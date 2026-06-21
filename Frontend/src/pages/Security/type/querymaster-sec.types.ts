@@ -1,0 +1,21 @@
+export type TQuerymaster = {
+  SR_NO?: number;
+  COMPANY_CODE: string;
+  PARAMETER: String;
+  SQL_STRING: string;
+  STRING1?: string;
+  STRING2?: string;
+  STRING3?: string;
+  STRING4?: string;
+  ORDER_BY?: string;
+  USTRING1?: string;
+  USTRING2?: string;
+  USTRING3?: string;
+  USTRING4?: string;
+  USTRING5?: string;
+  USTRING6?: string;
+  created_at?: Date;
+  updated_at?: Date;
+  created_by?: string;
+  updated_by?: string;
+};

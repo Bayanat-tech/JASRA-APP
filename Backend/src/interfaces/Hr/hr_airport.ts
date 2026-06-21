@@ -1,0 +1,44 @@
+export interface IHrAirport {
+  company_code: string;
+  airport_code: string;
+  airport_name: string;
+  airport_short_name: string;
+  adult_ticket_fair: number;
+  remarks: string;
+  status: string;
+  fair_class: string;
+  curr_code: string;
+  ex_rate: number;
+  fc_adult_fair: number;
+  fc_child_fair: number;
+  fc_infant_fair: number;
+  destination_country: string;
+  updated_at?: Date;
+  updated_by?: string;
+  created_at?: Date;
+  created_by?: string;
+}
+
+// ADULT_TICKET_FAIR
+// decimal(10,2)
+// CHILD_TICKET_FAIR
+// decimal(10,2)
+// INFANT_TICKET_FAIR
+// decimal(10,2)
+// REMARKS
+// varchar(100)
+// STATUS
+// char(1)
+// FAIR_CLASS
+// char(1)
+// CURR_CODE
+// varchar(3)
+// EX_RATE
+// decimal(6,3)
+// FC_ADULT_FAIR
+// decimal(18,3)
+// FC_CHILD_FAIR
+// decimal(18,3)
+// FC_INFANT_FAIR
+// decimal(18,3)
+// DESTINATION_COUNTR

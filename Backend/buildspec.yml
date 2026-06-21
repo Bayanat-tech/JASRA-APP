@@ -1,0 +1,20 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - docker login -u $DOCKER_ACCOUNT_UNAME -p $DOCKER_ACCOUNT_PASS
+  build:
+    commands:
+      - echo Build started on `date`
+      - docker build -t ${REPOSITORY_URI}:${RUNTIME_CONFIG} .
+  post_build:
+    commands:
+      - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
+      - echo Build completed on `date`
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username $DOCKER_UNAME --password-stdin $DOCKER_PASS
+      - docker push ${REPOSITORY_URI}:${RUNTIME_CONFIG}
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME ${REPOSITORY_URI}:${RUNTIME_CONFIG} > imagedefinitions.json
+artifacts:
+  files:
+    - imagedefinitions.json

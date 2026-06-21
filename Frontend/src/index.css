@@ -1,0 +1,52 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: gray transparent;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border: 1px solid black;
+    border-radius: 10px;
+    margin-right: 1px;
+    background-color: gray;
+  }
+}
+
+@font-face {
+  font-family: 'segoeui';
+  src: url('./fonts/segoeuithis.ttf') format('truetype');
+  font-weight: 400;
+}
+
+@layer base {
+  .ag-theme-alpine {
+    font-family: 'segoeui', 'Segoe UI', sans-serif !important;
+  }
+}
+@layer base {
+  .ag-theme-alpine-mytable .ag-row {
+    font-size: 11px !important;
+  }
+}
+
+.ant-select-selection-item,
+.ant-select,
+.ant-select-dropdown,
+.ant-select-item {
+  font-family: 'Segoe UI', sans-serif !important;
+  font-size: 11px !important;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol';
+}
+
+.ag-header-medium .ag-header-cell-text {
+  font-weight: 500 !important;
+}

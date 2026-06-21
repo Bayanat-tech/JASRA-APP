@@ -1,0 +1,22 @@
+export type TBank = {
+  bank_code: string;
+  bank_name: string;
+  bank_short_name?: string;
+  bank_addr1?: string;
+  bank_addr2?: string;
+  bank_addr3?: string;
+  country_code?: string;
+  phone?: string;
+  fax?: string;
+  email?: string;
+  remarks?: string;
+  status?: string;
+  main_bank_code?: string;
+  company_flag?: string;
+  comp_acct_code?: string;
+  company_code?: string;
+  created_at?: Date;
+  created_by?: string;
+  updated_at?: Date;
+  updated_by?: string;
+};

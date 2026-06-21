@@ -1,0 +1,27 @@
+export type TPartner = {
+  broker_code: string;
+  broker_name: string;
+  country_code?: string;
+  company_code?: string;
+  broker_addr1?: string;
+  broker_addr2?: string;
+  broker_addr3?: string;
+  broker_addr4?: string;
+  broker_city?: string;
+  broker_contact1?: string;
+  broker_telno1?: string;
+  broker_faxno1?: string;
+  broker_email1?: string;
+  broker_ref1?: string;
+  service_date?: Date;
+  broker_acref?: string;
+  broker_stat?: string;
+  broker_imp_code?: string;
+  broker_lic_no?: string;
+  price_check?: string;
+  trn_no?: string;
+  updated_at?: Date;
+  updated_by?: string;
+  created_by?: string;
+  created_at?: Date;
+};

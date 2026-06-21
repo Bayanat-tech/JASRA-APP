@@ -1,0 +1,30 @@
+export interface VendorData {
+  COMPANY_CODE: string;
+  VENDOR_CODE: string;
+  CURR_CODE?: string;
+  COUNTRY_CODE?: string;
+  VENDOR_NAME?: string;
+  VENDOR_ADDR1?: string;
+  VENDOR_ADDR2?: string;
+  VENDOR_ADDR3?: string;
+  VENDOR_ADDR4?: string;
+  VENDOR_CITY?: string;
+  VENDOR_CONTACT1?: string;
+  VENDOR_TELNO1?: string;
+  VENDOR_FAXNO1?: string;
+  VENDOR_EMAIL1?: string;
+  VENDOR_CONTACT2?: string;
+  VENDOR_TELNO2?: string;
+  VENDOR_FAXNO2?: string;
+  VENDOR_EMAIL2?: string;
+  VENDOR_CONTACT3?: string;
+  VENDOR_TELNO3?: string;
+  VENDOR_FAXNO3?: string;
+  VENDOR_REF1?: string;
+  VENDOR_REF2?: string;
+  VENDOR_REF3?: string;
+  SECLOGINID?: string;
+  AC_CODE?: string;
+  AC_NAME?: string;
+  SERVICE_DATE?: string | Date;
+}

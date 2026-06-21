@@ -1,0 +1,34 @@
+### Test Process Adjustment API
+
+# First, you need to authenticate and get a JWT token
+# POST http://localhost:3500/api/auth/login
+# Content-Type: application/json
+#
+# {
+#   "username": "your_username",
+#   "password": "your_password"
+# }
+
+### Process Stock Adjustment - CORRECT URL
+POST http://localhost:3500/api/wms/stock-adjustment/process-adjustment
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "COMPANY_CODE": "BSG",
+  "PRIN_CODE": "10001",
+  "ADJ_NO": 3,
+  "USERID": "PRAKASH"
+}
+
+### Alternative test with different values
+POST http://localhost:3500/api/wms/stock-adjustment/process-adjustment
+Content-Type: application/json
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+{
+  "COMPANY_CODE": "BSG",
+  "PRIN_CODE": "10001",
+  "ADJ_NO": 3,
+  "USERID": "PRAKASH"
+}

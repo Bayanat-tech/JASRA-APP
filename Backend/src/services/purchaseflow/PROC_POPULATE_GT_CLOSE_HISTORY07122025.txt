@@ -1,0 +1,106 @@
+CREATE OR REPLACE PROCEDURE JASDEV.PROC_POPULATE_GT_CLOSE_HISTORY(
+    p_user_code    IN  VARCHAR2,
+    p_company_code IN  VARCHAR2
+)
+IS
+    is_cost_controller NUMBER := 0;
+BEGIN
+    -- Check if user is a cost controller
+    SELECT COUNT(*)
+    INTO is_cost_controller
+    FROM V_USER_FLOW_DETAILS
+    WHERE USER_CODE = p_user_code
+      AND COMPANY_CODE = p_company_code
+      AND FLOW_ROLE IN ('009', '010');
+
+    -- Clear temporary table
+  EXECUTE IMMEDIATE 'TRUNCATE TABLE GT_CLOSE';
+
+    -- Insert records based on cost controller status
+    IF is_cost_controller > 0 THEN
+        INSERT INTO GT_CLOSE (
+            company_code,
+            request_number,
+            document_number,
+            request_date,
+            description,
+            document_type,
+            project_name,
+            supplier,
+            amount,
+            status,
+            updated_at,
+            last_updated,
+            company_name,
+            reference_doc_no
+        )
+        SELECT DISTINCT
+            p_company_code,
+            POHeader.request_number,
+            REPLACE(POHeader.document_number, '$', '/') AS document_number,
+            POHeader.updated_at AS request_date,
+            POHeader.description,
+            POHeader.document_type,
+            POHeader.project_name,
+            POHeader.supplier,
+            POHeader.amount,
+            POHeader.status,
+            POHeader.updated_at,
+            NULL,
+            POHeader.company_name,
+            REPLACE(POHeader.reference_doc_no, '$', '/') AS reference_doc_no
+        FROM VW_TOTAL_CLOSE_DOCUMENT POHeader
+        INNER JOIN MS_PROJECT_USER_ASSIGN B
+            ON B.PROJECT_CODE = POHeader.project_code
+           AND B.USER_ID = p_user_code
+        WHERE POHeader.company_code = p_company_code AND TRUNC(POHeader.REQUEST_DATE) <= TRUNC(SYSDATE -60) ;
+    ELSE
+        INSERT INTO GT_CLOSE (
+            company_code,
+            request_number,
+            document_number,
+            request_date,
+            description,
+            document_type,
+            project_name,
+            supplier,
+            amount,
+            status,
+            updated_at,
+            last_updated,
+            company_name,
+            reference_doc_no
+        )
+        SELECT DISTINCT
+            p_company_code,
+            POHeader.request_number,
+            REPLACE(POHeader.document_number, '$', '/') AS document_number,
+            POHeader.updated_at AS request_date,
+            POHeader.description,
+            POHeader.document_type,
+            POHeader.project_name,
+            POHeader.supplier,
+            POHeader.amount,
+            POHeader.status,
+            POHeader.updated_at,
+            NULL,
+            POHeader.company_name,
+            REPLACE(POHeader.reference_doc_no, '$', '/') AS reference_doc_no
+        FROM VW_TOTAL_CLOSE_DOCUMENT POHeader
+        INNER JOIN MS_PROJECT_USER_ASSIGN B
+            ON B.PROJECT_CODE = POHeader.project_code
+           AND B.USER_ID = p_user_code
+        WHERE POHeader.company_code = p_company_code
+          AND POHeader.document_type <> 'Budget Request' AND TRUNC(POHeader.REQUEST_DATE) <= TRUNC(SYSDATE -60);
+    END IF;
+
+    -- User-specific filtering
+    IF p_user_code LIKE 'TEST_%' THEN
+        DELETE FROM GT_CLOSE WHERE PROJECT_NAME NOT LIKE 'TESTING%';
+    ELSIF p_user_code LIKE 'USER_%' THEN
+        DELETE FROM GT_CLOSE WHERE PROJECT_NAME LIKE 'TESTING%';
+    END IF;
+
+    COMMIT;
+END PROC_POPULATE_GT_CLOSE_HISTORY;
+/

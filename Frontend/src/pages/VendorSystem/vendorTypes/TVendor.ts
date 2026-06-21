@@ -1,0 +1,185 @@
+// vendor related types
+
+export type TVendor = {
+  COMPANY_CODE: string;
+  CURR_CODE?: string | null;
+  COUNTRY_CODE?: string | null;
+  COMPANY_NAME?: string | null;
+  AC_CODE?: string | null;
+  CR_NUMBER?: string | null;
+  VENDOR_NAME?: string | null;
+  VENDOR_CODE?: string | null;
+  VENDOR_ADDR1?: string | null;
+  VENDOR_ADDR2?: string | null;
+  VENDOR_ADDR3?: string | null;
+  VENDOR_ADDR4?: string | null;
+  VENDOR_CITY?: string | null;
+  VENDOR_CONTACT1?: string | null;
+  VENDOR_TELNO1?: string | null;
+  VENDOR_FAXNO1?: string | null;
+  VENDOR_EMAIL1?: string | null;
+  VENDOR_CONTACT2?: string | null;
+  VENDOR_TELNO2?: string | null;
+  VENDOR_FAXNO2?: string | null;
+  VENDOR_EMAIL2?: string | null;
+  VENDOR_CONTACT3?: string | null;
+  VENDOR_TELNO3?: string | null;
+  VENDOR_FAXNO3?: string | null;
+  VENDOR_REF1?: string | null;
+  VENDOR_REF2?: string | null;
+  VENDOR_REF3?: string | null;
+  SERVICE_DATE?: string | Date | null;
+  BS_CODE? : string;
+  
+
+    CREDIT_PERIOD?: number | string | null;
+  CREDIT_AMOUNT?: number | string | null;
+  SALESMAN_CODE?: string | null;
+  SECTOR_CODE?: string | null;
+  BANK_SWIFT?: string | null;
+  BANK_AC_CODE?: string | null;
+  BANK_NAME?: string | null;
+  BI_SUB_GROUP?: string | null;
+  BI_MAIN_GROUP?: string | null;
+  TERRITORY_CODE?: string | null;
+  TAX_COUNTRY?: string | null;
+  VAT_NO?: string | null;
+  BI_PL_BS_IND?: string | null;
+  BI_EXP_TYPE?: string | null;
+  BI_DEPT?: string | null;
+};
+
+export type HeaderTVendor = {
+  DOC_TYPE?: string | null;
+  DOC_NO?: string | null;
+  DOC_DATE?: string | null;
+  ACCOUNT_DATE?: string | null;
+  LAST_ACTION?: string | null;
+  AC_CODE?: string | null;
+  AC_NAME?: string | null;
+  REF_NO?: string | null;
+  REF_DATE?: string | null;
+  REMARKS?: string | null;
+  ADDRESS?: string | null;
+  FAX?: string | null;
+  PHONE?: string | null;
+  CURR_CODE?: string | null;
+  EX_RATE?: number | null;
+  CANCELED?: boolean | null;
+  CREATE_USER?: string | null;
+  EDIT_USER?: string | null;
+  CREATE_DATE?: string | null;
+  EDIT_DATE?: string | null;
+  LAST_SERIAL_NO?: number | null;
+  PAYMENT_TERMS?: string | null;
+  CREDIT_PERIOD?: number | null;
+  DUE_DATE?: string | null;
+  REF_DOC_NO?: string | null;
+  REF_DOC_TYPE?: string | null;
+  PARTY_NAME?: string | null;
+  PARTY_ADDRESS?: string | null;
+  PARTY_PHONE?: string | null;
+  PARTY_FAX?: string | null;
+  INV_GENERATED?: boolean | null;
+  DELIVERY_TO?: string | null;
+  DLVR_CONTACT?: string | null;
+  DLVR_EMAIL?: string | null;
+  DLVR_MOBILE?: string | null;
+  DLVR_TERM?: string | null;
+  DIV_CODE?: string | null;
+  DIV_NAME?: string | null;
+  CASH_IND?: boolean | null;
+  APP_REF_NO?: string | null;
+  TX_CAT_CODE?: string | null;
+  TX_COMPNTCAT_CODE_1?: string | null;
+  TX_COMPNTCAT_CODE_2?: string | null;
+  TX_COMPNTCAT_CODE_3?: string | null;
+  TX_COMPNTCAT_CODE_4?: string | null;
+  TX_COMPNT_1_EXPMT?: number | null;
+
+  // Preferred fields
+  INVOICE_NUMBER?: string | null;
+  INVOICE_DATE?: string | null;
+
+  // Aliases (if backend sends these instead)
+  INV_NO?: string | null;
+  INV_DATE?: string | null;
+
+  PDO_TYPE?: string | null;
+};
+
+export type detailsTVendor = {
+  COMPANY_CODE: string;
+  DOC_TYPE: string;
+  DOC_NO: string;
+  SERIAL_NO: number;
+  DOC_DATE: string;
+  AC_CODE: string;
+  HEADER_AC_CODE: string;
+  REMARKS: string;
+  AMOUNT: number;
+  CR_AMT: number;
+  SIGN_IND: string;
+  CURR_CODE: string;
+  EX_RATE: number;
+  LCUR_AMOUNT: number;
+  CANCELLED: boolean;
+  JOB_NO: string;
+  REF_DATE: string;
+  DEPT_CODE: string;
+  QTY: number;
+  ORIGINAL_QTY: number;
+  PRICE: number;
+  UOM: string;
+  REF_DOC_TYPE: string;
+  REF_DOC_NO: string;
+  PROD_CODE: string;
+  QTY_RCV: number;
+  OTHER_REMARKS: string;
+  AMOUNT_RCV: number;
+  DIV_CODE: string;
+  DIV_NAME: string;
+  TX_CAT_CODE: string;
+  TX_COMPNTCAT_CODE_1: string;
+  TX_COMPNTCAT_CODE_2: string;
+  TX_COMPNTCAT_CODE_3: string;
+  TX_COMPNTCAT_CODE_4: string;
+  TX_COMPNT_PERC_1: number;
+  TX_COMPNT_PERC_2: number;
+  TX_COMPNT_PERC_3: number;
+  TX_COMPNT_PERC_4: number;
+  TX_COMPNT_AMT_1: number;
+  TX_COMPNT_AMT_2: number;
+  TX_COMPNT_AMT_3: number;
+  TX_COMPNT_AMT_4: number;
+  TX_COMPNT_LCURAMT_1: number;
+  TX_COMPNT_LCURAMT_2: number;
+  TX_COMPNT_LCURAMT_3: number;
+  TX_COMPNT_LCURAMT_4: number;
+  TX_COMPNT_1_EXPMT: number;
+  TX_COMPNT_2_EXPMT: number;
+  TX_COMPNT_3_EXPMT: number;
+  TX_COMPNT_4_EXPMT: number;
+  EDIT_USER: string;
+  CREATE_USER: string;
+  DOC_DATE_FROM: string;
+  DOC_DATE_TO: string;
+};
+
+export type TVendorMain = HeaderTVendor & {
+  COMPANY_CODE: string;
+  DOC_NO: string;
+  REF_DOC1?: string | null;
+  REF_DOC2?: string | null;
+  REF_DOC3?: string | null;
+  AMOUNT?: number | null;
+  CR_AMT?: number | null;
+  LCUR_AMOUNT?: number | null;
+  DEBIT_AMT?: number;
+  DEBIT_AMOUNT?: number;
+  CREDIT_AMT?: number;
+  CREDIT_AMOUNT?: number;
+  BALANCE?: number;
+
+  items: detailsTVendor[];
+};

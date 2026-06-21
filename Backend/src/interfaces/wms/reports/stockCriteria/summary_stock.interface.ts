@@ -1,0 +1,31 @@
+export interface ISummaryStock {
+  company_code: string;
+  prin_code: string;
+  prin_name: string;
+  txn_type: string;
+  job_no: string;
+  txn_date: Date;
+  prod_code: string;
+  qty_puom: number;
+  p_uom: string;
+  qty_luom: number;
+  l_uom: string;
+  site_code: string;
+  location_code: string;
+  user_id: string;
+  order_no: string;
+  aisle: string;
+  quantity: number;
+  sign_indicator: number;
+  origin_country: string;
+  lot_no: string;
+  container_no: string;
+  doc_ref: string;
+  exp_date: Date;
+  prod_grade1: string;
+  prod_grade2: string;
+  status: string;
+  po_no: string;
+  unit_price: number;
+  ex_rate: number;
+}

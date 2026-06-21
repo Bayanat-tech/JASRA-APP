@@ -1,0 +1,43 @@
+#pf-report-viewer.e-reportviewer .e-rptviewer-toolbarcontainer .e-toolbar-center {
+  justify-content: flex-start !important;
+  padding-left: 10px !important;
+}
+
+.custom-report-viewer .e-reportviewer-toolbar .e-reportviewer-toolbaritem {
+  font-family: 'Arial', sans-serif !important;
+  color: #333333 !important;
+}
+
+.e-reportviewer .e-rptviewer-toolbarcontainer .e-toolbar-center {
+  justify-content: flex-start !important;
+  padding-left: 10px;
+}
+
+.e-reportviewer .e-reportviewer-toolbar .e-reportviewer-toolbaritem {
+  font-family: 'Arial', sans-serif;
+  color: #333333;
+}
+
+.e-reportviewer .e-reportviewer-toolbar .e-reportviewer-toolbaritem:hover {
+  background-color: #f0f0f0;
+}
+
+.e-reportviewer .e-reportviewer-popuplist {
+  font-family: 'Arial', sans-serif;
+  color: #333333;
+  text-align: left;
+}
+
+.e-reportviewer .e-reportviewer-icon {
+  color: #666666;
+}
+
+.e-reportviewer .e-reportviewer-viewreportcontainer {
+  font-family: 'Arial', sans-serif;
+}
+
+.e-reportviewer .e-reportviewer-viewreportcontainer td,
+.e-reportviewer .e-reportviewer-viewreportcontainer th {
+  font-size: 14px;
+  padding: 8px;
+}

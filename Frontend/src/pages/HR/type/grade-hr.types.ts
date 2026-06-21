@@ -1,0 +1,21 @@
+export type TGrade = {
+  company_code?: string;
+  grade_code: string;
+  grade_name: string;
+  grade_short_name?: string;
+  ot_eligibility?: 'Y' | 'N';
+  remarks?: string;
+  status?: String;
+  grade_status?: String;
+  updated_at?: Date;
+  updated_by?: string;
+  created_by?: string;
+  created_at?: Date;
+};
+//   type?: string;
+//   airfare_entitlement?: 'Y' | 'N';
+//   spouse_af_entitlement?: 'Y' | 'N';
+//   dep_af_entitlement?: 'Y' | 'N';
+//   medical_entitlement?: 'Y' | 'N';
+//   spouse_med_entitlement?: 'Y' | 'N';
+//   dep_med_entitlement?: 'Y' | 'N';

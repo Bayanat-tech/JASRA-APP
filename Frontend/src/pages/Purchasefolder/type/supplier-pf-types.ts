@@ -1,0 +1,47 @@
+export type TSupplier = {
+  company_code: string; // COMPANY_CODE varchar(10) NOT NULL
+  supp_code?: string; // SUPP_CODE varchar(5) NOT NULL
+  curr_code?: string; // CURR_CODE varchar(3) DEFAULT NULL
+  country_code?: string; // COUNTRY_CODE varchar(5) DEFAULT NULL
+  supp_name?: string; // SUPP_NAME varchar(50) DEFAULT NULL
+  supp_addr1?: string; // SUPP_ADDR1 varchar(50) DEFAULT NULL
+  supp_addr2?: string; // SUPP_ADDR2 varchar(50) DEFAULT NULL
+  supp_addr3?: string; // SUPP_ADDR3 varchar(50) DEFAULT NULL
+  supp_addr4?: string; // SUPP_ADDR4 varchar(50) DEFAULT NULL
+  supp_city?: string; // SUPP_CITY varchar(50) DEFAULT NULL
+  supp_contact1?: string; // SUPP_CONTACT1 varchar(50) DEFAULT NULL
+  supp_telno1?: string; // SUPP_TELNO1 varchar(50) DEFAULT NULL
+  supp_faxno1?: string; // SUPP_FAXNO1 varchar(50) DEFAULT NULL
+  supp_email1?: string; // SUPP_EMAIL1 varchar(200) DEFAULT NULL
+  supp_contact2?: string; // SUPP_CONTACT2 varchar(50) DEFAULT NULL
+  supp_telno2?: string; // SUPP_TELNO2 varchar(50) DEFAULT NULL
+  supp_faxno2?: string; // SUPP_FAXNO2 varchar(50) DEFAULT NULL
+  supp_email2?: string; // SUPP_EMAIL2 varchar(50) DEFAULT NULL
+  supp_contact3?: string; // SUPP_CONTACT3 varchar(50) DEFAULT NULL
+  supp_telno3?: string; // SUPP_TELNO3 varchar(50) DEFAULT NULL
+  supp_faxno3?: string; // SUPP_FAXNO3 varchar(50) DEFAULT NULL
+  supp_ref1?: string; // SUPP_REF1 varchar(50) DEFAULT NULL
+  supp_ref2?: string; // SUPP_REF2 varchar(50) DEFAULT NULL
+  supp_ref3?: string; // SUPP_REF3 varchar(50) DEFAULT NULL
+  service_date?: Date; // SERVICE_DATE date DEFAULT NULL
+  supp_acref?: string; // SUPP_ACREF varchar(10) DEFAULT NULL
+  supp_credit?: number; // SUPP_CREDIT int DEFAULT NULL
+  supp_stat?: string; // SUPP_STAT varchar(5) DEFAULT NULL
+  supp_imp_code?: string; // SUPP_IMP_CODE varchar(25) DEFAULT NULL
+  supp_lic_no?: string; // SUPP_LIC_NO varchar(25) DEFAULT NULL
+  supp_lic_type?: string; // SUPP_LIC_TYPE varchar(25) DEFAULT NULL
+  price_check?: string; // PRICE_CHECK varchar(1) DEFAULT NULL
+  supp_email3?: string; // SUPP_EMAIL3 varchar(50) DEFAULT NULL
+  importer_code?: string; // IMPORTER_CODE varchar(40) DEFAULT NULL
+  updated_at?: Date; // updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_by?: string; // updated_by varchar(50) DEFAULT NULL
+  created_by?: string; // created_by varchar(20) DEFAULT NULL
+  created_at?: Date; // created_at datetime DEFAULT CURRENT_TIMESTAMP
+  prin_code?: string; // PRIN_CODE varchar(45) DEFAULT '10001'
+  payment_terms?: string; // PAYMENT_TERMS varchar(45) DEFAULT NULL
+  mater_category_code?: string; // MATER_CATEGORY_CODE varchar(100) DEFAULT NULL
+  old_supplier_code?: string; // OLD_SUPPLIER_CODE varchar(100) DEFAULT NULL
+  mobile?: string; // MOBILE varchar(100) DEFAULT NULL
+  address?: string; // ADDRESS varchar(200) DEFAULT NULL
+  cr_number?: string; // CR_NUMBER varchar(100) DEFAULT NULL
+};

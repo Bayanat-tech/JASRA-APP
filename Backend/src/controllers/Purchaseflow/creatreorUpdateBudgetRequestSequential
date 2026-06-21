@@ -1,0 +1,67 @@
+import { TBasicBrequest } from "../../interfaces/Purchaseflow/Budgetflow.interface";
+export const createOrUpdateBudgetRequestSequential = async (
+  req: Request,
+  res: Response,
+  next?: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      request_number,
+      company_code,
+      request_date,
+      description,
+      remarks,
+      last_action,
+      project_code,
+      updated_by,
+      created_by,
+    } = req.body;
+
+    console.log("Incoming request data30012025:", req.body);
+
+    const parsedRequestDate =
+      request_date && !isNaN(new Date(request_date).getTime())
+        ? new Date(request_date)
+        : undefined;
+
+    const budgetRequest: TBasicBrequest = {
+      request_number,
+      company_code,
+      request_date: parsedRequestDate,
+      description,
+      remarks,
+      last_action,
+      project_code,
+      created_by,
+      updated_by,
+    };
+
+    console.log("Constructed budgetRequest:", budgetRequest);
+    console.log("log 30012025");
+
+    const { requestNumber } = await upsertBudgetRequest(budgetRequest);
+
+    console.log("After upsertBudgetRequest");
+    console.log("Generated Request Number:", requestNumber);
+
+    // Respond only if headers haven't already been sent
+    if (!res.headersSent) {
+      res.status(200).json({
+        success: true,
+        message: "Budget request processed successfully.",
+        requestNumber,
+      });
+    }
+  } catch (error) {
+    console.error("Error saving/updating budget request:", error);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Error saving/updating budget request.",
+        error:
+          error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    }
+  }
+};
