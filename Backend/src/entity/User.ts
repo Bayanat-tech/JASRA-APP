@@ -73,7 +73,7 @@ export class User {
   @Column({ name: "USER_CODE", type: "varchar2", length: 50, nullable: true })
   user_code!: string;
 
-  @Column({ name: "USER_ID", type: "varchar2", length: 50, nullable: true })
+  @Column({ name: "USERID", type: "varchar2", length: 50, nullable: true })
   user_id!: string;
 
   @Column({ name: "LOGINID1", type: "varchar2", length: 50, nullable: true })

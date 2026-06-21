@@ -4,7 +4,7 @@ import { MSPSProjectMaster } from "./mspsprojectmaster.entity";
 
 @Entity(constants.TABLE.SEC_LOGIN)
 export class SecLogin {
-  @PrimaryColumn({ name: "USER_ID", type: "varchar2", length: 50 })
+  @PrimaryColumn({ name: "USERID", type: "varchar2", length: 50 })
   user_id!: string;
 
   @Column({ name: "USERNAME", type: "varchar2", length: 100 })
@@ -17,7 +17,7 @@ export class SecLogin {
   @JoinTable({
     name: constants.TABLE.MS_PROJECT_USER_ASSIGN,
     joinColumn: {
-      name: "USER_ID",
+      name: "USERID",
       referencedColumnName: "user_id",
     },
     inverseJoinColumn: {
