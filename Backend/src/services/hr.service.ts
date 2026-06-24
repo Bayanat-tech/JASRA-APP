@@ -109,68 +109,6 @@ export const HrService = {
     return response.data;
   },
 
-
- LeaveDaysCount: async (params: {
-    leaveStartDate: string;
-    leaveEndDate: string;
-    leaveType: string;
-    companycode: string;
-  }) => {
-    const { leaveStartDate, leaveEndDate , leaveType , companycode} = params;
-
-    const query = `
-    DECLARE
-     v_leave_days NUMBER;
-     BEGIN
-        v_leave_days := FUN_CALC_LEAVE_DAYS(
-          TO_DATE(:leaveStartDate, 'DD-MM-YYYY'),
-          TO_DATE(:leaveEndDate, 'DD-MM-YYYY'),
-          :p_leaveType,
-          :p_companycode
-        );
-      :p_leave_days := v_leave_days;
-      END;
-    `;
-    
-    const bindParams = {
-      leaveStartDate: leaveStartDate,
-      leaveEndDate: leaveEndDate,
-      p_leaveType: leaveType,
-      p_companycode: companycode,
-      p_leave_days: {
-        dir: oracledb.BIND_OUT,
-        type: oracledb.NUMBER,
-      },
-    };
-
-    try {
-      const result = await oracleDb.query(query, bindParams);
-      const leaveDays = (result.outBinds as any).p_leave_days;
-
-      return {
-        success: true,
-        leaveStartDate: leaveStartDate,
-        leaveEndDate: leaveEndDate,
-        leaveDays: leaveDays,
-        leaveType: leaveType,
-        company_code: companycode,
-        message: "Leave days calculated successfully",
-      };
-    }catch (error: string | any) {
-      console.error("Error calculating leave days:", error);
-      return {
-        success: false,
-        leaveStartDate: leaveStartDate,
-        leaveEndDate: leaveEndDate,
-        leaveDays: null,
-        company_code: companycode,
-        leaveType: leaveType,
-        message: "Failed to calculate leave days",
-      };
-    }
-  },
-
-
 newValidaterequest: async(params: {
   leaveStartDate: string;
   employeeId: string;

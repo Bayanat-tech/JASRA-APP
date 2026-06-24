@@ -112,23 +112,66 @@ export const HrService = {
     }
   },
 
-  // getLeaveHistory: async (params: {
-  //   employeeId?: string;
-  //   leaveType?: string;
-  //   leaveStartDateFrom?: string;
-  //   leaveStartDateTo?: string;
-  //   leaveEndDateFrom?: string;
-  //   leaveEndDateTo?: string;
-  //   orderBy?: string;
-  // }) => {
-  //   const response = await axiosInstance.get(
-  //     "/api/EmployeeLeave/leavehistory",
-  //     {
-  //       params,
-  //     }
-  //   );
-  //   return response.data;
-  // },
+ LeaveDaysCount: async (params: {
+    leaveStartDate: string;
+    leaveEndDate: string;
+    leaveType: string;
+    company_code: string;
+    employee_code: string;
+  }) => {
+    const { leaveStartDate, leaveEndDate , leaveType , company_code } = params;
+
+    const query = `
+    DECLARE
+     v_leave_days NUMBER;
+     BEGIN
+        v_leave_days := FUN_CALC_LEAVE_DAYS(
+          TO_DATE(:leaveStartDate, 'DD-MM-YYYY'),
+          TO_DATE(:leaveEndDate, 'DD-MM-YYYY'),
+          :p_leaveType,
+          :p_company_code
+        );
+      :p_leave_days := v_leave_days;
+      END;
+    `;
+    
+    const bindParams = {
+      leaveStartDate: leaveStartDate,
+      leaveEndDate: leaveEndDate,
+      p_leaveType: leaveType,
+      p_company_code: company_code,
+      p_leave_days: {
+        dir: oracledb.BIND_OUT,
+        type: oracledb.NUMBER,
+      },
+    };
+
+    try {
+      const result = await oracleDb.query(query, bindParams);
+      const leaveDays = (result.outBinds as any).p_leave_days;
+
+      return {
+        success: true,
+        leaveStartDate: leaveStartDate,
+        leaveEndDate: leaveEndDate,
+        company_code: company_code,
+        leaveDays: leaveDays,
+        leaveType: leaveType,
+        message: "Leave days calculated successfully",
+      };
+    }catch (error: string | any) {
+      console.error("Error calculating leave days:", error);
+      return {
+        success: false,
+        leaveStartDate: leaveStartDate,
+        leaveEndDate: leaveEndDate,
+        company_code: company_code,
+        leaveDays: null,
+        leaveType: leaveType,
+        message: "Failed to calculate leave days",
+      };
+    }
+  },
 
   newValidaterequest: async (params: {
     leaveStartDate: string;
@@ -184,7 +227,7 @@ export const HrService = {
     console.log("Bind Parameters:", bindParams);
 
     async function getLeaveBalances(employeeId: string, leaveType: string) {
-      const balanceQuery = `
+    const balanceQuery = `
     SELECT NO_OF_LEAVES_AVAILABLE 
     FROM VW_HR_LEAVE_YEARLY_BALANCE 
     WHERE EMPLOYEE_ID = :employeeId 

@@ -100,10 +100,7 @@ export const getHrMaster = async (
         const limit = Number(req.query.limit) || 10;
         const offset = (page - 1) * limit;
 
-
-
         const loginid = req.query.code as string;
-
 
         if (!requestUser?.company_code || !loginid) {
           console.error("Missing company_code or loginid");
@@ -117,7 +114,6 @@ export const getHrMaster = async (
         };
 
         let whereConditions = "";
-
 
         switch (masters) {
           case "Pg_Leave_flow":
@@ -133,17 +129,6 @@ export const getHrMaster = async (
           AND RESUME_DATE_APPROVED = 'NO')
         )
   `;
-         /*   whereConditions = `company_code = :company_code
-                      AND (
-                          (NEXT_ACTION_BY IN (SELECT EMPLOYEE_ID FROM VW_HR_EMPLOYEE_AWARE WHERE
-EMPLOYEE_ID =  :loginid ) AND FINAL_APPROVED <> 'YES')
-                          OR
-                          (IMMEDIATE_SUPERVISOR IN (SELECT EMPLOYEE_ID FROM VW_HR_EMPLOYEE_AWARE WHERE
-EMPLOYEE_ID =  :loginid ) AND ACTUAL_RESUME_DATE IS NOT NULL AND RESUME_DATE_APPROVED = 'NO')
-                      )
-                      AND LAST_ACTION <> 'REJECTED'
-                      AND LAST_ACTION <> 'CANCEL'
-                      `;*/
             break;
           case "Pg_leave_flow_Rejected":
               whereConditions = `

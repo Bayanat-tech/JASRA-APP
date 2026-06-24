@@ -684,7 +684,6 @@ export const upsertLeaveApprovalHandler = async (
 
     const leaveApprovalData: TLeaveApproval = {
       ...data,
-      COMPANY_CODE: "BSG", 
     };
 
     const requestNumber = await upsertLeaveApproval(leaveApprovalData);

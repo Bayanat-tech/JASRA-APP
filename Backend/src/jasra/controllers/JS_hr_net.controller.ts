@@ -44,6 +44,30 @@ export const JSleaveDaysCntHandler = async (req: Request, res: Response) => {
   }
 };
 
+export const leaveDaysCntHandler = async (req: Request, res: Response) => {
+  try {
+    const {
+      leaveStartDate,
+      leaveEndDate,
+      leaveType,
+      company_code,
+      employee_code,
+    } = req.query;
+
+    const data = await HrService.LeaveDaysCount({
+      leaveStartDate: leaveStartDate as string,
+      leaveEndDate: leaveEndDate as string,
+      leaveType: leaveType as string,
+      company_code: company_code as string,
+      employee_code: employee_code as string,
+    });
+
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const JSvalidateLeaveHandler = async (req: Request, res: Response) => {
   try {
     const {

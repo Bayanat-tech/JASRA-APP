@@ -3,7 +3,7 @@ import express from "express";
 import {
   upsertLeaveApprovalHandler,
   saveFileHR,
-} from "../../controllers/HR/hr_leave_approval";
+} from "../../jasra/controllers/JS_hr_leave_approval";
 import {
   createhrcategory,
   updatehrcategory,
@@ -58,11 +58,11 @@ import {
   validateLeaveHandler,
   getLeaveRequestsWithErpDocHandler,
   newvalidateLeaveHandler,
-  leaveDaysCntHandler,
+  
 } from "../../controllers/HR/hr_net.controller";
 import { executeRawSql } from "../../controllers/HR/rawSql_hr_controller";
 import { getRequestFlowUsers } from "../../controllers/HR/hr_leave_flow_sentback";
-import { getJSEmployeesHandler } from "../../jasra/controllers/JS_hr_net.controller";
+import { getJSEmployeesHandler, JSgetLeaveEntitleHandler, JSvalidateLeaveHandler , leaveDaysCntHandler } from "../../jasra/controllers/JS_hr_net.controller";
 
 // Creating an instance of the Express Router
 const router = express.Router();
@@ -125,10 +125,10 @@ router.get("/getRequestFlowUsers", getRequestFlowUsers as any );
 // HR .NET API routes
 router.get("/employees", getEmployeesHandler);
 router.get("/leavebalance/:employeeId", getLeaveBalanceHandler);
-router.get("/leaveentitle/:employeeId", getLeaveEntitleHandler);
+router.get("/JS_leaveentitle/:employeeId", JSgetLeaveEntitleHandler);
 router.get("/leavehistory", getLeaveHistoryHandler);
-// router.get("/validateleave", validateLeaveHandler);
-router.get("/validateleave", newvalidateLeaveHandler);
+// router.get("/validateleave", validateLeaveHandler);  
+router.get("/validateleave", JSvalidateLeaveHandler);
 router.get("/leave-requests-erp-doc", getLeaveRequestsWithErpDocHandler);
 router.get('/leaveDaysCount',leaveDaysCntHandler);
 
