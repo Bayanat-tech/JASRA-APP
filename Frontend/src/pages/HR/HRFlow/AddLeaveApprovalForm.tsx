@@ -14,18 +14,13 @@ import {
   Collapse,
   FormControlLabel,
   Snackbar,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  Skeleton,
   Autocomplete,
   Dialog,
 } from '@mui/material';
 import CustomAlert from 'components/@extended/CustomAlert';
 import { showAlert } from 'store/CustomAlert/alertSlice';
 import { TLeaveApproval } from 'pages/Purchasefolder/type/leave-approval-types';
-import { IoSendSharp, IoPrintSharp } from 'react-icons/io5';
+import { IoSendSharp } from 'react-icons/io5';
 import { MdCancelScheduleSend } from 'react-icons/md';
 import hrapprovalInstance from 'service/Service.hr';
 import useAuth from 'hooks/useAuth';
@@ -36,12 +31,9 @@ import { DialogPop } from 'components/popup/DIalogPop';
 import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
 import HrRequestServiceInstance, { IHrEmployee, IValidateLeaveResponse } from 'service/services.hr';
 import * as XLSX from 'xlsx';
-import WmsReportView from 'components/reports/WmsReportView';
 import UniversalDialog from 'components/popup/UniversalDialog';
-import WmsSerivceInstance from 'service/wms/service.wms';
 import { useIntl } from 'react-intl';
 import { TUniversalDialogProps } from 'types/types.UniversalDialog';
-import { EyeOutlined } from '@ant-design/icons';
 import HRLeaveFilesDialog from './HRFileAttachment/HRLeaveFilesDialog';
 import { IoIosAttach } from 'react-icons/io';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -238,31 +230,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   // Snackbar state for export notifications
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
-  // Report dialog state
-  const [printPopup, setPrintPopup] = useState<TUniversalDialogProps>({
-    action: {
-      open: false,
-      fullWidth: true,
-      maxWidth: 'xs'
-    },
-    title: intl.formatMessage({ id: 'Print Leave Request' }) || 'Print Leave Request',
-    data: { isPrintMode: false }
-  });
-
-  const [previewReportPopup, setPreviewReportPopup] = useState<TUniversalDialogProps>({
-    action: {
-      open: false,
-      fullWidth: true,
-      maxWidth: 'md'
-    },
-    title: intl.formatMessage({ id: 'Print Report' }) || 'Print Report',
-    data: { selectedReport: null }
-  });
-
-  const DynamicViewName = user?.company_code === 'BSG' ?  'VW_HR_EMPLOYEE_AWARE' : 'VW_HR_EMPLOYEE'
-
   const sql_string = `
-   SELECT * FROM ${DynamicViewName} WHERE EMPLOYEE_ID = '${user?.loginid1}'
+   SELECT * FROM VW_HR_EMPLOYEE WHERE EMPLOYEE_ID = '${user?.loginid1}'
   `;
 
   const { data: currentUserEmployeeData } = useQuery({
@@ -284,9 +253,9 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
      lrfh.NEXT_ACTION_BY,
      lrfh.NEXT_ACTION_BY || ' - ' || next_emp.RPT_NAME as NEXT_ACTION_BY_DISPLAY
     FROM LEAVE_REQUEST_FLOW_HISTRY lrfh
-    LEFT JOIN VW_HR_EMPLOYEE_AWARE emp ON lrfh.UPDATED_BY = emp.EMPLOYEE_ID
-    LEFT JOIN VW_HR_EMPLOYEE_AWARE next_emp ON lrfh.NEXT_ACTION_BY = next_emp.EMPLOYEE_ID
-    LEFT JOIN VW_MS_HR_LEAVE_TYPES_AWARE lt ON lrfh.LEAVE_TYPE = lt.LEAVE_TYPE
+    LEFT JOIN VW_HR_EMPLOYEE emp ON lrfh.UPDATED_BY = emp.EMPLOYEE_ID
+    LEFT JOIN VW_HR_EMPLOYEE next_emp ON lrfh.NEXT_ACTION_BY = next_emp.EMPLOYEE_ID
+    LEFT JOIN MS_HR_LEAVE_TYPES lt ON lrfh.LEAVE_TYPE = lt.LEAVE_TYPE
     WHERE REQUEST_NUMBER like '${formData.request_number ? formData.request_number : newInsertedData?.REQUEST_NUMBER || ''}'
     AND LAST_ACTION <> 'SAVEASDRAFT'
     ORDER BY UPDATED_AT 
@@ -350,24 +319,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     enabled: !!user?.loginid1
   });
 
-  // const supervisor = currentSupervisorEmployeeData && currentSupervisorEmployeeData.length > 0;
-
   console.log('currentSupervisorEmployeeData', currentSupervisorEmployeeData);
-
-  // Report data query
-  const {
-    data: reportData,
-    isLoading: reportsLoading,
-    isError: reportsError,
-    refetch: refetchReportListData
-  } = useQuery({
-    queryKey: ['employee_reports'],
-    queryFn: async () => {
-      const reports = await WmsSerivceInstance.getAllEmployeeReports();
-      return reports || null;
-    },
-    enabled: printPopup.action.open
-  });
 
   //Get user flow
   // Transform in useQuery
@@ -713,7 +665,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
               leaveStartDate: String(start),
               leaveEndDate: String(end),
               leaveType: formData.leave_type,
-              companycode : String(user?.company_code)
+              company_code: String(user?.company_code),
             })
             setFormData((prev) => ({
               ...prev,
@@ -733,7 +685,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     if (!employeeId) return '';
 
     try {
-      const sql_string = `SELECT * FROM VW_HR_EMPLOYEE_AWARE WHERE EMPLOYEE_ID = '${employeeId}'`;
+      const sql_string = `SELECT * FROM VW_HR_EMPLOYEE WHERE EMPLOYEE_ID = '${employeeId}'`;
       const result = await HrServiceInstance.executeRawSql(sql_string);
       return result?.[0]?.RPT_NAME || ''; // Adjust field name as needed
     } catch (error) {
@@ -1144,23 +1096,23 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   };
 
   // Print handler
-  const handlePrint = () => {
-    if (!printPopup.action.open) {
-      refetchReportListData();
-    }
-    setPrintPopup((prev) => ({
-      ...prev,
-      action: { ...prev.action, open: !prev.action.open }
-    }));
-  };
+  // const handlePrint = () => {
+  //   if (!printPopup.action.open) {
+  //     refetchReportListData();
+  //   }
+  //   setPrintPopup((prev) => ({
+  //     ...prev,
+  //     action: { ...prev.action, open: !prev.action.open }
+  //   }));
+  // };
 
-  const togglePreviewPopup = (report?: any) => {
-    setPreviewReportPopup((prev) => ({
-      ...prev,
-      action: { ...prev.action, open: !prev.action.open },
-      data: { selectedReport: report ?? null }
-    }));
-  };
+  // const togglePreviewPopup = (report?: any) => {
+  //   setPreviewReportPopup((prev) => ({
+  //     ...prev,
+  //     action: { ...prev.action, open: !prev.action.open },
+  //     data: { selectedReport: report ?? null }
+  //   }));
+  // };
   
   const refreshAttachments = async () => {
     if (formData.request_number || newInsertedData?.REQUEST_NUMBER) {
@@ -1939,7 +1891,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Button>
               </Tooltip>
 
-              <Tooltip title={intl.formatMessage({ id: 'Print Leave Request Form' }) || 'Print Leave Request Form'}>
+              {/* <Tooltip title={intl.formatMessage({ id: 'Print Leave Request Form' }) || 'Print Leave Request Form'}>
                 <Button
                   type="button"
                   variant="outlined"
@@ -1950,7 +1902,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 >
                   <IoPrintSharp />
                 </Button>
-              </Tooltip>
+              </Tooltip> */}
 
               {(viewAttachments || formData.request_number || newInsertedData?.REQUEST_NUMBER) && (
                 <Tooltip title={intl.formatMessage({ id: 'Attach & View' }) || 'Attach & View'}>
@@ -2138,7 +2090,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       </DialogPop>
 
       {/* Report dialog */}
-      {printPopup.action.open && (
+      {/* {printPopup.action.open && (
         <UniversalDialog action={printPopup.action} onClose={handlePrint} title={printPopup.title} hasPrimaryButton={false}>
           {reportsLoading ? (
             <div className="space-y-2">
@@ -2169,9 +2121,9 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
             </List>
           )}
         </UniversalDialog>
-      )}
+      )} */}
 
-      {previewReportPopup.action.open && (
+      {/* {previewReportPopup.action.open && (
         <UniversalDialog
           action={previewReportPopup.action}
           onClose={() => togglePreviewPopup()}
@@ -2195,7 +2147,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
             <Typography> {intl.formatMessage({ id: 'NoReportSelected' }) || 'No report selected'}</Typography>
           )}
         </UniversalDialog>
-      )}
+      )} */}
 
       {uploadFilesPopup && uploadFilesPopup.action.open && (
         <UniversalDialog

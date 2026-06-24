@@ -65,10 +65,6 @@ const HRLLeaveApprovalPage = ({
     queryKey: ['Pg_Leave_flow', paginationData, filterData, user?.loginid1],
     queryFn: () => HrServiceInstance.getMasters('hr', 'Pg_Leave_flow', paginationData, filterData, user?.loginid1),
     refetchOnWindowFocus: false
-    //  select: (data) => ({
-    //   ...data,
-    //   tableData: (data?.tableData as { EMPLOYEE_CODE?: string }[])?.filter((item) => 
-    // })
   });
 
   //  const tableData = HR_Data?.tableData || HR_Data?.tableData || [];

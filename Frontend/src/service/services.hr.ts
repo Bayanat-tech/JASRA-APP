@@ -104,7 +104,7 @@ export interface ILeaveDaysParams {
   leaveStartDate: string ;
   leaveEndDate: string;
   leaveType: string;
-  companycode: string;
+  company_code: string;
 }
 
 // const {user} = useAuth();
@@ -142,14 +142,14 @@ class HrRequestService {
 
       return [];
     }
-  }
+  } 
 
   async getSupervisorEmployees(supervisor_empid?: string): Promise<IHrEmployee[]> {
     try {
       // Create config object with params if loginId is provided
       const config = supervisor_empid ? { params: { supervisor_empid: supervisor_empid } } : {};
 
-      const response = await axiosServices.get('/api/hr/gm/employees', config);
+      const response = await axiosServices.get('/api/hr/gm/jsemployees', config);
 
       console.log('Full API response:', response);
 
@@ -181,29 +181,29 @@ class HrRequestService {
       leaveStartDate,
       leaveEndDate,
       leaveType,
-      companycode
+      company_code
     }: ILeaveDaysParams) {
       const response = await axiosServices.get("/api/hr/gm/leaveDaysCount", {
         params: {
           leaveStartDate: formatDateOnly(leaveStartDate),
           leaveEndDate: formatDateOnly(leaveEndDate),
           leaveType: leaveType,
-          companycode : companycode,
+          companycode : company_code,
         },
       });
 
       return response.data;
   }
 
-  async getLeaveBalance(employeeId: string): Promise<any> {
-    try {
-      const response = await axiosServices.get(`/api/hr/gm/leavebalance/${employeeId}`);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching leave balance:', error);
-      throw error;
-    }
-  }
+  // async getLeaveBalance(employeeId: string): Promise<any> {
+  //   try {
+  //     const response = await axiosServices.get(`/api/hr/gm/leavebalance/${employeeId}`);
+  //     return response.data;
+  //   } catch (error) {
+  //     console.error('Error fetching leave balance:', error);
+  //     throw error;
+  //   }
+  // }
 
   async getLeaveHistory(params: ILeaveHistoryParams): Promise<ILeaveHistory[]> {
     try {
@@ -217,7 +217,7 @@ class HrRequestService {
       if (leaveStartDateFrom) queryParams.leaveStartDateFrom = leaveStartDateFrom;
       if (leaveEndDateTo) queryParams.leaveEndDateTo = leaveEndDateTo;
 
-      const response = await axiosServices.get(`/api/hr/gm/leaveentitle/${employeeId}`, {
+      const response = await axiosServices.get(`/api/hr/gm/JS_leaveentitle/${employeeId}`, {
         params: queryParams
       });
 

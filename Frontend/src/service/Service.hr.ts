@@ -95,7 +95,7 @@ class HRService {
     sql_string?: string
   ) => {
     try {
-      dispatch(openBackdrop()); // Show loading backdrop
+      dispatch(openBackdrop()); 
       const page = paginationData?.page ? paginationData.page + 1 : undefined;
       const limit = paginationData?.rowsPerPage;
 
