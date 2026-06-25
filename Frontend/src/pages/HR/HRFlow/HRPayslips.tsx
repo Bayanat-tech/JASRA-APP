@@ -48,12 +48,11 @@ export default function HRPayslips() {
       console.log('🔄 Fetching supervisor employees for user:', user.loginid1);
       
       try {
-        // Use direct SQL query to get employees under this supervisor
         const sql = `
             SELECT DISTINCT *
             FROM (
                 SELECT *
-                FROM VW_HR_EMPLOYEE_AWARE
+                FROM VW_HR_EMPLOYEE
                 WHERE EMP_STATUS <> 'S'
                 START WITH 
                     EMPLOYEE_ID = '${user.loginid1}'
@@ -66,9 +65,9 @@ export default function HRPayslips() {
             )
         `;
         
-        console.log('Executing supervisor SQL:', sql);
+        // console.log('Executing supervisor SQL:', sql);
         const result = await HrServiceInstance.executeRawSql(sql);
-        console.log('Supervisor employees SQL response:', result);
+        // console.log('Supervisor employees SQL response:', result);
         
         if (Array.isArray(result)) {
           console.log(`Found ${result.length} employees under supervisor`);
@@ -96,13 +95,13 @@ export default function HRPayslips() {
       try {
         const sql = `
           SELECT EMPLOYEE_ID, EMPLOYEE_CODE, RPT_NAME, SUPERVISOR_EMPID, DEPT_HEAD_EMPID, MANGR_EMPID 
-          FROM VW_HR_EMPLOYEE_AWARE 
+          FROM VW_HR_EMPLOYEE
           WHERE EMPLOYEE_ID = '${user.loginid1}'
         `;
         
-        console.log('Fetching current user data with SQL:', sql);
+        // console.log('Fetching current user data with SQL:', sql);
         const result = await HrServiceInstance.executeRawSql(sql);
-        console.log('Current user database response:', result);
+        // console.log('Current user database response:', result);
         
         return result?.[0] || null;
       } catch (error) {

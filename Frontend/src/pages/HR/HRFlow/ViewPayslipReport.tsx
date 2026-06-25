@@ -70,7 +70,7 @@ const isAllowedYear = year === currentYear.toString() || year === previousYear.t
               SELECT DISTINCT *
               FROM (
                   SELECT *
-                  FROM VW_HR_EMPLOYEE_AWARE
+                  FROM VW_HR_EMPLOYEE
                   WHERE EMP_STATUS <> 'S'
                   START WITH 
                       EMPLOYEE_ID = '${user.loginid1}'
@@ -105,12 +105,12 @@ const isAllowedYear = year === currentYear.toString() || year === previousYear.t
 
   // Check if user has permission to view this payslip
   const hasPermission = React.useMemo(() => {
-    console.log(' Checking permission...');
-    console.log(' Current user:', user?.loginid1);
-    console.log(' Requested employee:', employeeId);
-    console.log(' Supervisor data loaded:', !isLoadingSupervisor);
-    console.log(' Team members count:', currentSupervisorEmployeeData?.length || 0);
-    console.log(' Team member IDs:', currentSupervisorEmployeeData?.map(e => e.EMPLOYEE_ID));
+    // console.log(' Checking permission...');
+    // console.log(' Current user:', user?.loginid1);
+    // console.log(' Requested employee:', employeeId);
+    // console.log(' Supervisor data loaded:', !isLoadingSupervisor);
+    // console.log(' Team members count:', currentSupervisorEmployeeData?.length || 0);
+    // console.log(' Team member IDs:', currentSupervisorEmployeeData?.map(e => e.EMPLOYEE_ID));
 
     // User can always view their own payslip
     if (user?.loginid1 === employeeId) {
@@ -119,24 +119,24 @@ const isAllowedYear = year === currentYear.toString() || year === previousYear.t
     }
     
     // Supervisor can view payslips of employees under them
-    if (!isLoadingSupervisor && currentSupervisorEmployeeData && currentSupervisorEmployeeData.length > 0) {
-      const isTeamMember = currentSupervisorEmployeeData.some(emp => {
-        const isMatch = emp.EMPLOYEE_ID === employeeId;
-        console.log(` Checking ${emp.EMPLOYEE_ID} === ${employeeId}: ${isMatch}`);
-        return isMatch;
-      });
+    // if (!isLoadingSupervisor && currentSupervisorEmployeeData && currentSupervisorEmployeeData.length > 0) {
+    //   const isTeamMember = currentSupervisorEmployeeData.some(emp => {
+    //     const isMatch = emp.EMPLOYEE_ID === employeeId;
+    //     console.log(` Checking ${emp.EMPLOYEE_ID} === ${employeeId}: ${isMatch}`);
+    //     return isMatch;
+    //   });
       
-      if (isTeamMember) {
-        console.log('Permission GRANTED: Supervisor viewing team member payslip');
-        return true;
-      } else {
-        console.log(' Permission DENIED: Employee not in supervisor team');
-      }
-    } else {
-      console.log('Permission DENIED: Not supervisor or no team data');
-    }
+      // if (isTeamMember) {
+      //   console.log('Permission GRANTED: Supervisor viewing team member payslip');
+      //   return true;
+      // } else {
+      //   console.log(' Permission DENIED: Employee not in supervisor team');
+      // }
+    // } else {
+    //   console.log('Permission DENIED: Not supervisor or no team data');
+    // }
     
-    console.log(' FINAL: Permission DENIED');
+    // console.log(' FINAL: Permission DENIED');
     return false;
   }, [user?.loginid1, employeeId, currentSupervisorEmployeeData, isLoadingSupervisor]);
 
@@ -383,16 +383,14 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
     }
 
     try {
-      // Create a clone of the element to modify for PDF without affecting the UI
+
       const clone = element.cloneNode(true) as HTMLElement;
       
-      // Remove only the back button from the clone, keep the header
       const backButton = clone.querySelector('.no-print');
       if (backButton) {
         backButton.remove();
       }
       
-      // Smaller font size increase for PDF 
       const allElements = clone.querySelectorAll('*');
       allElements.forEach((el: any) => {
         if (el.style) {
@@ -401,12 +399,10 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
           const currentSize = parseFloat(currentFontSize);
           
           if (!isNaN(currentSize)) {
-            // 10% font size increase for PDF
             let newSize = currentSize * 1.1;
             
-            // Apply different scaling for different element types
             if (el.tagName === 'H1' || el.tagName === 'H2' || el.tagName === 'H3' || el.tagName === 'H4' || el.tagName === 'H5' || el.tagName === 'H6') {
-              newSize = currentSize * 1.15; // headings
+              newSize = currentSize * 1.15; 
             }
             
             el.style.fontSize = `${newSize}px`;
@@ -415,7 +411,6 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
         }
       });
 
-      // Add the clone to the document temporarily (hidden)
       clone.style.position = 'fixed';
       clone.style.left = '-9999px';
       clone.style.top = '0';
@@ -467,7 +462,6 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
 
   return (
     <Container maxWidth="lg">
-      {/* Print buttons - hidden during actual printing */}
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'flex-end', 
@@ -505,7 +499,6 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
           }
         }}
       >
-        {/* Header section - Properly centered */}
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -523,7 +516,6 @@ const convertAmountToWords = (amount: number, currency: string = 'RIALS'): strin
             Back to Search
           </Button>
           
-          {/* Centered header title */}
           <Box sx={{ 
             flex: 1, 
             display: 'flex', 

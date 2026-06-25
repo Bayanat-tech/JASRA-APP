@@ -45,8 +45,7 @@ const LeaveResumptionApprovalPage = () => {
   const sql_string = `
   SELECT *
   FROM VW_HR_LEAVE_REQUEST_FLOW
-  WHERE COMPANY_CODE = 'BSG'
-  AND ( ACTUAL_RESUME_DATE IS NULL
+  WHERE ( ACTUAL_RESUME_DATE IS NULL
   AND RESUME_DATE_APPROVED = 'NO'
     AND FINAL_APPROVED = 'YES'
     AND CREATED_BY = '${user?.loginid1}')

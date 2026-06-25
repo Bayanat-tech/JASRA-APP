@@ -13,32 +13,27 @@ import {
   Alert,
   Collapse,
   FormControlLabel,
-  Snackbar,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  Skeleton
+  Snackbar
 } from '@mui/material';
 import CustomAlert from 'components/@extended/CustomAlert';
 import { showAlert } from 'store/CustomAlert/alertSlice';
 import { TLeaveApproval } from 'pages/Purchasefolder/type/leave-approval-types';
-import { IoSendSharp, IoPrintSharp } from 'react-icons/io5';
+import { IoSendSharp} from 'react-icons/io5';
 import { MdCancelScheduleSend } from 'react-icons/md';
 import hrapprovalInstance from 'service/Service.hr';
 import useAuth from 'hooks/useAuth';
 import { useDispatch } from 'store';
 import { useQuery } from '@tanstack/react-query';
-import WmsReportView from 'components/reports/WmsReportView';
-import UniversalDialog from 'components/popup/UniversalDialog';
-import WmsSerivceInstance from 'service/wms/service.wms';
+// import WmsReportView from 'components/reports/WmsReportView';
+// import UniversalDialog from 'components/popup/UniversalDialog';
+// import WmsSerivceInstance from 'service/wms/service.wms';
 import { FaFileExport, FaSave } from 'react-icons/fa';
 import { DialogPop } from 'components/popup/DIalogPop';
 import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
 import HrRequestServiceInstance, { IHrEmployee, IValidateLeaveResponse } from 'service/services.hr';
 import * as XLSX from 'xlsx';
-import { TUniversalDialogProps } from 'types/types.UniversalDialog';
-import { EyeOutlined } from '@ant-design/icons';
+// import { TUniversalDialogProps } from 'types/types.UniversalDialog';
+// import { EyeOutlined } from '@ant-design/icons';
 import { useIntl } from 'react-intl';
 import dayjs from 'dayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -187,29 +182,31 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   // Report popup state
-  const [printPopup, setPrintPopup] = useState<TUniversalDialogProps>({
-    action: {
-      open: false,
-      fullWidth: true,
-      maxWidth: 'xs'
-    },
+  // const [printPopup, setPrintPopup] = useState<TUniversalDialogProps>({
+  //   action: {
+  //     open: false,
+  //     fullWidth: true,
+  //     maxWidth: 'xs'
+  //   },
 
-    title: intl.formatMessage({ id: 'Print Leave Resumption' }) || 'Print Leave Resumption',
-    data: { isPrintMode: false }
-  });
+  //   title: intl.formatMessage({ id: 'Print Leave Resumption' }) || 'Print Leave Resumption',
+  //   data: { isPrintMode: false }
+  // });
 
-  const [previewReportPopup, setPreviewReportPopup] = useState<TUniversalDialogProps>({
-    action: {
-      open: false,
-      fullWidth: true,
-      maxWidth: 'md'
-    },
-    title: intl.formatMessage({ id: 'Print Report' }) || 'Print Report',
+  // const [previewReportPopup, setPreviewReportPopup] = useState<TUniversalDialogProps>({
+  //   action: {
+  //     open: false,
+  //     fullWidth: true,
+  //     maxWidth: 'md'
+  //   },
+  //   title: intl.formatMessage({ id: 'Print Report' }) || 'Print Report',
 
-    data: { selectedReport: null }
-  });
+  //   data: { selectedReport: null }
+  // });
+
 
   // Query to get logged-in user's employee data only
+
   const { data: currentUserEmployeeData } = useQuery<IHrEmployee | null, Error>({
     queryKey: ['current-user-employee', user?.loginid1],
     queryFn: async () => {
@@ -227,19 +224,19 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
   });
 
   // Query to fetch report data
-  const {
-    data: reportData,
-    isLoading: reportsLoading,
-    isError: reportsError,
-    refetch: refetchReportListData
-  } = useQuery({
-    queryKey: ['employee_reports'],
-    queryFn: async () => {
-      const reports = await WmsSerivceInstance.getAllEmployeeReports();
-      return reports || null;
-    },
-    enabled: printPopup.action.open
-  });
+  // const {
+  //   data: reportData,
+  //   isLoading: reportsLoading,
+  //   isError: reportsError,
+  //   refetch: refetchReportListData
+  // } = useQuery({
+  //   queryKey: ['employee_reports'],
+  //   queryFn: async () => {
+  //     const reports = await WmsSerivceInstance.getAllEmployeeReports();
+  //     return reports || null;
+  //   },
+  //   enabled: printPopup.action.open
+  // });
 
   // Update form data when user data loads
   useEffect(() => {
@@ -383,28 +380,39 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
   };
 
   useEffect(() => {
-    if (formData.leave_start_date && formData.leave_end_date) {
-      const start = parseCustomDate(formData.leave_start_date);
-      const end = parseCustomDate(formData.leave_end_date);
+    const fetchLeaveDays = async () => {
 
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-        const diffDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        if (diffDays !== Number(formData.leave_days)) {
-          setFormData((prev) => ({
-            ...prev,
-            leave_days: diffDays > 0 ? diffDays.toString() : ''
-          }));
+      if (formData.leave_start_date && formData.leave_end_date && formData.leave_type) {
+        const start = parseCustomDate(formData.leave_start_date);
+        const end = parseCustomDate(formData.leave_end_date);
+
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          try {
+            const result = await HrRequestServiceInstance.LeaveDaysCount({
+              leaveStartDate: String(start),
+              leaveEndDate: String(end),
+              leaveType: formData.leave_type,
+              company_code: String(user?.company_code),
+            })
+            setFormData((prev) => ({
+              ...prev,
+              leave_days: result?.leaveDays?.toString() || "",
+            }));
+          } catch (error) {
+            console.error("Error calculating leave days:", error);
+          }
         }
       }
     }
-  }, [formData.leave_start_date, formData.leave_end_date]);
+    fetchLeaveDays();
+  }, [formData.leave_start_date, formData.leave_end_date,formData.leave_type]);
 
   const getEmployeeNameById = async (employeeId: string): Promise<string> => {
     if (!employeeId) return '';
 
     try {
       const employeeArr = await HrRequestServiceInstance.getEmployees(employeeId);
-      return employeeArr[0]?.RPT_NAME || ''; // Use RPT_NAME (or Employee_Name as fallback)
+      return employeeArr[0]?.RPT_NAME || ''; 
     } catch (error) {
       console.error(`Error fetching employee name for ID ${employeeId}:`, error);
       return '';
@@ -524,7 +532,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
 
     try {
       const result = await HrRequestServiceInstance.getValidateLeave({
-        companyCode: 'BSG',
+        companyCode: 'JASRA',
         employeeId: formData.EMPLOYEE_ID,
         leaveStartDate: formData.leave_start_date,
         leaveEndDate: formData.leave_end_date,
@@ -741,23 +749,23 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
   };
 
   // Handler to open report popup
-  const handlePrint = () => {
-    if (!printPopup.action.open) {
-      refetchReportListData();
-    }
-    setPrintPopup((prev) => ({
-      ...prev,
-      action: { ...prev.action, open: !prev.action.open }
-    }));
-  };
+  // const handlePrint = () => {
+  //   if (!printPopup.action.open) {
+  //     refetchReportListData();
+  //   }
+  //   setPrintPopup((prev) => ({
+  //     ...prev,
+  //     action: { ...prev.action, open: !prev.action.open }
+  //   }));
+  // };
 
-  const togglePreviewPopup = (report?: any) => {
-    setPreviewReportPopup((prev) => ({
-      ...prev,
-      action: { ...prev.action, open: !prev.action.open },
-      data: { selectedReport: report ?? null }
-    }));
-  };
+  // const togglePreviewPopup = (report?: any) => {
+  //   setPreviewReportPopup((prev) => ({
+  //     ...prev,
+  //     action: { ...prev.action, open: !prev.action.open },
+  //     data: { selectedReport: report ?? null }
+  //   }));
+  // };
 
   return (
     <Box maxWidth="xl" mx="auto" px={2}>
@@ -1303,11 +1311,11 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Button>
               </Tooltip>
 
-              <Tooltip title={intl.formatMessage({ id: 'Print Leave Request Form' }) || 'Print Leave Request Form'}>
+              {/* <Tooltip title={intl.formatMessage({ id: 'Print Leave Request Form' }) || 'Print Leave Request Form'}>
                 <Button variant="outlined" color="primary" onClick={handlePrint} disabled={!isEditMode} size="small">
                   <IoPrintSharp />
                 </Button>
-              </Tooltip>
+              </Tooltip> */}
             </div>
           </div>
         </div>
@@ -1347,7 +1355,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
       )}
 
       {/* Report dialog for leave resumption form */}
-      {printPopup.action.open && (
+      {/* {printPopup.action.open && (
         <UniversalDialog action={printPopup.action} onClose={handlePrint} title={printPopup.title} hasPrimaryButton={false}>
           {reportsLoading ? (
             <div className="space-y-2">
@@ -1404,7 +1412,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
             <Typography>{intl.formatMessage({ id: 'NoReportSelected' }) || 'No report selected'}</Typography>
           )}
         </UniversalDialog>
-      )}
+      )} */}
     </Box>
   );
 };

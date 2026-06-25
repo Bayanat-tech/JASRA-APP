@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, Tab, useTheme } from '@mui/material';
-import { useInitializeUserLevel } from '../../../shared/global-state';
+// import { useInitializeUserLevel } from '../../../shared/global-state';
 import { Breadcrumbs, Link, Typography } from '@mui/material';
 import CustomAlert from 'components/@extended/CustomAlert';
 import LeaveResumptionApprovalPage from './LeaveResumptionApprovalPage';
@@ -11,7 +11,7 @@ import HRLeaveResumptionCancelRequest from './HRLeaveResumptionCancelRequest';
 import { useIntl } from 'react-intl';
 
 const HRLeaveResumptionMainPage = () => {
-  useInitializeUserLevel();
+  // useInitializeUserLevel();
   const theme = useTheme();
   const [activeTab, setActiveTab] = useState(0);
  const intl = useIntl();

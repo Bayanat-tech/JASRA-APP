@@ -93,7 +93,7 @@ const HrEmployeeRegisterMainPage: React.FC<Props> = ({ leaveTypes = [], leaveDat
   SELECT DISTINCT *
   FROM (
     SELECT *
-    FROM VW_HR_EMPLOYEE_AWARE
+    FROM VW_HR_EMPLOYEE
     WHERE EMP_STATUS <> 'S'
     START WITH
       EMPLOYEE_ID = '${user?.loginid1}'
@@ -161,7 +161,7 @@ const leaveBalanceSql = useMemo(() => {
   return `
     SELECT EMPLOYEE_ID, LEAVE_TYPE, LEAVE_TYPE_DESC, 
     NVL(NO_OF_LEAVES_AVAILABLE,0) as NO_OF_LEAVES_AVAILABLE
-    FROM VW_HR_LEAVE_YEARLY_BAL_SYSDATE_AWARE 
+    FROM VW_HR_LEAVE_YEARLY_BAL_SYSDATE
     WHERE EMPLOYEE_ID = '${employee}' 
     AND LEAVE_TYPE NOT IN ('001','008','ABS')
   `;
@@ -278,6 +278,20 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
   });
 
   // Fetch filtered leave history with all filters
+    const filtered_leavestring = `
+    SELECT *
+    FROM VW_HR_EMP_LEAVE_HIST
+    WHERE EMPLOYEE_ID = '${employee}'
+    AND ('${leaveType}' = 'ALL' OR LEAVE_TYPE = '${leaveType}')
+    AND (
+            '${fromDate}' IS NULL OR '${toDate}' IS NULL
+            OR LEAVE_REQUEST_DATE BETWEEN 
+                TO_DATE('${fromDate}','YYYY-MM-DD') 
+                AND TO_DATE('${toDate}','YYYY-MM-DD')
+        )
+    ORDER BY LEAVE_START_DATE DESC
+    `;
+
   const {
     data: filteredLeaveHistory = [],
     isLoading: filteredLeaveHistoryLoading,
@@ -287,12 +301,7 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
     queryFn: async () => {
       if (!employee) return [];
       try {
-        const response = await HrRequestServiceInstance.getLeaveHistory({
-          employeeId: employee,
-          leaveType: leaveType === 'ALL' ? undefined : leaveType || undefined,
-          leaveStartDateFrom: fromDate || undefined,
-          leaveEndDateTo: toDate || undefined
-        });
+        const response = await HrServiceInstance.executeRawSql(filtered_leavestring);
         return response as unknown as ILeaveHistory[];
       } catch (err) {
         console.error('Error fetching filtered leave history:', err);
