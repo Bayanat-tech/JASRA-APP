@@ -2,13 +2,13 @@ import oracledb from 'oracledb';
 import { oracleDb } from "../../database/connection";
 import { Request, Response } from "express";
 import constants from "../../helpers/constants";
-import { HrService } from "../service/JS_hr.service";
+// import { HrService } from "../service/JS_hr.service";
 import { TLeaveApproval } from "../../interfaces/Hr/hr_leave_approval";
-import { notifyUser } from "../../helpers/functions";
+// import { notifyUser } from "../../helpers/functions";
 import { sendLeaveNotifications } from '../../controllers/HR/sendLeaveNotifications';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
+// const MAX_RETRIES = 3;
+// const RETRY_DELAY = 1000;
 
 function toOracleDate(dateInput?: string | Date | null): string | null {
   if (!dateInput) return null;
@@ -48,27 +48,27 @@ function toOracleDate(dateInput?: string | Date | null): string | null {
   }
 }
 
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// async function sleep(ms: number) {
+//   return new Promise((resolve) => setTimeout(resolve, ms));
+// }
 
-async function retryOnError<T>(
-  operation: () => Promise<T>,
-  retries = MAX_RETRIES
-): Promise<T> {
-  try {
-    return await operation();
-  } catch (error: any) {
-    const errorCode = error.errorNum || error.code;
-    const retryableErrors = [60, 12514, 12505, 12154]; // deadlock, listener not reached, etc.
-    if (retries > 0 && (retryableErrors.includes(errorCode) || error.message?.includes('NJS-040'))) {
-      console.warn(`[retryOnError] Retrying operation due to error ${errorCode}: ${error.message}`);
-      await sleep(RETRY_DELAY);
-      return retryOnError(operation, retries - 1);
-    }
-    throw error;
-  }
-}
+// async function retryOnError<T>(
+//   operation: () => Promise<T>,
+//   retries = MAX_RETRIES
+// ): Promise<T> {
+//   try {
+//     return await operation();
+//   } catch (error: any) {
+//     const errorCode = error.errorNum || error.code;
+//     const retryableErrors = [60, 12514, 12505, 12154]; // deadlock, listener not reached, etc.
+//     if (retries > 0 && (retryableErrors.includes(errorCode) || error.message?.includes('NJS-040'))) {
+//       console.warn(`[retryOnError] Retrying operation due to error ${errorCode}: ${error.message}`);
+//       await sleep(RETRY_DELAY);
+//       return retryOnError(operation, retries - 1);
+//     }
+//     throw error;
+//   }
+// }
 
 // export async function upsertLeaveApproval(
 //   data: TLeaveApproval
@@ -321,38 +321,38 @@ export async function upsertLeaveApproval(
     console.error("sendLeaveNotifications failed for", requestNumber, err);
   });
 
-  if (finalApproved) {
-    console.log('Triggering background processing for approved leave');
-    processApprovedLeaveRequestsForSingleRecord(requestNumber, data.COMPANY_CODE)
-      .catch((error) => {
-        console.error('Background processing failed:', error);
-      });
-  }
+  // if (finalApproved) {
+  //   console.log('Triggering background processing for approved leave');
+  //   processApprovedLeaveRequestsForSingleRecord(requestNumber, data.COMPANY_CODE)
+  //     .catch((error) => {
+  //       console.error('Background processing failed:', error);
+  //     });
+  // }
 
   return { requestNumber, uuid };
 }
 
-export async function processApprovedLeaveRequestsForSingleRecord(
-  requestNumber: string,
-  companyCode: string
-): Promise<void> {
-  try {
+// export async function processApprovedLeaveRequestsForSingleRecord(
+//   requestNumber: string,
+//   companyCode: string
+// ): Promise<void> {
+//   try {
 
-    await processApprovedLeaveRequests({
-      specificRequestNumber: requestNumber,
-      specificCompanyCode: companyCode,
-    });
-  } catch (error) {
-    console.error("Error processing single record:", {
-      requestNumber,
-      companyCode,
-      error:
-        typeof error === "object" && error !== null && "message" in error
-          ? (error as any).message
-          : String(error),
-    });
-  }
-}
+//     await processApprovedLeaveRequests({
+//       specificRequestNumber: requestNumber,
+//       specificCompanyCode: companyCode,
+//     });
+//   } catch (error) {
+//     console.error("Error processing single record:", {
+//       requestNumber,
+//       companyCode,
+//       error:
+//         typeof error === "object" && error !== null && "message" in error
+//           ? (error as any).message
+//           : String(error),
+//     });
+//   }
+// }
 
 async function recordExists(
   requestNumber: string,
@@ -505,20 +505,20 @@ const params = {
     console.log("Update sql result:", result); 
   }
 
-const formatDate = (date: string | number | Date | undefined) => {
-  if (!date) return null;
+// const formatDate = (date: string | number | Date | undefined) => {
+//   if (!date) return null;
 
-  if (date instanceof Date) {
-    return date.toISOString().split("T")[0];
-  }
+//   if (date instanceof Date) {
+//     return date.toISOString().split("T")[0];
+//   }
 
-  const parsedDate = new Date(date);
-  if (!isNaN(parsedDate.getTime())) {
-    return parsedDate.toISOString().split("T")[0];
-  }
+//   const parsedDate = new Date(date);
+//   if (!isNaN(parsedDate.getTime())) {
+//     return parsedDate.toISOString().split("T")[0];
+//   }
 
-  return null;
-};
+//   return null;
+// };
 
 async function insertLeaveApproval(data: TLeaveApproval, connection: any) {
   console.log(
@@ -720,291 +720,291 @@ export const upsertLeaveApprovalHandler = async (
   }
 };
 
-const oq = (s: string) => s.replace(/'/g, "''"); 
+// const oq = (s: string) => s.replace(/'/g, "''"); 
 
-export async function processApprovedLeaveRequests(options?: {
-  specificRequestNumber?: string;
-  specificCompanyCode?: string;
-}): Promise<void> {
-  try {
-    console.log("Starting to process approved leave requests...", options);
+// export async function processApprovedLeaveRequests(options?: {
+//   specificRequestNumber?: string;
+//   specificCompanyCode?: string;
+// }): Promise<void> {
+//   try {
+//     console.log("Starting to process approved leave requests...", options);
 
-    let whereClause = "WHERE FINAL_APPROVED = 'YES'";
+//     let whereClause = "WHERE FINAL_APPROVED = 'YES'";
 
-    if (options?.specificRequestNumber && options?.specificCompanyCode) {
-      const rn = oq(options.specificRequestNumber);
-      const cc = oq(options.specificCompanyCode);
-      whereClause += ` AND REQUEST_NUMBER = '${rn}' AND COMPANY_CODE = '${cc}'`;
-      console.log("Using specific record filter (inlined):", {
-        requestNumber: rn,
-        companyCode: cc,
-      });
-    }
+//     if (options?.specificRequestNumber && options?.specificCompanyCode) {
+//       const rn = oq(options.specificRequestNumber);
+//       const cc = oq(options.specificCompanyCode);
+//       whereClause += ` AND REQUEST_NUMBER = '${rn}' AND COMPANY_CODE = '${cc}'`;
+//       console.log("Using specific record filter (inlined):", {
+//         requestNumber: rn,
+//         companyCode: cc,
+//       });
+//     }
 
-    const fileDataResult = await oracleDb.query(
-      `SELECT 
-        REQUEST_NUMBER, SR_NO, ORG_FILE_NAME, AWS_FILE_LOCN, EXTENSIONS, USER_FILE_NAME
-      FROM UPLOADED_FILES_DLTS_VH
-      WHERE REQUEST_NUMBER = :requestNumber AND (FILE_TRANSFER != 'Y' OR FILE_TRANSFER IS NULL)`,
-      { requestNumber: { val: options?.specificRequestNumber } }
-    );
-    const fileData: any[] = fileDataResult.rows || fileDataResult;
+//     const fileDataResult = await oracleDb.query(
+//       `SELECT 
+//         REQUEST_NUMBER, SR_NO, ORG_FILE_NAME, AWS_FILE_LOCN, EXTENSIONS, USER_FILE_NAME
+//       FROM UPLOADED_FILES_DLTS_VH
+//       WHERE REQUEST_NUMBER = :requestNumber AND (FILE_TRANSFER != 'Y' OR FILE_TRANSFER IS NULL)`,
+//       { requestNumber: { val: options?.specificRequestNumber } }
+//     );
+//     const fileData: any[] = fileDataResult.rows || fileDataResult;
 
-    for (const file of fileData) {
-      try {
-        await HrService.insertUploadedFileEmployee(file);
-      } catch (error: any) {
-        console.error(
-          `Failed to send file data for REQUEST_NUMBER: ${options?.specificRequestNumber}`,
-          error
-        );
+//     for (const file of fileData) {
+//       try {
+//         await HrService.insertUploadedFileEmployee(file);
+//       } catch (error: any) {
+//         console.error(
+//           `Failed to send file data for REQUEST_NUMBER: ${options?.specificRequestNumber}`,
+//           error
+//         );
 
-        const detailedError =
-          error?.response?.data ??
-          error?.response ??
-          error?.message ??
-          String(error);
+//         const detailedError =
+//           error?.response?.data ??
+//           error?.response ??
+//           error?.message ??
+//           String(error);
 
-        const detailedErrorText =
-          typeof detailedError === "string"
-            ? detailedError
-            : JSON.stringify(detailedError, null, 2);
+//         const detailedErrorText =
+//           typeof detailedError === "string"
+//             ? detailedError
+//             : JSON.stringify(detailedError, null, 2);
 
-        const notifPayload = {
-          event: "HR_API_ERROR",
-          message: `Failed to upload file to HR for Request: ${options?.specificRequestNumber}\nError: ${error?.message || "Unknown error"}\n\nDetails: ${detailedErrorText}`,
-          subject: "HR API File Upload Failed",
-          request_users: "Rohan.Yadav@bayanattechnology.com",
-          htmlMessage: `
-            <h3>HR API File Upload Failed</h3>
-            <p><strong>Request Number:</strong> ${options?.specificRequestNumber}</p>
-            <p><strong>Error Message:</strong> ${error?.message || "Unknown error"}</p>
-            <p><strong>Error Details:</strong></p>
-            <pre>${detailedErrorText}</pre>
-            <p><strong>File Details:</strong></p>
-            <pre>${JSON.stringify(file, null, 2)}</pre>
-          `,
-        };
+//         const notifPayload = {
+//           event: "HR_API_ERROR",
+//           message: `Failed to upload file to HR for Request: ${options?.specificRequestNumber}\nError: ${error?.message || "Unknown error"}\n\nDetails: ${detailedErrorText}`,
+//           subject: "HR API File Upload Failed",
+//           request_users: "Rohan.Yadav@bayanattechnology.com",
+//           htmlMessage: `
+//             <h3>HR API File Upload Failed</h3>
+//             <p><strong>Request Number:</strong> ${options?.specificRequestNumber}</p>
+//             <p><strong>Error Message:</strong> ${error?.message || "Unknown error"}</p>
+//             <p><strong>Error Details:</strong></p>
+//             <pre>${detailedErrorText}</pre>
+//             <p><strong>File Details:</strong></p>
+//             <pre>${JSON.stringify(file, null, 2)}</pre>
+//           `,
+//         };
 
-        try {
-          console.log("notifyUser payload (HR file upload):", notifPayload);
-          const notifResult: any = await notifyUser(notifPayload);
-          console.log("notifyUser result (HR file upload):", notifResult);
-        } catch (notifErr) {
-          console.error("notifyUser failed (HR file upload):", notifErr);
-        }
+//         try {
+//           console.log("notifyUser payload (HR file upload):", notifPayload);
+//           const notifResult: any = await notifyUser(notifPayload);
+//           console.log("notifyUser result (HR file upload):", notifResult);
+//         } catch (notifErr) {
+//           console.error("notifyUser failed (HR file upload):", notifErr);
+//         }
 
-        return;
-      }
-    }
+//         return;
+//       }
+//     }
 
-    if (fileData.length > 0) {
-      await oracleDb.query(
-        `UPDATE UPLOADED_FILES_DLTS_VH 
-         SET FILE_TRANSFER = 'Y' 
-         WHERE REQUEST_NUMBER = :requestNumber`,
-        { requestNumber: { val: options?.specificRequestNumber } }
-      );
-    }
+//     if (fileData.length > 0) {
+//       await oracleDb.query(
+//         `UPDATE UPLOADED_FILES_DLTS_VH 
+//          SET FILE_TRANSFER = 'Y' 
+//          WHERE REQUEST_NUMBER = :requestNumber`,
+//         { requestNumber: { val: options?.specificRequestNumber } }
+//       );
+//     }
 
-    const approvedRequests = await oracleDb.query(
-      `
-      SELECT
-        NVL(REQUEST_NUMBER, '') AS "requestNumber",
-        NVL(COMPANY_CODE, '') AS "companyCode",
-        NVL(EMPLOYEE_CODE, '') AS "employeeCode",
-        TO_CHAR(LEAVE_REQUEST_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveRequestDate",
-        TO_CHAR(TRAVEL_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "travelDate",
-        NVL(LEAVE_TYPE, '') AS "leaveType",
-        TO_CHAR(LEAVE_START_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveStartDate",
-        TO_CHAR(LEAVE_END_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveEndDate",
-        NVL(LEAVE_DAYS, 0) AS "leaveDays",
-        NVL(LEAVE_REASON, '') AS "leaveReason",
-        NVL(DAYS_ADJUSTED, 0) AS "daysAdjusted",
-        NVL(HALF_DAY, '') AS "halfDay",
-        NVL(AIR_TICKET, '') AS "airTicket",
-        NVL(AIR_TICKET_SELF, '') AS "airTicketSelf",
-        NVL(AIR_TICKET_WIFE, '') AS "airTicketWife",
-        NVL(AIR_TICKET_CHILDREN, 0) AS "airTicketChildren",
-        TO_CHAR(REQUEST_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "requestDate",
-        NVL(FLOW_CODE, '') AS "flowCode",
-        NVL(FLOW_LEVEL_INITIAL, 0) AS "flowLevelInitial",
-        NVL(FLOW_LEVEL_RUNNING, 0) AS "flowLevelRunning",
-        NVL(FLOW_LEVEL_FINAL, 0) AS "flowLevelFinal",
-        NVL(FA_UPLOADED, '') AS "faUploaded",
+//     const approvedRequests = await oracleDb.query(
+//       `
+//       SELECT
+//         NVL(REQUEST_NUMBER, '') AS "requestNumber",
+//         NVL(COMPANY_CODE, '') AS "companyCode",
+//         NVL(EMPLOYEE_CODE, '') AS "employeeCode",
+//         TO_CHAR(LEAVE_REQUEST_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveRequestDate",
+//         TO_CHAR(TRAVEL_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "travelDate",
+//         NVL(LEAVE_TYPE, '') AS "leaveType",
+//         TO_CHAR(LEAVE_START_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveStartDate",
+//         TO_CHAR(LEAVE_END_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "leaveEndDate",
+//         NVL(LEAVE_DAYS, 0) AS "leaveDays",
+//         NVL(LEAVE_REASON, '') AS "leaveReason",
+//         NVL(DAYS_ADJUSTED, 0) AS "daysAdjusted",
+//         NVL(HALF_DAY, '') AS "halfDay",
+//         NVL(AIR_TICKET, '') AS "airTicket",
+//         NVL(AIR_TICKET_SELF, '') AS "airTicketSelf",
+//         NVL(AIR_TICKET_WIFE, '') AS "airTicketWife",
+//         NVL(AIR_TICKET_CHILDREN, 0) AS "airTicketChildren",
+//         TO_CHAR(REQUEST_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "requestDate",
+//         NVL(FLOW_CODE, '') AS "flowCode",
+//         NVL(FLOW_LEVEL_INITIAL, 0) AS "flowLevelInitial",
+//         NVL(FLOW_LEVEL_RUNNING, 0) AS "flowLevelRunning",
+//         NVL(FLOW_LEVEL_FINAL, 0) AS "flowLevelFinal",
+//         NVL(FA_UPLOADED, '') AS "faUploaded",
 
-        CASE WHEN UPPER(TRIM(FINAL_APPROVED)) = 'YES' THEN 'YES' ELSE 'NO' END
-                                                                     AS "finalApproved",
+//         CASE WHEN UPPER(TRIM(FINAL_APPROVED)) = 'YES' THEN 'YES' ELSE 'NO' END
+//                                                                      AS "finalApproved",
 
-        NVL(CREATE_USER, '') AS "createUser",
-        TO_CHAR(CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "createDate",
-        NVL(LAST_UPDATED, '') AS "lastUpdated",
-        NVL(LAST_ACTION, '') AS "lastAction",
-        NVL(HISTORY_SERIAL, 0) AS "historySerial",
-        NVL(CANCEL_FLAG, '') AS "cancelFlag",
-        NVL(CANCEL_USER, '') AS "cancelUser",
-        TO_CHAR(CANCEL_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "cancelDate",
-        NVL(CANCEL_REMARK, '') AS "cancelRemark",
-        NVL(REMARKS_HISTRY, '') AS "remarksHistry",
-        NVL(REMARKS, '') AS "remarks",
-        NVL(DESCRIPTION, '') AS "description",
-        NVL(COMMENTS, '') AS "comments",
-        NVL(MOBILE_APP_UPDATE, 'N') AS "mobileAppUpdate",
-        TO_CHAR(UPDATED_AT, 'YYYY-MM-DD HH24:MI:SS') AS "updatedAt",
-        NVL(UPDATED_BY, '') AS "updatedBy",
-        NVL(CREATED_BY, '') AS "createdBy",
-        TO_CHAR(CREATED_AT, 'YYYY-MM-DD HH24:MI:SS') AS "createdAt",
-        NVL(HOD, '') AS "hod",
-        NVL(DEPT_HEAD, '') AS "deptHead",
-        NVL(IMMEDIATE_SUPERVISOR, '') AS "immediateSupervisor",
-        NVL(LOG_NUMBER, 0) AS "logNumber",
-        NVL(NEXT_ACTION_BY, '') AS "nextActionBy",
-        NVL(LEAVE_ALLOWANCE, '') AS "leaveAllowance",
-        NVL(ADV_PAYMENT, '') AS "advPayment",
-        NVL(CAUSE_TYPE, '') AS "causeType",
-        NVL(NAME_OF_REPLACEMENT, '') AS "nameOfReplacement",
-        NVL(CONTACT_DETAILS_DURING_LEAVE, '') AS "contactDetailsDuringLeave",
-        TO_CHAR(DUTY_RESUME_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "dutyResumeDate",
-        TO_CHAR(ACTUAL_RESUME_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "actualResumeDate",
-        NVL(EMPLOYEE_NAME, '') AS "employeeName",
+//         NVL(CREATE_USER, '') AS "createUser",
+//         TO_CHAR(CREATE_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "createDate",
+//         NVL(LAST_UPDATED, '') AS "lastUpdated",
+//         NVL(LAST_ACTION, '') AS "lastAction",
+//         NVL(HISTORY_SERIAL, 0) AS "historySerial",
+//         NVL(CANCEL_FLAG, '') AS "cancelFlag",
+//         NVL(CANCEL_USER, '') AS "cancelUser",
+//         TO_CHAR(CANCEL_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "cancelDate",
+//         NVL(CANCEL_REMARK, '') AS "cancelRemark",
+//         NVL(REMARKS_HISTRY, '') AS "remarksHistry",
+//         NVL(REMARKS, '') AS "remarks",
+//         NVL(DESCRIPTION, '') AS "description",
+//         NVL(COMMENTS, '') AS "comments",
+//         NVL(MOBILE_APP_UPDATE, 'N') AS "mobileAppUpdate",
+//         TO_CHAR(UPDATED_AT, 'YYYY-MM-DD HH24:MI:SS') AS "updatedAt",
+//         NVL(UPDATED_BY, '') AS "updatedBy",
+//         NVL(CREATED_BY, '') AS "createdBy",
+//         TO_CHAR(CREATED_AT, 'YYYY-MM-DD HH24:MI:SS') AS "createdAt",
+//         NVL(HOD, '') AS "hod",
+//         NVL(DEPT_HEAD, '') AS "deptHead",
+//         NVL(IMMEDIATE_SUPERVISOR, '') AS "immediateSupervisor",
+//         NVL(LOG_NUMBER, 0) AS "logNumber",
+//         NVL(NEXT_ACTION_BY, '') AS "nextActionBy",
+//         NVL(LEAVE_ALLOWANCE, '') AS "leaveAllowance",
+//         NVL(ADV_PAYMENT, '') AS "advPayment",
+//         NVL(CAUSE_TYPE, '') AS "causeType",
+//         NVL(NAME_OF_REPLACEMENT, '') AS "nameOfReplacement",
+//         NVL(CONTACT_DETAILS_DURING_LEAVE, '') AS "contactDetailsDuringLeave",
+//         TO_CHAR(DUTY_RESUME_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "dutyResumeDate",
+//         TO_CHAR(ACTUAL_RESUME_DATE, 'YYYY-MM-DD HH24:MI:SS') AS "actualResumeDate",
+//         NVL(EMPLOYEE_NAME, '') AS "employeeName",
 
-        /* keep if you still need flags downstream */
-        NVL(DATA_TRANSFER, 'N') AS "dataTransfer",
-        NVL(DATE_FLAG, 'N') AS "dateFlag"
+//         /* keep if you still need flags downstream */
+//         NVL(DATA_TRANSFER, 'N') AS "dataTransfer",
+//         NVL(DATE_FLAG, 'N') AS "dateFlag"
 
-      FROM LEAVE_REQUEST_FLOW
-      ${whereClause}
-        AND NVL(NULLIF(TRIM(DATA_TRANSFER), ''), 'N') = 'N'
-      `,
-    );
+//       FROM LEAVE_REQUEST_FLOW
+//       ${whereClause}
+//         AND NVL(NULLIF(TRIM(DATA_TRANSFER), ''), 'N') = 'N'
+//       `,
+//     );
 
-    console.log(`Found ${approvedRequests.rows?.length || 0} records to INSERT`);
+//     console.log(`Found ${approvedRequests.rows?.length || 0} records to INSERT`);
 
-    for (const request of approvedRequests.rows || []) {
-      try {
-        await HrService.insertLeaveRequest(request);
-        const rn = oq(request.requestNumber);
-        const cc = oq(request.companyCode);
-        await oracleDb.query(
-          `UPDATE LEAVE_REQUEST_FLOW
-             SET DATA_TRANSFER = 'Y',
-                 UPDATED_AT = SYSTIMESTAMP
-           WHERE REQUEST_NUMBER = '${rn}'
-             AND COMPANY_CODE = '${cc}'`
-        );
+//     // for (const request of approvedRequests.rows || []) {
+//     //   try {
+//     //     await HrService.insertLeaveRequest(request);
+//     //     const rn = oq(request.requestNumber);
+//     //     const cc = oq(request.companyCode);
+//     //     await oracleDb.query(
+//     //       `UPDATE LEAVE_REQUEST_FLOW
+//     //          SET DATA_TRANSFER = 'Y',
+//     //              UPDATED_AT = SYSTIMESTAMP
+//     //        WHERE REQUEST_NUMBER = '${rn}'
+//     //          AND COMPANY_CODE = '${cc}'`
+//     //     );
 
-        console.log(`Inserted/marked transferred: ${request.requestNumber}`);
-      } catch (error: any) {
-        console.error("Failed to insert request:", {
-          requestNumber: request.requestNumber,
-          error: error.message,
-          fullError: error?.response?.data ?? error,
-        });
+//     //     console.log(`Inserted/marked transferred: ${request.requestNumber}`);
+//     //   } catch (error: any) {
+//     //     console.error("Failed to insert request:", {
+//     //       requestNumber: request.requestNumber,
+//     //       error: error.message,
+//     //       fullError: error?.response?.data ?? error,
+//     //     });
 
-        const detailedError =
-          error?.response?.data ??
-          error?.response ??
-          error?.message ??
-          String(error);
+//     //     const detailedError =
+//     //       error?.response?.data ??
+//     //       error?.response ??
+//     //       error?.message ??
+//     //       String(error);
 
-        const detailedErrorText =
-          typeof detailedError === "string"
-            ? detailedError
-            : JSON.stringify(detailedError, null, 2);
+//     //     const detailedErrorText =
+//     //       typeof detailedError === "string"
+//     //         ? detailedError
+//     //         : JSON.stringify(detailedError, null, 2);
 
-        const notifPayload = {
-          event: "HR_API_ERROR",
-          message: `Failed to transfer leave request to HR \nRequestNumber: ${request.requestNumber}\nCompanyCode: ${request.companyCode}\nError: ${error?.message || "Unknown error"}\n\nDetails: ${detailedErrorText}`,
-          subject: "HR API Leave Transfer Failed",
-          request_users: "Rohan.Yadav@bayanattechnology.com",
-          htmlMessage: `
-            <h3>HR API Leave Transfer Failed</h3>
-            <p><strong>Request Number:</strong> ${request.requestNumber}</p>
-            <p><strong>Company Code:</strong> ${request.companyCode}</p>
-            <p><strong>Error Message:</strong> ${error?.message || "Unknown error"}</p>
-            <p><strong>Error Details:</strong></p>
-            <pre>${detailedErrorText}</pre>
-            <p><strong>Request Payload:</strong></p>
-            <pre>${JSON.stringify(request, null, 2)}</pre>
-          `,
-        };
+//     //     const notifPayload = {
+//     //       event: "HR_API_ERROR",
+//     //       message: `Failed to transfer leave request to HR \nRequestNumber: ${request.requestNumber}\nCompanyCode: ${request.companyCode}\nError: ${error?.message || "Unknown error"}\n\nDetails: ${detailedErrorText}`,
+//     //       subject: "HR API Leave Transfer Failed",
+//     //       request_users: "Rohan.Yadav@bayanattechnology.com",
+//     //       htmlMessage: `
+//     //         <h3>HR API Leave Transfer Failed</h3>
+//     //         <p><strong>Request Number:</strong> ${request.requestNumber}</p>
+//     //         <p><strong>Company Code:</strong> ${request.companyCode}</p>
+//     //         <p><strong>Error Message:</strong> ${error?.message || "Unknown error"}</p>
+//     //         <p><strong>Error Details:</strong></p>
+//     //         <pre>${detailedErrorText}</pre>
+//     //         <p><strong>Request Payload:</strong></p>
+//     //         <pre>${JSON.stringify(request, null, 2)}</pre>
+//     //       `,
+//     //     };
 
-        try {
-          console.log("notifyUser payload (HR leave transfer):", notifPayload);
-          const notifResult: any = await notifyUser(notifPayload);
-          console.log("notifyUser result (HR leave transfer):", notifResult);
-        } catch (notifErr) {
-          console.error("notifyUser failed (HR leave transfer):", notifErr);
-        }
-      }
-    }
+//     //     try {
+//     //       console.log("notifyUser payload (HR leave transfer):", notifPayload);
+//     //       const notifResult: any = await notifyUser(notifPayload);
+//     //       console.log("notifyUser result (HR leave transfer):", notifResult);
+//     //     } catch (notifErr) {
+//     //       console.error("notifyUser failed (HR leave transfer):", notifErr);
+//     //     }
+//     //   }
+//     // }
 
-    const resumeRequests = await oracleDb.query(
-      `SELECT
-          REQUEST_NUMBER                                   AS "requestNumber",
-          COMPANY_CODE                                     AS "companyCode",
-          TO_CHAR(DUTY_RESUME_DATE,   'YYYY-MM-DD')        AS "dutyResumeDate",
-          TO_CHAR(ACTUAL_RESUME_DATE, 'YYYY-MM-DD')        AS "actualResumeDate",
-          NVL(DATE_FLAG, 'N')                              AS "dateFlag",
-          NVL(DATA_TRANSFER, 'N')                          AS "dataTransfer"
-       FROM LEAVE_REQUEST_FLOW
-       ${whereClause}
-         AND (DUTY_RESUME_DATE IS NOT NULL OR ACTUAL_RESUME_DATE IS NOT NULL)
-         AND NVL(DATE_FLAG, 'N') != 'Y'
-         AND NVL(DATA_TRANSFER, 'N') = 'Y'`
-    );
+//     const resumeRequests = await oracleDb.query(
+//       `SELECT
+//           REQUEST_NUMBER                                   AS "requestNumber",
+//           COMPANY_CODE                                     AS "companyCode",
+//           TO_CHAR(DUTY_RESUME_DATE,   'YYYY-MM-DD')        AS "dutyResumeDate",
+//           TO_CHAR(ACTUAL_RESUME_DATE, 'YYYY-MM-DD')        AS "actualResumeDate",
+//           NVL(DATE_FLAG, 'N')                              AS "dateFlag",
+//           NVL(DATA_TRANSFER, 'N')                          AS "dataTransfer"
+//        FROM LEAVE_REQUEST_FLOW
+//        ${whereClause}
+//          AND (DUTY_RESUME_DATE IS NOT NULL OR ACTUAL_RESUME_DATE IS NOT NULL)
+//          AND NVL(DATE_FLAG, 'N') != 'Y'
+//          AND NVL(DATA_TRANSFER, 'N') = 'Y'`
+//     );
 
-    console.log(
-      `Found ${resumeRequests.rows?.length || 0} records with resume dates to update`
-    );
+//     console.log(
+//       `Found ${resumeRequests.rows?.length || 0} records with resume dates to update`
+//     );
 
-    for (const r of resumeRequests.rows || []) {
-      const hasDuty = !!r.dutyResumeDate;
-      const hasActual = !!r.actualResumeDate;
-      if (!hasDuty && !hasActual) {
-        console.log(`Skipping resume API; no dates present for ${r.requestNumber}`);
-        continue;
-      }
+//     // for (const r of resumeRequests.rows || []) {
+//     //   const hasDuty = !!r.dutyResumeDate;
+//     //   const hasActual = !!r.actualResumeDate;
+//     //   if (!hasDuty && !hasActual) {
+//     //     console.log(`Skipping resume API; no dates present for ${r.requestNumber}`);
+//     //     continue;
+//     //   }
 
-      try {
-        await HrService.updateLeaveResume({
-          requestNumber: r.requestNumber,
-          dutyResumeDate: hasDuty ? new Date(r.dutyResumeDate) : null,
-          actualResumeDate: hasActual ? new Date(r.actualResumeDate) : null,
-        });
+//     //   try {
+//     //     await HrService.updateLeaveResume({
+//     //       requestNumber: r.requestNumber,
+//     //       dutyResumeDate: hasDuty ? new Date(r.dutyResumeDate) : null,
+//     //       actualResumeDate: hasActual ? new Date(r.actualResumeDate) : null,
+//     //     });
 
-        const rn = oq(r.requestNumber);
-        const cc = oq(r.companyCode);
-        await oracleDb.query(
-          `UPDATE LEAVE_REQUEST_FLOW
-             SET DATE_FLAG  = 'Y',
-                 UPDATED_AT = SYSTIMESTAMP
-           WHERE REQUEST_NUMBER = '${rn}'
-             AND COMPANY_CODE   = '${cc}'`
-        );
+//     //     const rn = oq(r.requestNumber);
+//     //     const cc = oq(r.companyCode);
+//     //     await oracleDb.query(
+//     //       `UPDATE LEAVE_REQUEST_FLOW
+//     //          SET DATE_FLAG  = 'Y',
+//     //              UPDATED_AT = SYSTIMESTAMP
+//     //        WHERE REQUEST_NUMBER = '${rn}'
+//     //          AND COMPANY_CODE   = '${cc}'`
+//     //     );
 
-        console.log(`Updated resume dates for: ${r.requestNumber}`);
-      } catch (error: any) {
-        console.error('Failed to update resume dates:', {
-          requestNumber: r.requestNumber,
-          error: error.message,
-        });
-      }
-    }
+//     //     console.log(`Updated resume dates for: ${r.requestNumber}`);
+//     //   } catch (error: any) {
+//     //     console.error('Failed to update resume dates:', {
+//     //       requestNumber: r.requestNumber,
+//     //       error: error.message,
+//     //     });
+//     //   }
+//     // }
 
-    const status = await oracleDb.query(
-      `SELECT COUNT(*) AS total,
-              COUNT(CASE WHEN NVL(DATA_TRANSFER,'N')='Y' THEN 1 END) AS inserted,
-              COUNT(CASE WHEN NVL(DATE_FLAG,'N')='Y'    THEN 1 END) AS resumed
-         FROM LEAVE_REQUEST_FLOW
-         ${whereClause}`
-    );
-    console.log('Post-processing status:', status.rows?.[0] || {});
-  } catch (error) {
-    console.error("Error in processApprovedLeaveRequests:", error);
-    throw error;
-  }
-};
+//     const status = await oracleDb.query(
+//       `SELECT COUNT(*) AS total,
+//               COUNT(CASE WHEN NVL(DATA_TRANSFER,'N')='Y' THEN 1 END) AS inserted,
+//               COUNT(CASE WHEN NVL(DATE_FLAG,'N')='Y'    THEN 1 END) AS resumed
+//          FROM LEAVE_REQUEST_FLOW
+//          ${whereClause}`
+//     );
+//     console.log('Post-processing status:', status.rows?.[0] || {});
+//   } catch (error) {
+//     console.error("Error in processApprovedLeaveRequests:", error);
+//     throw error;
+//   }
+// };
 
 export const saveFileHR = async (
   req: Request,
@@ -1035,7 +1035,7 @@ export const saveFileHR = async (
 
       const duplicateCheckResult = await oracleDb.query(
         `SELECT COUNT(*) AS COUNT 
-         FROM UPLOADED_FILES_DLTS_VH 
+         FROM UPLOADED_FILES_DLTS_LMS 
          WHERE request_number = :request_number AND org_file_name = :org_file_name`,
         {
           request_number: { val: request_number },
@@ -1051,46 +1051,31 @@ export const saveFileHR = async (
       }
 
       const {
-        company_code,
-        file_name,
         extensions,
         aws_file_locn,
-        flow_level,
-        modules,
-        updated_by,
-        created_by,
         user_file_name,
       } = file;
 
       await oracleDb.query(
-        `INSERT INTO UPLOADED_FILES_DLTS_VH (
-          company_code, request_number, file_name, extensions, org_file_name,
-          aws_file_locn, flow_level, modules, updated_by, created_by, 
-          user_file_name, created_at, updated_at
+        `INSERT INTO UPLOADED_FILES_DLTS_LMS (
+          request_number, extensions, org_file_name,
+          aws_file_locn, user_file_name
         ) VALUES (
-          :company_code, :request_number, :file_name, :extensions, :org_file_name,
-          :aws_file_locn, :flow_level, :modules, :updated_by, :created_by,
-          :user_file_name, SYSDATE, SYSDATE
+          :request_number, :extensions, :org_file_name,
+          :aws_file_locn,:user_file_name
         )`,
         {
-          company_code: { val: company_code || null },
           request_number: { val: request_number },
-          file_name: { val: file_name || null },
           extensions: { val: extensions || null },
           org_file_name: { val: org_file_name || null },
           aws_file_locn: { val: aws_file_locn || null },
-          flow_level: { val: flow_level || null },
-          modules: { val: modules || null },
-          updated_by: { val: updated_by || null },
-          created_by: { val: created_by || null },
           user_file_name: { val: user_file_name || null },
         }
       );
 
-      // Fetch SR_NO
       const srNoResult = await oracleDb.query(
         `SELECT SR_NO 
-         FROM UPLOADED_FILES_DLTS_VH 
+         FROM UPLOADED_FILES_DLTS_LMS
          WHERE request_number = :request_number 
          AND org_file_name = :org_file_name 
          ORDER BY created_at DESC 

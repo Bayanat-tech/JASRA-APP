@@ -1,22 +1,21 @@
 import { RequestWithUser } from "../../interfaces/common.interface";
-import {JS_FilesVhService} from '../service/JS_filesVH.service'
+import {JS_Uploadfilesdltslms} from '../service/JS_filesVH.service'
 import { Response } from "express";
 import constants from "../../helpers/constants";
 
 
-let JS_filesVHService: JS_FilesVhService;
+let JS_filesLMSService: JS_Uploadfilesdltslms;
 
 (async () => {
-  JS_filesVHService = await JS_FilesVhService.getInstance();
+  JS_filesLMSService = await JS_Uploadfilesdltslms.getInstance();
 })().catch(console.error);
 
-export const BTgetEmployeeFiles = async (
+export const JSgetEmployeeFiles = async (
   req: RequestWithUser,
   res: Response
 ): Promise<void> => {
   try {
     let { request_number } = req.params;
-    const { modules } = req.query;
 
     request_number = decodeURIComponent(request_number);
 
@@ -29,14 +28,12 @@ export const BTgetEmployeeFiles = async (
     }
 
     const conditions = {
-      request_number, 
-      modules: (modules as string) || "hr",
-      company_code: req.user.company_code,
+      request_number 
     };
 
     console.log("Searching with conditions:", conditions);
 
-    const files = await JS_filesVHService.findAll(conditions);
+    const files = await JS_filesLMSService.findAll(conditions);
 
     // Handle no records found
     if (!files || files.length === 0) {
@@ -64,20 +61,20 @@ export const BTgetEmployeeFiles = async (
   }
 };
 
-export const BTeditEmployeeFiles = async (
+export const JSeditEmployeeFiles = async (
   req: RequestWithUser,
   res: Response
 ): Promise<void> => {
   try {
     const { aws_file_locn, request_number, user_file_name } = req.body;
 
-    const result = await JS_filesVHService.update(
+    const result = await JS_filesLMSService.update(
       {
-        awsFileLocn: aws_file_locn,
-        requestNumber: request_number,
+        AWS_FILE_LOCN: aws_file_locn,
+        REQUEST_NUMBER: request_number,
       },
       {
-        userFileName: user_file_name,
+        USER_FILE_NAME: user_file_name,
       }
     );
 
@@ -101,7 +98,8 @@ export const BTeditEmployeeFiles = async (
     });
   }
 };
-export const BTdeleteEmployeeFiles = async (
+
+export const JSdeleteEmployeeFiles = async (
   req: RequestWithUser,
   res: Response
 ): Promise<void> => {
@@ -117,9 +115,9 @@ export const BTdeleteEmployeeFiles = async (
       return;
     }
 
-    const file = await JS_filesVHService.findOne({
-      requestNumber: request_number,
-      srNo: sr_no,
+    const file = await JS_filesLMSService.findOne({
+      REQUEST_NUMBER: request_number,
+      SR_NO: sr_no,
     });
 
     if (!file) {
@@ -130,9 +128,9 @@ export const BTdeleteEmployeeFiles = async (
       return;
     }
 
-    const result = await JS_filesVHService.delete({
-      requestNumber: request_number,
-      srNo: sr_no,
+    const result = await JS_filesLMSService.delete({
+      REQUEST_NUMBER: request_number,
+      SR_NO: sr_no,
     });
 
     if (result.affected === 0) {

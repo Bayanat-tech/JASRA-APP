@@ -1,27 +1,27 @@
 import { Repository } from "typeorm";
-import { FilesVHEntity } from "../../entities/filesVH.entity";
+import { JSUploadfilesdltslms } from "../entities/JS_Uploaded_files_dlts.entity";
 import { TypeORMService } from "../../database/connection";
 
-export class JS_FilesVhService {
-  private static instance: JS_FilesVhService;
-  private repository: Repository<FilesVHEntity> | null = null;
+export class JS_Uploadfilesdltslms {
+  private static instance: JS_Uploadfilesdltslms;
+  private repository: Repository<JSUploadfilesdltslms> | null = null;
 
   private constructor() {}
 
-  static async getInstance(): Promise<JS_FilesVhService> {
-    if (!JS_FilesVhService.instance) {
-      JS_FilesVhService.instance = new JS_FilesVhService();
+  static async getInstance(): Promise<JS_Uploadfilesdltslms> {
+    if (!JS_Uploadfilesdltslms.instance) {
+      JS_Uploadfilesdltslms.instance = new JS_Uploadfilesdltslms();
     }
 
-    await JS_FilesVhService.instance.ensureRepository();
-    return JS_FilesVhService.instance;
+    await JS_Uploadfilesdltslms.instance.ensureRepository();
+    return JS_Uploadfilesdltslms.instance;
   }
 
   private async ensureRepository() {
     if (!this.repository) {
       try {
         await TypeORMService.initialize();
-        this.repository = TypeORMService.getRepository(FilesVHEntity);
+        this.repository = TypeORMService.getRepository(JSUploadfilesdltslms);
       } catch (error) {
         console.error("Failed to initialize repository:", error);
         throw error;
@@ -30,21 +30,19 @@ export class JS_FilesVhService {
     return this.repository;
   }
 
-  async findAll(conditions: any): Promise<FilesVHEntity[]> {
+  async findAll(conditions: any): Promise<JSUploadfilesdltslms[]> {
     const repo = await this.ensureRepository();
 
     try {
       const mappedConditions = {
-        companyCode: conditions.company_code,
-        requestNumber: conditions.request_number,
-        modules: conditions.modules,
+        REQUEST_NUMBER: conditions.request_number,
       };
 
       console.log("Finding files with conditions:", mappedConditions);
 
       const results = await repo.find({
         where: mappedConditions,
-        order: { srNo: "DESC" },
+        order: { SR_NO: "DESC" },
       });
 
       if (results.length === 0) {
@@ -60,7 +58,7 @@ export class JS_FilesVhService {
     }
   }
 
-  async findOne(conditions: any): Promise<FilesVHEntity | null> {
+  async findOne(conditions: any): Promise<JSUploadfilesdltslms | null> {
     const repo = await this.ensureRepository();
     return await repo.findOne({ where: conditions });
   }

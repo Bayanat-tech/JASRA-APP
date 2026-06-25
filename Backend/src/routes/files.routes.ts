@@ -11,19 +11,19 @@ import {
   getHrVendorFiles,
   editHrVendorFiles,
   deleteHrVendorFiles,
-  getEmployeeFiles,
-  editEmployeeFiles,
-  deleteEmployeeFiles,
   getFilesBySrNo,
   getAllVendorFiles,
 } from "../controllers/files.controller";
 import { checkUserAuthorization } from "../middleware/checkUserAthorization";
+
 import {
   uploadToS3,
   uploadPFToS3,
   uploadVendorAttachmentToS3,
   uploadEmployeeAttachmentToS3,
 } from "../services/ociUpload.service";
+
+import { JSdeleteEmployeeFiles, JSeditEmployeeFiles, JSgetEmployeeFiles } from "../jasra/controllers/JSfiles.controller";
 
 const router = express.Router();
 const upload = multer({
@@ -59,13 +59,6 @@ router.get(
 );
 
 //------Employee files----------
-router.get(
-  "/employees/:request_number",
-  passport.authenticate("jwt", { session: false }),
-  checkUserAuthorization,
-  getEmployeeFiles 
-);
-
 router.put(
   "/editFiles",
   passport.authenticate("jwt", { session: false }),
@@ -99,13 +92,6 @@ router.get(
   passport.authenticate("jwt", { session: false }),
   checkUserAuthorization,
   getAllVendorFiles
-);
-
-router.put(
-  "/editEmployeeFile",
-  passport.authenticate("jwt", { session: false }),
-  checkUserAuthorization,
-  editEmployeeFiles
 );
 
 router.post(
@@ -161,11 +147,27 @@ router.delete(
   deleteHrVendorFiles
 );
 
+//Jasra LMS Files routes 
+
+router.get(
+  "/JS/employees/:request_number",
+  passport.authenticate("jwt", { session: false }),
+  checkUserAuthorization,
+  JSgetEmployeeFiles 
+);
+
+router.put(
+  "/editEmployeeFile",
+  passport.authenticate("jwt", { session: false }),
+  checkUserAuthorization,
+  JSeditEmployeeFiles
+);
+
 router.delete(
   "/deleteEmployeeFiles/:request_number(.+)/:sr_no",
   passport.authenticate("jwt", { session: false }),
   checkUserAuthorization,
-  deleteEmployeeFiles
+  JSdeleteEmployeeFiles
 );
 
 export default router;

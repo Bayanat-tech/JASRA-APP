@@ -1,7 +1,7 @@
 import { Entity, PrimaryColumn, Column } from "typeorm";
 
 @Entity("UPLOADED_FILES_DLTS_LMS")
-export class JS_Uploadfilesdltslms{
+export class JSUploadfilesdltslms{
 
     @PrimaryColumn({name:"REQUEST_NUMBER",type:"varchar"})
     REQUEST_NUMBER?: string;

@@ -4,8 +4,8 @@ import { oracleDb, getRepository } from "../../database/connection";
 import { LeaveRequestFlow } from "../../interfaces/leaveRequestFlow.interface";
 import { notifyUser } from "../../helpers/functions";
 import { TmpLeaveRequestFlow } from "../entities/JS_temp_leave_flow.entity";
-import { TempLeaveFlowService } from "./templeaveflow.service";
-import { Files_dltslms } from "./JS_Files_dlts.service";
+// import { TempLeaveFlowService } from "./templeaveflow.service";
+// import { Files_dltslms } from "./JS_Files_dlts.service";
 
 // Add helper function for date handling
 function formatDate(date: Date | string | null | undefined): string | null {
@@ -75,12 +75,7 @@ export const HrService = {
     }
   },
 
-  // getLeaveBalance: async (employeeId: string) => {
-  //   const response = await axiosInstance.get(
-  //     `/api/EmployeeLeave/leavebalance/${employeeId}`
-  //   );
-  //   return response.data;
-  // },
+
 
   getLeaveEntitle: async (employeeId: string) => {
     console.log("leave register hit");
@@ -307,60 +302,60 @@ export const HrService = {
     }
   },
   
-  JSLeaveDaysCount: async (params: {
-    leaveStartDate: string;
-    leaveEndDate: string;
-    leaveType: string;
-  }) => {
-    const { leaveStartDate, leaveEndDate , leaveType} = params;
+  // JSLeaveDaysCount: async (params: {
+  //   leaveStartDate: string;
+  //   leaveEndDate: string;
+  //   leaveType: string;
+  // }) => {
+  //   const { leaveStartDate, leaveEndDate , leaveType} = params;
 
-    const query = `
-    DECLARE
-     v_leave_days NUMBER;
-     BEGIN
-        v_leave_days := FUN_CALC_LEAVE_DAYS(
-          TO_DATE(:leaveStartDate, 'DD-MM-YYYY'),
-          TO_DATE(:leaveEndDate, 'DD-MM-YYYY'),
-          :p_leaveType
-        );
-      :p_leave_days := v_leave_days;
-      END;
-    `;
+  //   const query = `
+  //   DECLARE
+  //    v_leave_days NUMBER;
+  //    BEGIN
+  //       v_leave_days := FUN_CALC_LEAVE_DAYS(
+  //         TO_DATE(:leaveStartDate, 'DD-MM-YYYY'),
+  //         TO_DATE(:leaveEndDate, 'DD-MM-YYYY'),
+  //         :p_leaveType
+  //       );
+  //     :p_leave_days := v_leave_days;
+  //     END;
+  //   `;
     
-    const bindParams = {
-      leaveStartDate: leaveStartDate,
-      leaveEndDate: leaveEndDate,
-      p_leaveType: leaveType,
-      p_leave_days: {
-        dir: oracledb.BIND_OUT,
-        type: oracledb.NUMBER,
-      },
-    };
+  //   const bindParams = {
+  //     leaveStartDate: leaveStartDate,
+  //     leaveEndDate: leaveEndDate,
+  //     p_leaveType: leaveType,
+  //     p_leave_days: {
+  //       dir: oracledb.BIND_OUT,
+  //       type: oracledb.NUMBER,
+  //     },
+  //   };
 
-    try {
-      const result = await oracleDb.query(query, bindParams);
-      const leaveDays = (result.outBinds as any).p_leave_days;
+  //   try {
+  //     const result = await oracleDb.query(query, bindParams);
+  //     const leaveDays = (result.outBinds as any).p_leave_days;
 
-      return {
-        success: true,
-        leaveStartDate: leaveStartDate,
-        leaveEndDate: leaveEndDate,
-        leaveDays: leaveDays,
-        leaveType: leaveType,
-        message: "Leave days calculated successfully",
-      };
-    }catch (error: string | any) {
-      console.error("Error calculating leave days:", error);
-      return {
-        success: false,
-        leaveStartDate: leaveStartDate,
-        leaveEndDate: leaveEndDate,
-        leaveDays: null,
-        leaveType: leaveType,
-        message: "Failed to calculate leave days",
-      };
-    }
-  },
+  //     return {
+  //       success: true,
+  //       leaveStartDate: leaveStartDate,
+  //       leaveEndDate: leaveEndDate,
+  //       leaveDays: leaveDays,
+  //       leaveType: leaveType,
+  //       message: "Leave days calculated successfully",
+  //     };
+  //   }catch (error: string | any) {
+  //     console.error("Error calculating leave days:", error);
+  //     return {
+  //       success: false,
+  //       leaveStartDate: leaveStartDate,
+  //       leaveEndDate: leaveEndDate,
+  //       leaveDays: null,
+  //       leaveType: leaveType,
+  //       message: "Failed to calculate leave days",
+  //     };
+  //   }
+  // },
 
   JSvalidateLeave: async (params: {
     companyCode: string;
@@ -439,157 +434,157 @@ export const HrService = {
     }
   },
 
-  insertLeaveRequest: async (request: LeaveRequestFlow) => {
-    try {
-      if (request.finalApproved === "YES") {
-        const tmpFormattedRequest: Partial<TmpLeaveRequestFlow> = {
-          request_number: request.requestNumber || "",
-          current_step: request.currentStep || "",
-          company_code: request.companyCode || "",
-          employee_code: request.employeeCode || "",
-          leave_request_date: request.leaveRequestDate
-            ? new Date(request.leaveRequestDate)
-            : undefined,
-          travel_date: request.travelDate
-            ? new Date(request.travelDate)
-            : undefined,
-          leave_type: request.leaveType || "",
-          leave_start_date: request.leaveStartDate
-            ? new Date(request.leaveStartDate)
-            : undefined,
-          leave_end_date: request.leaveEndDate
-            ? new Date(request.leaveEndDate)
-            : undefined,
-          leave_days: Number(request.leaveDays) || 0,
-          leave_reason: request.leaveReason || "",
-          days_adjusted: Number(request.daysAdjusted) || 0,
-          half_day: request.halfDay || "",
-          air_ticket: request.airTicket || "",
-          air_ticket_self: request.airTicketSelf || "",
-          air_ticket_wife: request.airTicketWife || "",
-          air_ticket_children: Number(request.airTicketChildren) || 0,
-          request_date: request.requestDate
-            ? new Date(request.requestDate)
-            : undefined,
-          flow_code: request.flowCode || "",
-          flow_level_initial: Number(request.flowLevelInitial) || 0,
-          flow_level_running: Number(request.flowLevelRunning) || 0,
-          flow_level_final: Number(request.flowLevelFinal) || 0,
-          fa_uploaded: request.faUploaded || "",
-          final_approved: "YES",
-          create_user: request.createUser || "",
-          create_date: request.createDate
-            ? new Date(request.createDate)
-            : undefined,
-          last_updated: request.lastUpdated || "",
-          last_action: request.lastAction || "",
-          history_serial: Number(request.historySerial) || 0,
-          cancel_flag: request.cancelFlag || "",
-          cancel_user: request.cancelUser || "",
-          cancel_date: request.cancelDate
-            ? new Date(request.cancelDate)
-            : undefined,
-          cancel_remark: request.cancelRemark || "",
-          remarks_histry: request.remarksHistry || "",
-          remarks: request.remarks || "",
-          description: request.description || "",
-          comments: request.comments || "",
-          mobile_app_update: request.mobileAppUpdate || "N",
-          updated_by: request.updatedBy || "",
-          created_by: request.createdBy || "",
-          hod: request.hod || "",
-          dept_head: request.deptHead || "",
-          immediate_supervisor: request.immediateSupervisor || "",
-          log_number: Number(request.logNumber) || 0,
-          next_action_by: request.nextActionBy || "",
-          leave_allowance: request.leaveAllowance || "",
-          adv_payment: request.advPayment || "",
-          cause_type: request.causeType || "",
-          name_of_replacement: request.nameOfReplacement || "",
-          contact_details_during_leave: request.contactDetailsDuringLeave || "",
-          duty_resume_date: request.dutyResumeDate
-            ? new Date(request.dutyResumeDate)
-            : undefined,
-          actual_resume_date: request.actualResumeDate
-            ? new Date(request.actualResumeDate)
-            : undefined,
-          employee_name: request.employeeName || "",
-        };
+  // insertLeaveRequest: async (request: LeaveRequestFlow) => {
+  //   try {
+  //     if (request.finalApproved === "YES") {
+  //       const tmpFormattedRequest: Partial<TmpLeaveRequestFlow> = {
+  //         request_number: request.requestNumber || "",
+  //         current_step: request.currentStep || "",
+  //         company_code: request.companyCode || "",
+  //         employee_code: request.employeeCode || "",
+  //         leave_request_date: request.leaveRequestDate
+  //           ? new Date(request.leaveRequestDate)
+  //           : undefined,
+  //         travel_date: request.travelDate
+  //           ? new Date(request.travelDate)
+  //           : undefined,
+  //         leave_type: request.leaveType || "",
+  //         leave_start_date: request.leaveStartDate
+  //           ? new Date(request.leaveStartDate)
+  //           : undefined,
+  //         leave_end_date: request.leaveEndDate
+  //           ? new Date(request.leaveEndDate)
+  //           : undefined,
+  //         leave_days: Number(request.leaveDays) || 0,
+  //         leave_reason: request.leaveReason || "",
+  //         days_adjusted: Number(request.daysAdjusted) || 0,
+  //         half_day: request.halfDay || "",
+  //         air_ticket: request.airTicket || "",
+  //         air_ticket_self: request.airTicketSelf || "",
+  //         air_ticket_wife: request.airTicketWife || "",
+  //         air_ticket_children: Number(request.airTicketChildren) || 0,
+  //         request_date: request.requestDate
+  //           ? new Date(request.requestDate)
+  //           : undefined,
+  //         flow_code: request.flowCode || "",
+  //         flow_level_initial: Number(request.flowLevelInitial) || 0,
+  //         flow_level_running: Number(request.flowLevelRunning) || 0,
+  //         flow_level_final: Number(request.flowLevelFinal) || 0,
+  //         fa_uploaded: request.faUploaded || "",
+  //         final_approved: "YES",
+  //         create_user: request.createUser || "",
+  //         create_date: request.createDate
+  //           ? new Date(request.createDate)
+  //           : undefined,
+  //         last_updated: request.lastUpdated || "",
+  //         last_action: request.lastAction || "",
+  //         history_serial: Number(request.historySerial) || 0,
+  //         cancel_flag: request.cancelFlag || "",
+  //         cancel_user: request.cancelUser || "",
+  //         cancel_date: request.cancelDate
+  //           ? new Date(request.cancelDate)
+  //           : undefined,
+  //         cancel_remark: request.cancelRemark || "",
+  //         remarks_histry: request.remarksHistry || "",
+  //         remarks: request.remarks || "",
+  //         description: request.description || "",
+  //         comments: request.comments || "",
+  //         mobile_app_update: request.mobileAppUpdate || "N",
+  //         updated_by: request.updatedBy || "",
+  //         created_by: request.createdBy || "",
+  //         hod: request.hod || "",
+  //         dept_head: request.deptHead || "",
+  //         immediate_supervisor: request.immediateSupervisor || "",
+  //         log_number: Number(request.logNumber) || 0,
+  //         next_action_by: request.nextActionBy || "",
+  //         leave_allowance: request.leaveAllowance || "",
+  //         adv_payment: request.advPayment || "",
+  //         cause_type: request.causeType || "",
+  //         name_of_replacement: request.nameOfReplacement || "",
+  //         contact_details_during_leave: request.contactDetailsDuringLeave || "",
+  //         duty_resume_date: request.dutyResumeDate
+  //           ? new Date(request.dutyResumeDate)
+  //           : undefined,
+  //         actual_resume_date: request.actualResumeDate
+  //           ? new Date(request.actualResumeDate)
+  //           : undefined,
+  //         employee_name: request.employeeName || "",
+  //       };
 
-        const result =
-          await TempLeaveFlowService.createTempLeaveRequestFlow(
-            tmpFormattedRequest,
-          );
+  //       const result =
+  //         await TempLeaveFlowService.createTempLeaveRequestFlow(
+  //           tmpFormattedRequest,
+  //         );
 
-        console.log("TMP DB Insert Result:", result);
+  //       console.log("TMP DB Insert Result:", result);
 
-        return result;
-      } else {
-        return;
-      }
-    } catch (error: any) {
-      console.error("Error in insertLeaveRequest:", {
-        message: error.message,
-      });
-      throw error;
-    }
-  },
+  //       return result;
+  //     } else {
+  //       return;
+  //     }
+  //   } catch (error: any) {
+  //     console.error("Error in insertLeaveRequest:", {
+  //       message: error.message,
+  //     });
+  //     throw error;
+  //   }
+  // },
 
-updateLeaveResume: async (request: LeaveResumeDatesUpdate): Promise<any> => {
-    try {
-      const result = await TempLeaveFlowService.updateTempLeaveRequestFlow(
-        request.requestNumber,
-        {
-          duty_resume_date: request.dutyResumeDate ? new Date(request.dutyResumeDate) : undefined,
-          actual_resume_date: request.actualResumeDate ? new Date(request.actualResumeDate) : undefined,
-        }
-      );
-      console.log("TMP DB Update Result:", result);
+// updateLeaveResume: async (request: LeaveResumeDatesUpdate): Promise<any> => {
+//     try {
+//       const result = await TempLeaveFlowService.updateTempLeaveRequestFlow(
+//         request.requestNumber,
+//         {
+//           duty_resume_date: request.dutyResumeDate ? new Date(request.dutyResumeDate) : undefined,
+//           actual_resume_date: request.actualResumeDate ? new Date(request.actualResumeDate) : undefined,
+//         }
+//       );
+//       console.log("TMP DB Update Result:", result);
 
-      return result;
+//       return result;
 
-    } catch (error: any) {
-      console.error("Error in updateLeaveResume:", {
-        message: error.message,
-        payload: request,
-      });
+//     } catch (error: any) {
+//       console.error("Error in updateLeaveResume:", {
+//         message: error.message,
+//         payload: request,
+//       });
 
-      const apiError = error?.response?.data ?? error;
-      const apiMessage =
-        (apiError && (apiError.message || apiError.error)) ||
-        error?.message ||
-        String(error);
+//       const apiError = error?.response?.data ?? error;
+//       const apiMessage =
+//         (apiError && (apiError.message || apiError.error)) ||
+//         error?.message ||
+//         String(error);
 
-      const detailedErrorText =
-        typeof apiError === "string" ? apiError : JSON.stringify(apiError, null, 2);
+//       const detailedErrorText =
+//         typeof apiError === "string" ? apiError : JSON.stringify(apiError, null, 2);
 
-      const notifPayload = {
-        event: "HR_API_ERROR",
-        message: `test Failed to update resume dates for RequestNumber: ${request.requestNumber}\nError: ${apiMessage}`,
-        subject: "HR DB updateResumeDates Failed",
-        request_users: "Sagar.b@bayanattechnology.com,Sandeep.dandekar@bayanattechnology.com,arun.colaco@bayanattechnology.com,rohan.yadav@bayanattechnology.com",
-        cc: "prem@bayanattechnology.com",
-        htmlMessage: `
-          <h3>HR DB updateResumeDates Failed</h3>
-          <p><strong>Request Number:</strong> ${request.requestNumber}</p>
-          <p><strong>Error Message:</strong> ${apiMessage}</p>
-          <h4>Error Details</h4>
-          <pre>${detailedErrorText}</pre>
-          <h4>Payload Sent</h4>
-          <pre>${JSON.stringify(request, null, 2)}</pre>
-        `,
-      };
+//       const notifPayload = {
+//         event: "HR_API_ERROR",
+//         message: `test Failed to update resume dates for RequestNumber: ${request.requestNumber}\nError: ${apiMessage}`,
+//         subject: "HR DB updateResumeDates Failed",
+//         request_users: "Sagar.b@bayanattechnology.com,Sandeep.dandekar@bayanattechnology.com,arun.colaco@bayanattechnology.com,rohan.yadav@bayanattechnology.com",
+//         cc: "prem@bayanattechnology.com",
+//         htmlMessage: `
+//           <h3>HR DB updateResumeDates Failed</h3>
+//           <p><strong>Request Number:</strong> ${request.requestNumber}</p>
+//           <p><strong>Error Message:</strong> ${apiMessage}</p>
+//           <h4>Error Details</h4>
+//           <pre>${detailedErrorText}</pre>
+//           <h4>Payload Sent</h4>
+//           <pre>${JSON.stringify(request, null, 2)}</pre>
+//         `,
+//       };
 
-      try {
-        await notifyUser(notifPayload);
-        console.log("notifyUser sent for updateLeaveResume failure");
-      } catch (notifErr) {
-        console.error("notifyUser failed for updateLeaveResume:", notifErr);
-      }
+//       try {
+//         await notifyUser(notifPayload);
+//         console.log("notifyUser sent for updateLeaveResume failure");
+//       } catch (notifErr) {
+//         console.error("notifyUser failed for updateLeaveResume:", notifErr);
+//       }
 
-      throw error;
-    }
-  },
+//       throw error;
+//     }
+//   },
 
   // getLeaveRequestsWithErpDoc: async (employeeCode: string) => {
   //   const response = await axiosInstance.get(
@@ -601,31 +596,31 @@ updateLeaveResume: async (request: LeaveResumeDatesUpdate): Promise<any> => {
   //   return response.data;
   // },
 
-  insertUploadedFileEmployee: async (data: Record<string, any>) => {
-    const requiredFields = ["REQUEST_NUMBER", "SR_NO", "ORG_FILE_NAME", "AWS_FILE_LOCN", "EXTENSIONS", "USER_FILE_NAME"];
-    const missingFields = requiredFields.filter(field => !data[field] && data[field] !== 0);
+  // insertUploadedFileEmployee: async (data: Record<string, any>) => {
+  //   const requiredFields = ["REQUEST_NUMBER", "SR_NO", "ORG_FILE_NAME", "AWS_FILE_LOCN", "EXTENSIONS", "USER_FILE_NAME"];
+  //   const missingFields = requiredFields.filter(field => !data[field] && data[field] !== 0);
 
-    if (missingFields.length > 0) {
-      throw new Error(`Missing required fields: ${missingFields.join(", ")}`);
-    }
+  //   if (missingFields.length > 0) {
+  //     throw new Error(`Missing required fields: ${missingFields.join(", ")}`);
+  //   }
 
-    try {
-      console.log("Sending File Data Payload:", data);
+  //   try {
+  //     console.log("Sending File Data Payload:", data);
 
-      const response = await Files_dltslms.insertFiles_dltslms(data);
+  //     const response = await Files_dltslms.insertFiles_dltslms(data);
 
-      console.log("Inserted file record:", response);
+  //     console.log("Inserted file record:", response);
 
-      return response;
-    } catch (error: any) {
-      console.error("Error inserting into UPLOADED_FILES_DLTS_LMS:", {
-        payload: data,
-        message: error.message,
-      });
+  //     return response;
+  //   } catch (error: any) {
+  //     console.error("Error inserting into UPLOADED_FILES_DLTS_LMS:", {
+  //       payload: data,
+  //       message: error.message,
+  //     });
 
-      throw new Error(`Failed to insert uploaded file data: ${error.message}`);
-    }
-  },
+  //     throw new Error(`Failed to insert uploaded file data: ${error.message}`);
+  //   }
+  // },
 
 };
 

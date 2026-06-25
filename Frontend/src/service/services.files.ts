@@ -920,11 +920,11 @@ class FileUploadService {
 
   getEmployeeFiles = async (request_number: string, modules: string = 'hr') => {
     try {
-      console.log('Request Params:', { request_number, modules });
+      console.log('Request Params:', { request_number });
 
       const encodedRequestNumber = encodeURIComponent(request_number);
 
-      const response: IApiResponse<any> = await axiosServices.get(`api/files/employees/${encodedRequestNumber}?modules=${modules}`);
+      const response: IApiResponse<any> = await axiosServices.get(`api/files/JS/employees/${encodedRequestNumber}`);
 
       if (response) {
         return response.data.data;
@@ -949,7 +949,7 @@ class FileUploadService {
       const response: IApiResponse<any> = await axiosServices.put(`api/files/editEmployeeFile`, {
         aws_file_locn,
         user_file_name,
-        request_number // Include request_number in the payload
+        request_number 
       });
       if (response) {
         return response.data.data;

@@ -24,25 +24,25 @@ export const JSgetLeaveEntitleHandler = async (req: Request, res: Response) => {
   }
 };
 
-export const JSleaveDaysCntHandler = async (req: Request, res: Response) => {
-  try {
-    const {
-      leaveStartDate,
-      leaveEndDate,
-      leaveType,
-    } = req.query;
+// export const JSleaveDaysCntHandler = async (req: Request, res: Response) => {
+//   try {
+//     const {
+//       leaveStartDate,
+//       leaveEndDate,
+//       leaveType,
+//     } = req.query;
 
-    const data = await HrService.JSLeaveDaysCount({
-      leaveStartDate: leaveStartDate as string,
-      leaveEndDate: leaveEndDate as string,
-      leaveType: leaveType as string,
-    });
+//     const data = await HrService.JSLeaveDaysCount({
+//       leaveStartDate: leaveStartDate as string,
+//       leaveEndDate: leaveEndDate as string,
+//       leaveType: leaveType as string,
+//     });
 
-    res.json(data);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-};
+//     res.json(data);
+//   } catch (error: any) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
 
 export const leaveDaysCntHandler = async (req: Request, res: Response) => {
   try {
