@@ -10,11 +10,13 @@ services:
       - ./Backend/.env
     environment:
       NODE_ENV: production
-      PORT: 3500
+      PORT: 8001
       FRONTEND_URL: ${PUBLIC_APP_URL:-https://aljassragroup.bayanattechnology.com}
       BACKEND_URL: ${PUBLIC_APP_URL:-https://aljassragroup.bayanattechnology.com}
     expose:
-      - "3500"
+      - "8001"
+    ports:
+      - "${BACKEND_HOST_PORT:-8001}:8001"
 
   frontend:
     build:

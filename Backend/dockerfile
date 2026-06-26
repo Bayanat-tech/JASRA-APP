@@ -3,7 +3,7 @@
 FROM node:20-bookworm-slim
 
 ENV NODE_ENV=production \
-    PORT=3500 \
+    PORT=8001 \
     ORACLE_INSTANT_CLIENT_PATH=/opt/oracle/instantclient_19_31 \
     LD_LIBRARY_PATH=/opt/oracle/instantclient_19_31
 
@@ -29,6 +29,6 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
 
 COPY . .
 
-EXPOSE 3500
+EXPOSE 8001
 
 CMD ["yarn", "ts-node", "--transpile-only", "index.ts"]
