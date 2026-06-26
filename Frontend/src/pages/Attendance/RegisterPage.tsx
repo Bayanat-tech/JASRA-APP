@@ -81,7 +81,7 @@ const RegisterPage = () => {
     const fetchEmployees = async () => {
       try {
         setLoading(true);
-        const response = await axiosServices.get('http://localhost:3500/api/attendance/employees');
+        const response = await axiosServices.get('api/attendance/employees');
         setEmployees(response.data);
         setError('');
       } catch (err: any) {

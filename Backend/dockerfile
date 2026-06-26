@@ -1,47 +1,34 @@
-FROM node:latest
+# syntax=docker/dockerfile:1.7
 
-RUN npm install -g typescript
-RUN npm install -g ts-node
+FROM node:20-bookworm-slim
 
-ARG PORT=3500
-ARG FRONTEND_URL
-ARG BACKEND_URL
-ARG APP_SECRET
-ARG DATABASE_NAME
-ARG DATABASE_USERNAME
-ARG DATABASE_PASSWORD
-ARG DATABASE_HOST
-ARG DATABASE_DIALECT
-ARG S3_ACCESS_KEY
-ARG S3_SECRET_ACCESS_KEY
-ARG S3_BUCKET_NAME
-ARG S3_REGION
-ARG AWS_S3_URL
-ENV PORT=${PORT} \
-    FRONTEND_URL=${FRONTEND_URL} \
-    BACKEND_URL=${BACKEND_URL} \
-    APP_SECRET=${APP_SECRET} \
-    DATABASE_NAME=${DATABASE_NAME} \
-    DATABASE_USERNAME=${DATABASE_USERNAME} \
-    DATABASE_PASSWORD=${DATABASE_PASSWORD} \
-    DATABASE_HOST=${DATABASE_HOST} \
-    DATABASE_DIALECT=${DATABASE_DIALECT} \
-    S3_ACCESS_KEY=${S3_ACCESS_KEY} \
-    S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY} \
-    S3_BUCKET_NAME=${S3_BUCKET_NAME} \
-    S3_REGION=${S3_REGION} \
-    AWS_S3_URL=${AWS_S3_URL}
+ENV NODE_ENV=production \
+    PORT=3500 \
+    ORACLE_INSTANT_CLIENT_PATH=/opt/oracle/instantclient_19_31 \
+    LD_LIBRARY_PATH=/opt/oracle/instantclient_19_31
 
 WORKDIR /app
 
-COPY package.json .
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update \
+    && apt-get install -y --no-install-recommends unzip libaio1 libnsl2 \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN npm install
+COPY oracle/instantclient-basic-linux.x64-19.31.0.0.0dbru.zip /tmp/instantclient.zip
+RUN mkdir -p /opt/oracle \
+    && unzip -q /tmp/instantclient.zip -d /opt/oracle \
+    && rm /tmp/instantclient.zip \
+    && echo /opt/oracle/instantclient_19_31 > /etc/ld.so.conf.d/oracle-instantclient.conf \
+    && ldconfig
+
+COPY package.json yarn.lock ./
+
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
+    yarn install --frozen-lockfile --prefer-offline
 
 COPY . .
 
-RUN npm run build
+EXPOSE 3500
 
-EXPOSE $PORT
-
-CMD [ "npm","run","start:prod" ]
+CMD ["yarn", "ts-node", "--transpile-only", "index.ts"]
