@@ -3,6 +3,8 @@ import * as oracledb from "oracledb";
 import { DataSource, Repository, EntityTarget, ObjectLiteral } from "typeorm";
 import constants from "../helpers/constants"; 
 
+const useCompiledEntities = process.env.USE_COMPILED_ENTITIES === "true";
+
 // ==================== ORACLE CLIENT INIT ====================
 try {
   oracledb.initOracleClient({
@@ -46,12 +48,12 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   logging: true,
   entities: [
-    "src/entity/**/*.ts",
-    "src/entities/**/*.ts",
-    "src/jasra/entities/*.ts",
+    useCompiledEntities ? "build/src/entity/**/*.js" : "src/entity/**/*.ts",
+    useCompiledEntities ? "build/src/entities/**/*.js" : "src/entities/**/*.ts",
+    useCompiledEntities ? "build/src/jasra/entities/*.js" : "src/jasra/entities/*.ts",
   ],
-  migrations: ["src/migration/**/*.ts"],
-  subscribers: ["src/subscriber/**/*.ts"],
+  migrations: [useCompiledEntities ? "build/src/migration/**/*.js" : "src/migration/**/*.ts"],
+  subscribers: [useCompiledEntities ? "build/src/subscriber/**/*.js" : "src/subscriber/**/*.ts"],
   extra: {
     poolMin: 5,
     poolMax: 50,
