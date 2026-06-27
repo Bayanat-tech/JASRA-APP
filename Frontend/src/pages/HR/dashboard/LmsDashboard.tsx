@@ -812,7 +812,7 @@ const EmployeeDashboard = () => {
     left: '50%',
     transform: 'translate(-50%, -50%)',
     width: '90%',
-    maxWidth: '1400px',
+    maxWidth: '960px',
     maxHeight: '85vh',
     bgcolor: 'background.paper',
     borderRadius: 2,
@@ -821,13 +821,13 @@ const EmployeeDashboard = () => {
     overflow: 'auto'
   };
 
-  // Get dashboard title based on view
-  const getDashboardTitle = () => {
-    if (dashboardView.isApproverView) {
-      return "Leave Management Dashboard - Team View";
-    }
-    return "Leave Management Dashboard - Personal View";
-  };
+  // // Get dashboard title based on view
+  // const getDashboardTitle = () => {
+  //   if (dashboardView.isApproverView) {
+  //     return "Leave Management Dashboard - Team View";
+  //   }
+  //   return "Leave Management Dashboard - Personal View";
+  // };
 
   // Get card titles based on view
   const getCardTitles = () => {
@@ -918,105 +918,105 @@ const EmployeeDashboard = () => {
   };
 
   // Modal doughnut chart options (with legend and data labels)
-  const leavesByTypeChartOptionsWithLegend = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom' as const,
-        labels: {
-          boxWidth: 15,
-          font: {
-            size: 13,
-            weight: 'bold' as const,
-            family: 'Arial, sans-serif'
-          },
-          padding: 20,
-          color: COLOR_SCHEME.textPrimary,
-          generateLabels: (chart: any) => {
-            const data = chart.data;
-            if (data.labels.length && data.datasets.length) {
-              return data.labels.map((label: string, i: number) => {
-                const value = data.datasets[0].data[i];
-                const employeeCount = pieChartData?.[i]?.EMPLOYEE_COUNT || 0;
+  // const leavesByTypeChartOptionsWithLegend = {
+  //   responsive: true,
+  //   maintainAspectRatio: false,
+  //   plugins: {
+  //     legend: {
+  //       position: 'bottom' as const,
+  //       labels: {
+  //         boxWidth: 15,
+  //         font: {
+  //           size: 13,
+  //           weight: 'bold' as const,
+  //           family: 'Arial, sans-serif'
+  //         },
+  //         padding: 20,
+  //         color: COLOR_SCHEME.textPrimary,
+  //         generateLabels: (chart: any) => {
+  //           const data = chart.data;
+  //           if (data.labels.length && data.datasets.length) {
+  //             return data.labels.map((label: string, i: number) => {
+  //               const value = data.datasets[0].data[i];
+  //               const employeeCount = pieChartData?.[i]?.EMPLOYEE_COUNT || 0;
                 
-                let labelText = `${label}: ${value} days`;
-                if (dashboardView.isApproverView && employeeCount > 0) {
-                  labelText += ` (${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'})`;
-                }
+  //               let labelText = `${label}: ${value} days`;
+  //               if (dashboardView.isApproverView && employeeCount > 0) {
+  //                 labelText += ` (${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'})`;
+  //               }
                 
-                return {
-                  text: labelText,
-                  fillStyle: data.datasets[0].backgroundColor[i],
-                  hidden: false,
-                  index: i,
-                  strokeStyle: '#fff',
-                  lineWidth: 2
-                };
-              });
-            }
-            return [];
-          }
-        }
-      },
-      datalabels: {
-        display: true,
-        color: '#ffffff',
-        font: {
-          weight: 'bold' as const,
-          size: 16
-        },
-        formatter: (value: number) => {
-          return value;
-        }
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleFont: { size: 14, weight: 'bold' as const },
-        bodyFont: { size: 13, weight: 'bold' as const },
-        padding: 12,
-        cornerRadius: 8,
-        titleColor: '#ffffff',
-        bodyColor: '#ffffff',
-        borderColor: '#ffffff',
-        borderWidth: 2,
-        callbacks: {
-          label: function(context: any) {
-            const label = context.label || '';
-            const value = context.raw || 0;
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
+  //               return {
+  //                 text: labelText,
+  //                 fillStyle: data.datasets[0].backgroundColor[i],
+  //                 hidden: false,
+  //                 index: i,
+  //                 strokeStyle: '#fff',
+  //                 lineWidth: 2
+  //               };
+  //             });
+  //           }
+  //           return [];
+  //         }
+  //       }
+  //     },
+  //     datalabels: {
+  //       display: true,
+  //       color: '#ffffff',
+  //       font: {
+  //         weight: 'bold' as const,
+  //         size: 16
+  //       },
+  //       formatter: (value: number) => {
+  //         return value;
+  //       }
+  //     },
+  //     tooltip: {
+  //       backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  //       titleFont: { size: 14, weight: 'bold' as const },
+  //       bodyFont: { size: 13, weight: 'bold' as const },
+  //       padding: 12,
+  //       cornerRadius: 8,
+  //       titleColor: '#ffffff',
+  //       bodyColor: '#ffffff',
+  //       borderColor: '#ffffff',
+  //       borderWidth: 2,
+  //       callbacks: {
+  //         label: function(context: any) {
+  //           const label = context.label || '';
+  //           const value = context.raw || 0;
+  //           const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+  //           const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
             
-            let tooltipText = `${label}: ${value} days (${percentage}%)`;
+  //           let tooltipText = `${label}: ${value} days (${percentage}%)`;
             
-            if (dashboardView.isApproverView && pieChartData) {
-              const index = context.dataIndex;
-              const employeeCount = pieChartData[index]?.EMPLOYEE_COUNT || 0;
-              if (employeeCount > 0) {
-                tooltipText += ` - ${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'}`;
-              }
-            }
+  //           if (dashboardView.isApproverView && pieChartData) {
+  //             const index = context.dataIndex;
+  //             const employeeCount = pieChartData[index]?.EMPLOYEE_COUNT || 0;
+  //             if (employeeCount > 0) {
+  //               tooltipText += ` - ${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'}`;
+  //             }
+  //           }
             
-            return tooltipText;
-          }
-        }
-      },
-      title: {
-        display: true,
-        text: 'Leave Type Analysis',
-        font: {
-          size: 18,
-          weight: 'bold' as const,
-          family: 'Arial, sans-serif'
-        },
-        color: COLOR_SCHEME.textPrimary,
-        padding: {
-          bottom: 20
-        }
-      }
-    },
-    cutout: '50%'
-  };
+  //           return tooltipText;
+  //         }
+  //       }
+  //     },
+  //     title: {
+  //       display: true,
+  //       text: 'Leave Type Analysis',
+  //       font: {
+  //         size: 18,
+  //         weight: 'bold' as const,
+  //         family: 'Arial, sans-serif'
+  //       },
+  //       color: COLOR_SCHEME.textPrimary,
+  //       padding: {
+  //         bottom: 20
+  //       }
+  //     }
+  //   },
+  //   cutout: '50%'
+  // };
 
   // Monthly trend chart options (no title in non-modal view)
   const monthlyTrendChartOptions = {
@@ -1239,625 +1239,621 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // Get status color and text
-  const getStatusInfo = (status: string, finalApproved: string) => {
-    if (finalApproved === 'YES') return { color: 'text-green-700', text: 'Approved', bg: 'bg-green-50', badge: 'bg-green-100 text-green-700 border-green-200' };
-    if (status === 'REJECTED') return { color: 'text-red-700', text: 'Rejected', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 border-red-200' };
-    return { color: 'text-orange-700', text: 'Pending', bg: 'bg-orange-50', badge: 'bg-orange-100 text-orange-700 border-orange-200' };
-  };
-
   // Get recent leave requests data
   const allLeaveRequestsTyped = allLeaveRequests as IApiResponse;
   const recentLeaveRequests = (allLeaveRequestsTyped?.tableData as ILeaveRequest[]) || [];
+// ── helpers (add above return) ──────────────────────────────────────────────
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
-      
-      {/* Header with toggle - Always shows immediately */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 p-4 bg-white rounded-xl shadow-sm">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-            {getDashboardTitle()}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {dashboardView.isApproverView 
-              ? "Manage and monitor team leave requests and approvals" 
-              : "View and track your personal leave requests and status"}
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          {dashboardView.userIsApprover && (
-            <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-lg">
-              <span className={`text-sm font-semibold ${dashboardView.isApproverView ? 'text-gray-500' : 'text-indigo-600'}`}>
-                Personal View
-              </span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={dashboardView.isApproverView}
-                  onChange={handleToggleChange}
-                  className="sr-only peer"
-                  disabled={isDataLoading}
-                />
-                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
-              <span className={`text-sm font-semibold ${dashboardView.isApproverView ? 'text-indigo-600' : 'text-gray-500'}`}>
-                Team View
-              </span>
-            </div>
-          )}
-        </div>
+const cardConfig = [
+  {
+    key: 'total',
+    label: cardTitles.total,
+    getValue: () => totalLeavesAvailable,
+    loading: () => isDataLoading,
+    accent: '#185FA5', bgAccent: '#E6F1FB',
+    icon: 'ti-layout-grid',
+    badge: 'FY ' + dayjs().year(),
+    sub: 'All statuses combined',
+    onClick: undefined as (() => void) | undefined,
+    static: true,
+  },
+  {
+    key: 'pending',
+    label: cardTitles.pending,
+    getValue: () => pendingRequestsCount,
+    loading: () => isDataLoading || loadingInProgress,
+    accent: '#854F0B', bgAccent: '#FAEEDA',
+    icon: 'ti-clock-hour-4',
+    badge: null,
+    sub: 'Click to review',
+    onClick: () => !isDataLoading && handleOpenModal('inProgress'),
+    static: false,
+  },
+  {
+    key: 'approved',
+    label: cardTitles.approved,
+    getValue: () => totalLeavesTaken,
+    loading: () => isDataLoading || loadingApproved,
+    accent: '#0F6E56', bgAccent: '#E1F5EE',
+    icon: 'ti-circle-check',
+    badge: null,
+    sub: 'Click to view',
+    onClick: () => !isDataLoading && handleOpenModal('approved'),
+    static: false,
+  },
+  {
+    key: 'rejected',
+    label: cardTitles.rejected,
+    getValue: () => leavesRejectedCount,
+    loading: () => isDataLoading || loadingRejected,
+    accent: '#993C1D', bgAccent: '#FAECE7',
+    icon: 'ti-circle-x',
+    badge: null,
+    sub: 'Click to view',
+    onClick: () => !isDataLoading && handleOpenModal('rejected'),
+    static: false,
+  },
+];
+
+// status → pill class
+const pillClass = (status: string, finalApproved: string) => {
+  if (finalApproved === 'YES') return 'approved';
+  if (status === 'REJECTED') return 'rejected';
+  return 'pending';
+};
+const pillLabel = (status: string, finalApproved: string) => {
+  if (finalApproved === 'YES') return 'Approved';
+  if (status === 'REJECTED') return 'Rejected';
+  return 'Pending';
+};
+
+const getMonthlyTrendDataset = () => ({
+  label: 'Leave days',
+  data: monthlyTrendData.data,
+  borderColor: '#185FA5',
+  backgroundColor: 'rgba(56,138,221,0.08)',
+  borderWidth: 2,
+  fill: true,
+  tension: 0.4,
+  pointRadius: 3,
+  pointBackgroundColor: '#185FA5',
+});
+
+const getEmployeeDistributionDataset = () => ({
+  label: 'Leave days',
+  data: monthlyEmployeeDistributionData.data,
+  backgroundColor: '#1D9E75',
+  borderColor: '#185FA5',
+  borderWidth: 1.5,
+});
+
+// shared panel-header style
+const panelHeadStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14,
+};
+const panelTitleGroupStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8,
+};
+
+// ── JSX ─────────────────────────────────────────────────────────────────────
+
+return (
+  <div style={{ padding: '20px 24px', minHeight: '100vh', background: '#F8FAFC' }}>
+
+    {/* Top bar */}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div>
+        <h1 style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', margin: 0, color: '#0F172A' }}>
+          Leave management
+        </h1>
+        <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>
+          {dashboardView.isApproverView ? 'Team view' : 'Personal view'} — fiscal year {dayjs().year()}
+        </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        
-        {/* Total Leave Requests */}
-        <div 
-          className="bg-white p-5 rounded-xl shadow-sm hover:shadow-md transition-shadow cursor-default"
-        >
-          <div className="flex items-center mb-3">
-            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
-              <span className="text-xl text-indigo-600">📅</span>
-            </div>
-            <h3 className="text-sm font-semibold text-gray-700">
-              {cardTitles.total}
-            </h3>
-          </div>
-          <p className="text-3xl font-bold text-indigo-600 text-center">
-            {isDataLoading ? (
-              <div className="h-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-              </div>
-            ) : (
-              totalLeavesAvailable
-            )}
-          </p>
-          {isDataLoading && (
-            <div className="text-xs text-gray-500 text-center mt-2">
-              Loading...
-            </div>
-          )}
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ background: '#F1F5F9', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <CalendarIcon style={{ fontSize: 13 }} />
+          {dayjs().format('MMM YYYY')}
+        </span>
 
-        {/* Leaves in Progress  */}
-        <div 
-          className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-          onClick={() => !isDataLoading && handleOpenModal('inProgress')}
-        >
-          <div className="flex items-center mb-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mr-3">
-              {isDataLoading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600"></div>
-              ) : (
-                <span className="text-xl text-emerald-600">⏳</span>
-              )}
-            </div>
-            <h3 className="text-sm font-semibold text-gray-700">
-              {cardTitles.pending}
-            </h3>
+        {dashboardView.userIsApprover && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F8FAFC', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '5px 12px' }}>
+            <span style={{ fontSize: 12, color: dashboardView.isApproverView ? '#94A3B8' : '#185FA5', fontWeight: dashboardView.isApproverView ? 400 : 500 }}>
+              Personal
+            </span>
+            <div style={{ width: 1, height: 14, background: '#E2E8F0' }} />
+            <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={dashboardView.isApproverView} onChange={handleToggleChange} disabled={isDataLoading} className="sr-only peer" />
+              <div className="w-8 h-[18px] bg-gray-200 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-[14px] after:w-[14px] after:transition-all peer-checked:after:translate-x-[14px]" />
+            </label>
+            <div style={{ width: 1, height: 14, background: '#E2E8F0' }} />
+            <span style={{ fontSize: 12, color: dashboardView.isApproverView ? '#185FA5' : '#94A3B8', fontWeight: dashboardView.isApproverView ? 500 : 400 }}>
+              Team
+            </span>
           </div>
-          <p className="text-3xl font-bold text-emerald-600 text-center">
-            {isDataLoading || loadingInProgress ? (
-              <div className="h-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
-              </div>
-            ) : (
-              pendingRequestsCount
-            )}
-          </p>
-          <div className="text-xs text-gray-500 text-center mt-2">
-            {isDataLoading ? 'Loading data...' : 'Click to view details'}
-          </div>
-        </div>
+        )}
 
-        {/* Leaves Approved */}
-        <div 
-          className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-          onClick={() => !isDataLoading && handleOpenModal('approved')}
+        <button
+          onClick={handleRefreshData}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748B', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '5px 10px', background: 'none', cursor: 'pointer' }}
         >
-          <div className="flex items-center mb-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
-              {isDataLoading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-amber-600"></div>
-              ) : (
-                <span className="text-xl text-amber-600">✅</span>
-              )}
-            </div>
-            <h3 className="text-sm font-semibold text-gray-700">
-              {cardTitles.approved}
-            </h3>
-          </div>
-          <p className="text-3xl font-bold text-amber-600 text-center">
-            {isDataLoading || loadingApproved ? (
-              <div className="h-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-amber-600"></div>
-              </div>
-            ) : (
-              totalLeavesTaken
-            )}
-          </p>
-          <div className="text-xs text-gray-500 text-center mt-2">
-            {isDataLoading ? 'Loading data...' : 'Click to view details'}
-          </div>
-        </div>
-
-        {/* Leaves Rejected */}
-        <div 
-          className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-          onClick={() => !isDataLoading && handleOpenModal('rejected')}
-        >
-          <div className="flex items-center mb-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
-              {isDataLoading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
-              ) : (
-                <span className="text-xl text-red-600">❌</span>
-              )}
-            </div>
-            <h3 className="text-sm font-semibold text-gray-700">
-              {cardTitles.rejected}
-            </h3>
-          </div>
-          <p className="text-3xl font-bold text-red-600 text-center">
-            {isDataLoading || loadingRejected ? (
-              <div className="h-8 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
-              </div>
-            ) : (
-              leavesRejectedCount
-            )}
-          </p>
-          <div className="text-xs text-gray-500 text-center mt-2">
-            {isDataLoading ? 'Loading data...' : 'Click to view details'}
-          </div>
-        </div>
+          <RefreshIcon style={{ fontSize: 13 }} /> Refresh
+        </button>
       </div>
+    </div>
 
-      {/* Charts Section  */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        
-        {/* Leaves by Type Chart */}
-        <div 
-          className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-          onClick={() => !isDataLoading && handleOpenChartModal('leavesByType')}
+    {/* Stat cards */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+      {cardConfig.map(({ key, label, getValue, loading, accent, bgAccent, icon, badge, sub, onClick, static: isStatic }) => (
+        <div
+          key={key}
+          onClick={onClick}
+          style={{
+            background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12,
+            padding: '14px 16px', cursor: isStatic ? 'default' : 'pointer', transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => !isStatic && ((e.currentTarget as HTMLDivElement).style.borderColor = '#CBD5E1')}
+          onMouseLeave={e => !isStatic && ((e.currentTarget as HTMLDivElement).style.borderColor = '#E2E8F0')}
         >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <CategoryIcon className="text-indigo-600 mr-2" />
-              <h2 className="text-lg font-bold text-gray-800">
-                {dashboardView.isApproverView ? 'Leave Type Distribution' : 'My Leave Types'}
-              </h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: bgAccent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, color: accent }}>
+              {/* swap to whatever MUI icon you prefer per card */}
+              {key === 'total'    && <CategoryIcon style={{ fontSize: 15, color: accent }} />}
+              {key === 'pending'  && <SearchIcon style={{ fontSize: 15, color: accent }} />}
+              {key === 'approved' && <TrendingUpIcon style={{ fontSize: 15, color: accent }} />}
+              {key === 'rejected' && <CloseIcon style={{ fontSize: 15, color: accent }} />}
             </div>
-            {!isDataLoading && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Click to expand</span>
+            {badge && (
+              <span style={{ fontSize: 10, background: bgAccent, color: accent, padding: '2px 7px', borderRadius: 20, fontWeight: 500 }}>{badge}</span>
             )}
           </div>
-          {isDataLoading || loadingApproved ? (
-            <div className="h-64 flex flex-col items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-              <p className="text-gray-500 text-sm">Loading chart data...</p>
-            </div>
-          ) : pieChartData && pieChartData.length > 0 ? (
-            <div className="h-64 relative">
-              <ReactChart 
-                type="doughnut" 
-                data={leavesByTypeChartData} 
-                options={leavesByTypeChartOptionsNoLegend} 
-              />
+
+          {loading() ? (
+            <div style={{ height: 32, display: 'flex', alignItems: 'center' }}>
+              <CircularProgress size={18} style={{ color: accent }} />
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center">
-              <p className="text-gray-500">No leave data available</p>
+            <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: '-0.03em', color: accent, lineHeight: 1 }}>
+              {getValue()}
             </div>
+          )}
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 3 }}>{label}</div>
+          <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 8, paddingTop: 8, borderTop: '0.5px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: 4 }}>
+            {sub}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Charts — strictly side by side */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+
+      {/* Donut — Leave type breakdown */}
+      <div
+        style={{ background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12, padding: 16, cursor: isDataLoading ? 'default' : 'pointer' }}
+        onClick={() => !isDataLoading && handleOpenChartModal('leavesByType')}
+      >
+        <div style={panelHeadStyle}>
+          <div style={panelTitleGroupStyle}>
+            <CategoryIcon style={{ fontSize: 15, color: '#94A3B8' }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: '#0F172A' }}>
+                {dashboardView.isApproverView ? 'Leave type breakdown' : 'My leave types'}
+              </div>
+              <div style={{ fontSize: 11, color: '#94A3B8' }}>Approved days by category</div>
+            </div>
+          </div>
+          {!isDataLoading && (
+            <span style={{ fontSize: 11, color: '#94A3B8', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+              Expand
+            </span>
           )}
         </div>
 
-        {/* Monthly Trend Chart  */}
-        <div 
-          className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-          onClick={() => !isDataLoading && handleOpenChartModal('monthlyTrend')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <TrendingUpIcon className="text-indigo-600 mr-2" />
-              <h2 className="text-lg font-bold text-gray-800">
-                {dashboardView.isApproverView ? 'Monthly Leave Trends' : 'My Leave Trends'}
-              </h2>
-            </div>
-            {!isDataLoading && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Click to expand</span>
-            )}
+        {isDataLoading || loadingApproved ? (
+          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CircularProgress size={22} style={{ color: '#185FA5' }} />
           </div>
-          {isDataLoading || loadingApproved ? (
-            <div className="h-64 flex flex-col items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-              <p className="text-gray-500 text-sm">Loading chart data...</p>
+        ) : pieChartData?.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            {/* Donut */}
+            <div style={{ height: 140, width: 140, flexShrink: 0 }}>
+              <ReactChart type="doughnut" data={leavesByTypeChartData} options={leavesByTypeChartOptionsNoLegend} />
             </div>
-          ) : monthlyTrendData.labels.length > 0 ? (
-            <div className="h-64 relative">
-              <ReactChart 
-                type="line" 
-                data={{
-                  labels: monthlyTrendData.labels,
-                  datasets: [
-                    {
-                      label: 'Leave Days',
-                      data: monthlyTrendData.data,
-                      borderColor: COLOR_SCHEME.primary,
-                      backgroundColor: `${COLOR_SCHEME.primary}20`,
-                      borderWidth: 3,
-                      fill: true,
-                      tension: 0.4
-                    }
-                  ]
-                }} 
-                options={monthlyTrendChartOptions} 
-              />
+            {/* Inline legend */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
+              {pieChartData.map((item, i) => {
+                const total = pieChartData.reduce((s, d) => s + d.TOTAL_LEAVES_TAKEN, 0);
+                const pct = total > 0 ? Math.round((item.TOTAL_LEAVES_TAKEN / total) * 100) : 0;
+                const color = COLOR_SCHEME.chartColors[i % COLOR_SCHEME.chartColors.length];
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: '#475569', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.LEAVE_TYPE_DESC}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#0F172A' }}>{item.TOTAL_LEAVES_TAKEN}</span>
+                    <span style={{ fontSize: 10, color: '#94A3B8', minWidth: 30, textAlign: 'right' }}>{pct}%</span>
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center">
-              <p className="text-gray-500">No trend data available</p>
-            </div>
-          )}
-        </div>
-
-        {/* Monthly Employee Distribution or Recent Requests */}
-        {dashboardView.isApproverView ? (
-          <div 
-            className={`bg-white p-5 rounded-xl shadow-sm transition-all duration-300 ${isDataLoading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md transform hover:-translate-y-1 cursor-pointer active:scale-95'}`}
-            onClick={() => !isDataLoading && handleOpenChartModal('employeeDistribution')}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center">
-                <PeopleIcon className="text-indigo-600 mr-2" />
-                <h2 className="text-lg font-bold text-gray-800">
-                  Monthly Employee Analysis
-                </h2>
-              </div>
-              {!isDataLoading && (
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Click to expand</span>
-              )}
-            </div>
-            
-            {/* Month selector dropdown - stops propagation */}
-            <div className="mb-4" onClick={(e) => e.stopPropagation()}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Select Month</InputLabel>
-                <Select
-                  value={selectedMonth}
-                  label="Select Month"
-                  onChange={handleMonthChange}
-                  className="bg-white"
-                  disabled={isDataLoading}
-                >
-                  <MenuItem value="all">All Months</MenuItem>
-                  {availableMonths.map((month) => (
-                    <MenuItem key={month.key} value={month.key}>
-                      {month.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </div>
-            
-            {isDataLoading || loadingApproved ? (
-              <div className="h-48 flex flex-col items-center justify-center">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
-                <p className="text-gray-500 text-sm">Loading employee data...</p>
-              </div>
-            ) : monthlyEmployeeDistributionData.labels.length > 0 ? (
-              <div className="h-48 relative">
-                <ReactChart 
-                  type="bar" 
-                  data={{
-                    labels: monthlyEmployeeDistributionData.labels,
-                    datasets: [
-                      {
-                        label: 'Leave Days',
-                        data: monthlyEmployeeDistributionData.data,
-                        backgroundColor: COLOR_SCHEME.secondary,
-                        borderColor: COLOR_SCHEME.primary,
-                        borderWidth: 2
-                      }
-                    ]
-                  }} 
-                  options={monthlyEmployeeDistributionChartOptions} 
-                />
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center">
-                <p className="text-gray-500">
-                  {selectedMonth === 'all' ? 'No employee data available' : 'No data for selected month'}
-                </p>
-              </div>
-            )}
           </div>
         ) : (
-          <div className="bg-white p-5 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
-            <div className="flex items-center mb-4">
-              <CalendarIcon className="text-indigo-600 mr-2" />
-              <h2 className="text-lg font-bold text-gray-800">
-                My Recent Requests ({isDataLoading || loadingAllLeaves ? '...' : recentLeaveRequests?.length || 0})
-              </h2>
-            </div>
-            {isDataLoading || loadingAllLeaves ? (
-              <div className="h-64 flex flex-col items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                <p className="text-gray-500 text-sm">Loading recent requests...</p>
-              </div>
-            ) : recentLeaveRequests && recentLeaveRequests.length > 0 ? (
-              <div className="h-64 overflow-hidden">
-                <div className="overflow-auto h-full">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Applied Date</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Leave Type</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Period</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Days</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {recentLeaveRequests.map((request, index) => {
-                        const statusInfo = getStatusInfo(request.LAST_ACTION, request.FINAL_APPROVED);
-                        return (
-                          <tr 
-                            key={index}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            <td className="px-3 py-2 whitespace-nowrap">{formatDate(request.REQUEST_DATE)}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">{request.LEAVE_TYPE}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.badge}`}>
-                                {statusInfo.text}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {formatDate(request.LEAVE_START_DATE)} - {formatDate(request.LEAVE_END_DATE)}
-                            </td>
-                            <td className="px-3 py-2 whitespace-nowrap font-semibold">{request.LEAVE_DAYS}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="h-64 flex items-center justify-center">
-                <p className="text-gray-500">No recent leave requests found</p>
-              </div>
-            )}
+          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#94A3B8' }}>
+            No data available
           </div>
         )}
       </div>
 
-      {/* Recent Requests Section for Team View */}
-      {dashboardView.isApproverView && (
-        <div className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 mb-4">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            📋 Recent Team Requests ({isDataLoading || loadingAllLeaves ? '...' : recentLeaveRequests?.length || 0})
-          </h2>
-          {isDataLoading || loadingAllLeaves ? (
-            <div className="h-40 flex flex-col items-center justify-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
-              <p className="text-gray-500 text-sm">Loading team requests...</p>
+      {/* Line chart — Monthly trend */}
+      <div
+        style={{ background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12, padding: 16, cursor: isDataLoading ? 'default' : 'pointer' }}
+        onClick={() => !isDataLoading && handleOpenChartModal('monthlyTrend')}
+      >
+        <div style={panelHeadStyle}>
+          <div style={panelTitleGroupStyle}>
+            <TrendingUpIcon style={{ fontSize: 15, color: '#94A3B8' }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: '#0F172A' }}>
+                {dashboardView.isApproverView ? 'Monthly leave trend' : 'My leave trend'}
+              </div>
+              <div style={{ fontSize: 11, color: '#94A3B8' }}>Approved days per month</div>
             </div>
-          ) : recentLeaveRequests && recentLeaveRequests.length > 0 ? (
-            <div className="overflow-hidden">
-              <div className="overflow-auto max-h-80">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">Employee</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Applied Date</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Leave Type</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Period</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Days</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {recentLeaveRequests.map((request:any, index) => {
-                      const statusInfo = getStatusInfo(request.LAST_ACTION, request.FINAL_APPROVED);
-                      return (
-                        <tr 
-                          key={index}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-3 py-2 whitespace-nowrap">{request.EMPLOYEE_NAME}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{formatDate(request.REQUEST_DATE)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{request.LEAVE_TYPE_DESC}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.badge}`}>
-                              {statusInfo.text}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {formatDate(request.LEAVE_START_DATE)} - {formatDate(request.LEAVE_END_DATE)}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap font-semibold">{request.LEAVE_DAYS}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          </div>
+          {!isDataLoading && (
+            <span style={{ fontSize: 11, color: '#94A3B8', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '3px 8px' }}>
+              Expand
+            </span>
+          )}
+        </div>
+
+        {isDataLoading || loadingApproved ? (
+          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CircularProgress size={22} style={{ color: '#185FA5' }} />
+          </div>
+        ) : monthlyTrendData.labels.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Line chart */}
+            <div style={{ height: 110 }}>
+              <ReactChart
+                type="line"
+                data={{
+                  labels: monthlyTrendData.labels,
+                  datasets: [getMonthlyTrendDataset()],
+                }}
+                options={monthlyTrendChartOptions}
+              />
+            </div>
+            {/* Mini bar breakdown — top 3 types */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <div style={{ fontSize: 10, fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+                Top types this period
+              </div>
+              {pieChartData.slice(0, 3).map((item, i) => {
+                const maxVal = pieChartData[0]?.TOTAL_LEAVES_TAKEN || 1;
+                const pct = Math.round((item.TOTAL_LEAVES_TAKEN / maxVal) * 100);
+                const color = COLOR_SCHEME.chartColors[i % COLOR_SCHEME.chartColors.length];
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, color: '#475569', width: 70, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.LEAVE_TYPE_DESC}
+                    </span>
+                    <div style={{ flex: 1, height: 5, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#94A3B8', width: 26, textAlign: 'right' }}>
+                      {item.TOTAL_LEAVES_TAKEN}d
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#94A3B8' }}>
+            No data available
+          </div>
+        )}
+      </div>
+
+      {/* Employee distribution — approver only, full width */}
+      {dashboardView.isApproverView && (
+        <div
+          style={{ gridColumn: '1 / -1', background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12, padding: 16, cursor: isDataLoading ? 'default' : 'pointer' }}
+          onClick={() => !isDataLoading && handleOpenChartModal('employeeDistribution')}
+        >
+          <div style={panelHeadStyle}>
+            <div style={panelTitleGroupStyle}>
+              <PeopleIcon style={{ fontSize: 15, color: '#94A3B8' }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#0F172A' }}>Employee leave distribution</div>
+                <div style={{ fontSize: 11, color: '#94A3B8' }}>Top 10 employees by approved days</div>
               </div>
             </div>
-          ) : (
-            <div className="h-40 flex items-center justify-center">
-              <p className="text-gray-500">No recent leave requests found</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel style={{ fontSize: 12 }}>Month</InputLabel>
+                <Select value={selectedMonth} label="Month" onChange={handleMonthChange} disabled={isDataLoading} style={{ fontSize: 12 }}>
+                  <MenuItem value="all">All months</MenuItem>
+                  {availableMonths.map(m => <MenuItem key={m.key} value={m.key} style={{ fontSize: 12 }}>{m.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+              {!isDataLoading && (
+                <span style={{ fontSize: 11, color: '#94A3B8', border: '0.5px solid #E2E8F0', borderRadius: 6, padding: '3px 8px' }}>Expand</span>
+              )}
             </div>
+          </div>
+          {isDataLoading || loadingApproved ? (
+            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CircularProgress size={22} style={{ color: '#185FA5' }} />
+            </div>
+          ) : monthlyEmployeeDistributionData.labels.length > 0 ? (
+            <div style={{ height: 110 }}>
+              <ReactChart   type="bar"
+                  data={{ labels: monthlyEmployeeDistributionData.labels, 
+                  datasets: [getEmployeeDistributionDataset()] }}
+                  options={monthlyEmployeeDistributionChartOptions}
+                />
+            </div>
+          ) : (
+            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#94A3B8' }}>No data available</div>
           )}
         </div>
       )}
+    </div>
 
-      {/* Modal for Leave Details */}
-      <Modal
-        open={modalOpen}
-        onClose={handleCloseModal}
-        aria-labelledby="leave-details-modal"
-        aria-describedby="leave-details-description"
-      >
-        <Box sx={modalStyle}>
-          <div className="flex justify-between items-center mb-4">
-            <Typography id="leave-details-modal" variant="h6" component="h2" className="font-bold text-indigo-700">
-              {modalTitle}
-            </Typography>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handleRefreshData}
-                className="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-semibold"
-              >
-                <RefreshIcon className="h-3 w-3" />
-                Refresh
-              </button>
-              <IconButton
-                aria-label="close"
-                onClick={handleCloseModal}
-                className="text-gray-600 hover:text-gray-800"
-              >
-                <CloseIcon />
-              </IconButton>
+    {/* Requests table — always full width below charts */}
+    <div style={{ background: '#FFFFFF', border: '0.5px solid #E2E8F0', borderRadius: 12, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 0' }}>
+        <div style={panelTitleGroupStyle}>
+          <CalendarIcon style={{ fontSize: 15, color: '#94A3B8' }} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#0F172A' }}>
+              {dashboardView.isApproverView ? 'Recent team requests' : 'Recent requests'}
+            </div>
+            <div style={{ fontSize: 11, color: '#94A3B8' }}>
+              Latest {isDataLoading || loadingAllLeaves ? '…' : recentLeaveRequests?.length || 0} submissions
             </div>
           </div>
-          
-          {isLoadingModal ? (
-            <div className="flex flex-col items-center justify-center h-64">
-              <CircularProgress className="text-indigo-600" />
-              <Typography className="mt-4 text-gray-600">Loading leave data...</Typography>
-            </div>
-          ) : modalData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <SearchIcon className="text-gray-400 text-5xl mb-4" />
-              <Typography variant="h6" className="text-gray-700 mb-2">
-                No leave records found
-              </Typography>
-              <Typography variant="body2" className="text-gray-500">
-                {dashboardView.isApproverView 
-                  ? "There are no team leaves in this category."
-                  : "You have no leaves in this category."
-                }
-              </Typography>
-            </div>
-          ) : (
-            <div className="h-[60vh]">
-              <MyAgGrid
-                height="100%"
-                rowHeight={30}
-                headerHeight={35}
-                rowData={modalData}
-                columnDefs={modalColumnDefs}
-                paginationPageSize={10}
-                paginationPageSizeSelector={[10, 25, 50, 100]}
-                pagination
-              />
+        </div>
+      </div>
+
+      {isDataLoading || loadingAllLeaves ? (
+        <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CircularProgress size={20} style={{ color: '#185FA5' }} />
+        </div>
+      ) : recentLeaveRequests?.length > 0 ? (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 10 }}>
+          <thead>
+            <tr style={{ borderBottom: '0.5px solid #F1F5F9' }}>
+              {(['Request no.', dashboardView.isApproverView && 'Employee', 'Leave type', 'Start', 'End', 'Days', 'Status', 'Next action'] as (string | false)[])
+                .filter(Boolean).map(h => (
+                  <th key={h as string} style={{ padding: '8px 16px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {h}
+                  </th>
+                ))}
+            </tr>
+          </thead>
+          <tbody>
+            {recentLeaveRequests.map((req: any, i: number) => {
+              const cls = pillClass(req.LAST_ACTION, req.FINAL_APPROVED);
+              const lbl = pillLabel(req.LAST_ACTION, req.FINAL_APPROVED);
+              const pillColors: Record<string, { bg: string; color: string; dot: string }> = {
+                approved: { bg: '#ECFDF5', color: '#0F6E56', dot: '#0F6E56' },
+                pending:  { bg: '#FFFBEB', color: '#854F0B', dot: '#854F0B' },
+                rejected: { bg: '#FAECE7', color: '#993C1D', dot: '#993C1D' },
+              };
+              const pc = pillColors[cls];
+              const initials = (req.EMPLOYEE_NAME || req.EMPLOYEE_NAME_DISPLAY || '?')
+                .split(' ').map((n: string) => n[0]).slice(0, 2).join('');
+              return (
+                <tr
+                  key={i}
+                  style={{ borderBottom: '0.5px solid #F8FAFC' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F8FAFC'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}
+                >
+                  <td style={{ padding: '10px 16px', fontFamily: 'monospace', fontSize: 11, color: '#0F172A', fontWeight: 500 }}>
+                    #{req.REQUEST_NUMBER}
+                  </td>
+                  {dashboardView.isApproverView && (
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, flexShrink: 0 }}>
+                          {initials}
+                        </div>
+                        <span style={{ fontSize: 12, color: '#0F172A', fontWeight: 500 }}>
+                          {req.EMPLOYEE_NAME || req.EMPLOYEE_NAME_DISPLAY}
+                        </span>
+                      </div>
+                    </td>
+                  )}
+                  <td style={{ padding: '10px 16px', color: '#475569' }}>{req.LEAVE_TYPE_DESC || req.LEAVE_TYPE}</td>
+                  <td style={{ padding: '10px 16px', color: '#475569' }}>{formatDate(req.LEAVE_START_DATE)}</td>
+                  <td style={{ padding: '10px 16px', color: '#475569' }}>{formatDate(req.LEAVE_END_DATE)}</td>
+                  <td style={{ padding: '10px 16px', color: '#0F172A', fontWeight: 500 }}>{req.LEAVE_DAYS}d</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 20, background: pc.bg, color: pc.color }}>
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: pc.dot }} />
+                      {lbl}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 16px', color: '#94A3B8', fontSize: 11 }}>
+                    {req.NEXT_ACTION_BY_NAME || '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#94A3B8' }}>
+          No recent requests found
+        </div>
+      )}
+    </div>
+
+    {/* Modals — unchanged logic */}
+    <Modal open={modalOpen} onClose={handleCloseModal}>
+      <Box sx={{ ...modalStyle, borderRadius: 2, p: 3 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Typography style={{ fontSize: 15, fontWeight: 500 }}>{modalTitle}</Typography>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleRefreshData} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '5px 10px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+              <RefreshIcon style={{ fontSize: 13 }} /> Refresh
+            </button>
+            <IconButton onClick={handleCloseModal} size="small"><CloseIcon fontSize="small" /></IconButton>
+          </div>
+        </div>
+        {isLoadingModal ? (
+          <div style={{ height: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+            <CircularProgress size={28} />
+            <Typography style={{ fontSize: 13, color: '#64748B' }}>Loading data…</Typography>
+          </div>
+        ) : modalData.length === 0 ? (
+          <div style={{ height: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <SearchIcon style={{ fontSize: 40, color: '#CBD5E1' }} />
+            <Typography style={{ fontSize: 14, color: '#64748B' }}>No records found</Typography>
+          </div>
+        ) : (
+          <div style={{ height: '60vh' }}>
+            <MyAgGrid height="100%" rowHeight={30} headerHeight={35} rowData={modalData} columnDefs={modalColumnDefs} paginationPageSize={10} paginationPageSizeSelector={[10, 25, 50, 100]} pagination />
+          </div>
+        )}
+      </Box>
+    </Modal>
+
+    <Modal open={chartModalOpen} onClose={handleCloseChartModal}>
+      <Box sx={{ ...chartModalStyle, borderRadius: 2, p: 3 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Typography style={{ fontSize: 15, fontWeight: 500 }}>{chartModalTitle}</Typography>
+          <IconButton onClick={handleCloseChartModal} size="small"><CloseIcon fontSize="small" /></IconButton>
+        </div>
+        <div style={{ height: '70vh' }}>
+              {selectedChartType === 'leavesByType' && (
+                pieChartData?.length > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 48, maxWidth: 720, width: '100%' }}>
+                      <div style={{ height: 260, width: 260, flexShrink: 0 }}>
+                        <ReactChart type="doughnut" data={leavesByTypeChartData} options={leavesByTypeChartOptionsNoLegend} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 300 }}>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                          Breakdown by leave type
+                        </div>
+                        {pieChartData.map((item, i) => {
+                          const total = pieChartData.reduce((s, d) => s + d.TOTAL_LEAVES_TAKEN, 0);
+                          const pct = total > 0 ? Math.round((item.TOTAL_LEAVES_TAKEN / total) * 100) : 0;
+                          const color = COLOR_SCHEME.chartColors[i % COLOR_SCHEME.chartColors.length];
+                          return (
+                            <div
+                              key={i}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '10px 14px', background: '#F8FAFC',
+                                border: '0.5px solid #E2E8F0', borderRadius: 8
+                              }}
+                            >
+                              <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                              <span style={{ fontSize: 13, color: '#334155', fontWeight: 500, flex: 1 }}>
+                                {item.LEAVE_TYPE_DESC}
+                                {dashboardView.isApproverView && item.EMPLOYEE_COUNT > 0 && (
+                                  <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 400 }}>
+                                    {' '}· {item.EMPLOYEE_COUNT} {item.EMPLOYEE_COUNT === 1 ? 'employee' : 'employees'}
+                                  </span>
+                                )}
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{item.TOTAL_LEAVES_TAKEN}d</span>
+                              <span style={{ fontSize: 11, color: '#94A3B8', minWidth: 36, textAlign: 'right' }}>{pct}%</span>
+                            </div>
+                          );
+                        })}
+                        <div
+                          style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            marginTop: 4, paddingTop: 10, borderTop: '0.5px solid #E2E8F0'
+                          }}
+                        >
+                          <span style={{ fontSize: 12, color: '#94A3B8' }}>Total approved days</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
+                            {pieChartData.reduce((s, d) => s + d.TOTAL_LEAVES_TAKEN, 0)}d
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#94A3B8' }}>
+                    No data available
+                  </div>
+                )
+              )}
+
+            {selectedChartType === 'monthlyTrend' && (
+              monthlyTrendData.labels.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
+                  <div style={{ flex: 1, minHeight: 300 }}>
+                    <ReactChart
+                      type="line"
+                      data={{ labels: monthlyTrendData.labels, datasets: [getMonthlyTrendDataset()] }}
+                      options={monthlyTrendChartOptionsModal}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Top types this period
+                    </div>
+                    {pieChartData.map((item, i) => {
+                      const maxVal = pieChartData[0]?.TOTAL_LEAVES_TAKEN || 1;
+                      const pct = Math.round((item.TOTAL_LEAVES_TAKEN / maxVal) * 100);
+                      const color = COLOR_SCHEME.chartColors[i % COLOR_SCHEME.chartColors.length];
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 13, color: '#475569', width: 110, textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.LEAVE_TYPE_DESC}
+                          </span>
+                          <div style={{ flex: 1, height: 7, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: 13, color: '#94A3B8', width: 36, textAlign: 'right' }}>{item.TOTAL_LEAVES_TAKEN}d</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#94A3B8' }}>
+                  No data available
+                </div>
+              )
+            )}
+          {selectedChartType === 'employeeDistribution' && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }} onClick={e => e.stopPropagation()}>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Month</InputLabel>
+                  <Select value={selectedMonth} label="Month" onChange={handleMonthChange}>
+                    <MenuItem value="all">All months</MenuItem>
+                    {availableMonths.map(m => <MenuItem key={m.key} value={m.key}>{m.label}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </div>
+              <div style={{ flex: 1 }}>
+                <ReactChart
+                  type="bar"
+                  data={{ labels: monthlyEmployeeDistributionData.labels, datasets: [getEmployeeDistributionDataset()] }}
+                  options={monthlyEmployeeDistributionChartOptionsModal}
+                />              
+              </div>
             </div>
           )}
-        </Box>
-      </Modal>
-
-      {/* Modal for Expanded Charts */}
-      <Modal
-        open={chartModalOpen}
-        onClose={handleCloseChartModal}
-        aria-labelledby="chart-modal"
-        aria-describedby="chart-modal-description"
-      >
-        <Box sx={chartModalStyle}>
-          <div className="flex justify-between items-center mb-4">
-            <Typography id="chart-modal" variant="h6" component="h2" className="font-bold text-indigo-700">
-              {chartModalTitle}
-            </Typography>
-            <IconButton
-              aria-label="close"
-              onClick={handleCloseChartModal}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              <CloseIcon />
-            </IconButton>
-          </div>
-          
-          <div className="h-[70vh]">
-            {selectedChartType === 'leavesByType' && (
-              <ReactChart 
-                type="doughnut" 
-                data={leavesByTypeChartData} 
-                options={leavesByTypeChartOptionsWithLegend} 
-              />
-            )}
-            
-            {selectedChartType === 'monthlyTrend' && (
-              <ReactChart 
-                type="line" 
-                data={{
-                  labels: monthlyTrendData.labels,
-                  datasets: [
-                    {
-                      label: 'Leave Days',
-                      data: monthlyTrendData.data,
-                      borderColor: COLOR_SCHEME.primary,
-                      backgroundColor: `${COLOR_SCHEME.primary}20`,
-                      borderWidth: 3,
-                      fill: true,
-                      tension: 0.4
-                    }
-                  ]
-                }} 
-                options={monthlyTrendChartOptionsModal} 
-              />
-            )}
-            
-            {selectedChartType === 'employeeDistribution' && (
-              <div>
-                {/* Month selector in modal */}
-                <div className="mb-6 flex justify-center">
-                  <FormControl size="small" className="min-w-[200px]">
-                    <InputLabel>Select Month</InputLabel>
-                    <Select
-                      value={selectedMonth}
-                      label="Select Month"
-                      onChange={handleMonthChange}
-                      className="bg-white"
-                    >
-                      <MenuItem value="all">All Months</MenuItem>
-                      {availableMonths.map((month) => (
-                        <MenuItem key={month.key} value={month.key}>
-                          {month.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </div>
-                
-                <div className="h-[calc(70vh-100px)]">
-                  <ReactChart 
-                    type="bar" 
-                    data={{
-                      labels: monthlyEmployeeDistributionData.labels,
-                      datasets: [
-                        {
-                          label: 'Leave Days',
-                          data: monthlyEmployeeDistributionData.data,
-                          backgroundColor: COLOR_SCHEME.secondary,
-                          borderColor: COLOR_SCHEME.primary,
-                          borderWidth: 2
-                        }
-                      ]
-                    }} 
-                    options={monthlyEmployeeDistributionChartOptionsModal} 
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </Box>
-      </Modal>
-    </div>
-  );
+        </div>
+      </Box>
+    </Modal>
+  </div>
+);
 };
 
 export default EmployeeDashboard;
