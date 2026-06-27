@@ -1077,9 +1077,7 @@ export const saveFileHR = async (
         `SELECT SR_NO 
          FROM UPLOADED_FILES_DLTS_LMS
          WHERE request_number = :request_number 
-         AND org_file_name = :org_file_name 
-         ORDER BY created_at DESC 
-         FETCH FIRST 1 ROW ONLY`,
+         AND org_file_name = :org_file_name `,
         {
           request_number: { val: request_number },
           org_file_name: { val: org_file_name },

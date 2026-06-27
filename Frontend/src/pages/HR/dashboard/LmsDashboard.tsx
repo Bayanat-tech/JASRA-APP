@@ -148,7 +148,7 @@ const EmployeeDashboard = () => {
           SELECT DISTINCT EMPLOYEE_ID
           FROM (
             SELECT *
-            FROM VW_HR_EMPLOYEE_AWARE 
+            FROM VW_HR_EMPLOYEE 
             WHERE EMP_STATUS <> 'S'
             START WITH
               EMPLOYEE_ID = '${user.loginid1}'

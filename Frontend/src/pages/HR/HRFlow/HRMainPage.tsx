@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Tabs, Tab, useTheme, Button } from '@mui/material';
-//import useAuth from 'hooks/useAuth';
-//import GmPfServiceInstance from 'service/Purchaseflow/services.purchaseflow';
-import { useInitializeUserLevel } from '../../../shared/global-state';
-// import PurchaseRequest from './PurchaseRequestTab1';
-// import MyTaskClosedRequestTab from './MyTaskClosedRequestTab';
-// import MyitemPOConfirm from '../Purchasefolder/MyitemPOConfirm';
-// import MyitemPOCancel from '../Purchasefolder/MyitemPOCancel';
-// import RejectedTab3 from '../Purchasefolder/RejectedTab3';
 import HRLLeaveApprovalPage from '../HRFlow/HRLLeaveApprovalPage';
 import { useIntl } from 'react-intl';
 import { Breadcrumbs, Link, Typography } from '@mui/material';
-//import CustomAlert from 'components/@extended/CustomAlert';
 import HRLClosedRequest from './HRLClosedRequest';
 import HRLInProgress from './HRLInProgress';
 import HRLCancelRequest from './HRLCancelRequest';
@@ -21,7 +12,6 @@ import useAuth from 'hooks/useAuth';
 import HrRequestServiceInstance, { IHrEmployee } from 'service/services.hr';
 
 const HRMainPage = () => {
-  useInitializeUserLevel();
 
   const intl = useIntl();
   const { user } = useAuth();
@@ -187,12 +177,6 @@ const HRMainPage = () => {
         }}
       >
        
-        {/* {supervisor && (
-          <Tab sx={{ textTransform: 'none' }} label={intl.formatMessage({ id: 'Approve Leave Request' }) || 'Approve Leave Request'} />
-        )}
-        {supervisor && (
-          <Tab sx={{ textTransform: 'none' }} label={intl.formatMessage({ id: 'Approve Leave Resumption' }) || 'Approve Leave Request'} />
-        )} */}
         <Tab label={intl.formatMessage({ id: 'Leave Request' }) || 'Leave Request'} />
         <Tab label={intl.formatMessage({ id: 'In Progress' }) || 'In Progress'} />
         <Tab label={intl.formatMessage({ id: 'Closed' }) || 'Closed'} />
@@ -210,15 +194,7 @@ const HRMainPage = () => {
             setSelectedRequestNumber={setSelectedRequestNumber}
           />
         )}
-        {/* {supervisor && activeTab === 1 && (
-          <HRLLeaveApprovalPageBySupervisor
-            showFormDialog={showFormDialog}
-            setShowFormDialog={setShowFormDialog}
-            selectedRequestNumber={selectedRequestNumber}
-            setSelectedRequestNumber={setSelectedRequestNumber}
-          />
-        )} */}
-        {/* {activeTab ===  1 && <ApproveLeaveResumption />} */}
+
         {activeTab === 1 && <HRLInProgress />}
         {activeTab === 2 && <HRLClosedRequest />}
         {activeTab === 3 && <HRLCancelRequest />}

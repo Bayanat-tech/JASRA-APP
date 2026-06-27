@@ -39,11 +39,11 @@ const HRLeaveMediaList = ({
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
   // Helper to normalize fields (support snake_case and camelCase)
-  const getSrNo = (file: any) => file.sr_no ?? file.srNo;
-  const getOrgFileName = (file: any) => file.org_file_name ?? file.orgFileName;
-  const getUserFileName = (file: any) => file.user_file_name ?? file.userFileName;
-  const getAwsLoc = (file: any) => file.aws_file_locn ?? file.awsFileLocn;
-  const getRequestNumber = (file: any) => file.request_number ?? file.requestNumber;
+  const getSrNo = (file: any) => file.sr_no ?? file.srNo ?? file.SR_NO ;
+  const getOrgFileName = (file: any) => file.org_file_name ?? file.orgFileName ?? file.ORG_FILE_NAME ;
+  const getUserFileName = (file: any) => file.user_file_name ?? file.userFileName ?? file.USER_FILE_NAME ;
+  const getAwsLoc = (file: any) => file.aws_file_locn ?? file.awsFileLocn ?? file.AWS_FILE_LOCN ;
+  const getRequestNumber = (file: any) => file.request_number ?? file.requestNumber ?? file.REQUEST_NUMBER ;
 
   const handleEditClick = (index: number) => {
     setCurrentFileIndex(index);
@@ -70,7 +70,6 @@ const HRLeaveMediaList = ({
               ...file,
               user_file_name: editedFileName,
               userFileName: editedFileName,
-              // keep other fields intact
             }
             : file
         )
@@ -83,7 +82,6 @@ const HRLeaveMediaList = ({
       const reqNo = getRequestNumber(file) ?? '';
       const srNo = getSrNo(file);
 
-      // call API with normalized params
       await FileUploadServiceInstance.deleteEmployeeAttachment(reqNo, srNo);
       setFilesData((prev) => prev.filter((f) => (getSrNo(f) !== srNo)));
     } catch (error) {

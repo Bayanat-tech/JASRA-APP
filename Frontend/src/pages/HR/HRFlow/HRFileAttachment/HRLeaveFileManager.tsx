@@ -3,7 +3,7 @@ import FileUploadServiceInstance from 'service/services.files';
 import HRLeaveMediaList from './HRLeaveMediaList';
 import { Button } from '@mui/material';
 import useAuth from 'hooks/useAuth';
-import { useSelector } from 'store';
+// import { useSelector } from 'store';
 import { TFile } from 'types/types.file';
 import HrServiceInstance from 'service/Service.hr';
 
@@ -24,7 +24,7 @@ const HRLeaveFileManager = ({
 }) => {
   const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
-  const { app } = useSelector((state) => state.menuSelectionSlice);
+  // const { app } = useSelector((state) => state.menuSelectionSlice);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ const HRLeaveFileManager = ({
       return;
     }
 
-    const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+    const MAX_BYTES = 2 * 1024 * 1024; 
     const incoming = Array.from(event.target.files);
     const oversized = incoming.filter(f => f.size > MAX_BYTES).map(f => f.name);
     if (oversized.length > 0) {
@@ -68,14 +68,11 @@ const HRLeaveFileManager = ({
               return null;
             }
             const fileData: TFile = {
-              created_by: user.loginid,
-              updated_by: user.loginid,
               aws_file_locn: response.data,
               extensions: file.type.split('/')[1] || file.name.split('.').pop() || '',
               company_code: user.company_code,
               org_file_name: file.name,
               user_file_name: file.name,
-              modules: app,
               flow_level: 0,
               request_number: requestNumber
             };

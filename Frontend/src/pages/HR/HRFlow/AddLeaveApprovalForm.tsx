@@ -1797,7 +1797,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   size="small"
                   endIcon={<IoSendSharp />}
                   onClick={() => handleSave('SUBMITTED')}
-                  disabled={disableButtons || isSubmitDisabled()}
+                  disabled={disableButtons || isSubmitDisabled() || !RequestNumberExist}
                       title={
                       isSubmitDisabled() && leaveTypesRequiringAttachments.includes(formData.leave_type) && !hasAttachments
                         ? intl.formatMessage({ id: 'AttachmentsRequired' }) || 'Please attach files before submitting'
@@ -1890,19 +1890,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   <FaFileExport />
                 </Button>
               </Tooltip>
-
-              {/* <Tooltip title={intl.formatMessage({ id: 'Print Leave Request Form' }) || 'Print Leave Request Form'}>
-                <Button
-                  type="button"
-                  variant="outlined"
-                  color="primary"
-                  onClick={handlePrint}
-                  // disabled={!isEditMode || disableButtons}
-                  size="small"
-                >
-                  <IoPrintSharp />
-                </Button>
-              </Tooltip> */}
 
               {(viewAttachments || formData.request_number || newInsertedData?.REQUEST_NUMBER) && (
                 <Tooltip title={intl.formatMessage({ id: 'Attach & View' }) || 'Attach & View'}>
@@ -2088,66 +2075,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
           </Button>
         </Box>
       </DialogPop>
-
-      {/* Report dialog */}
-      {/* {printPopup.action.open && (
-        <UniversalDialog action={printPopup.action} onClose={handlePrint} title={printPopup.title} hasPrimaryButton={false}>
-          {reportsLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} height={50} />
-              ))}
-            </div>
-          ) : reportsError ? (
-            <div className="p-4 text-red-500">Failed to load reports. Please try again.</div>
-          ) : (
-            <List>
-              {reportData?.map((report) => (
-                <ListItem disablePadding key={report.reportid}>
-                  <ListItemButton onClick={() => togglePreviewPopup(report)}>
-                    <ListItemText
-                      primary={
-                        <span
-                          style={{ fontWeight: previewReportPopup.data.selectedReport?.reportid === report.reportid ? 'bold' : 'normal' }}
-                        >
-                          {report.reportname}
-                        </span>
-                      }
-                    />
-                    <EyeOutlined className="hover:text-blue-900 ml-2" />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </UniversalDialog>
-      )} */}
-
-      {/* {previewReportPopup.action.open && (
-        <UniversalDialog
-          action={previewReportPopup.action}
-          onClose={() => togglePreviewPopup()}
-          title={previewReportPopup.title}
-          hasPrimaryButton={false}
-        >
-          {previewReportPopup.data.selectedReport ? (
-            <WmsReportView
-              reportId={previewReportPopup.data.selectedReport.reportid}
-              parameters={{
-                company_code: formData.company_code,
-                div_code: formData.div_code || '10',
-                LOGINID: user?.loginid1,
-                Reportobject: 'Leave Resumption Report',
-                ReportTitle: previewReportPopup.data.selectedReport.reportname,
-                EMPLOYEE_CODE: formData.employee_code
-              }}
-              onClose={() => togglePreviewPopup()}
-            />
-          ) : (
-            <Typography> {intl.formatMessage({ id: 'NoReportSelected' }) || 'No report selected'}</Typography>
-          )}
-        </UniversalDialog>
-      )} */}
 
       {uploadFilesPopup && uploadFilesPopup.action.open && (
         <UniversalDialog
