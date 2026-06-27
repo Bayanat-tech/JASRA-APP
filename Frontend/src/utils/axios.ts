@@ -15,6 +15,10 @@ interface ICustomAxiosRequestConfig extends InternalAxiosRequestConfig<any> {
 // ==============================|| AXIOS - FOR MOCK SERVICES ||============================== //
 axiosServices.interceptors.request.use(
   async (config: ICustomAxiosRequestConfig) => {
+    if (config.url && !/^https?:\/\//i.test(config.url) && !config.url.startsWith('/')) {
+      config.url = `/${config.url}`;
+    }
+
     let additionalHeaders = {};
     if (config.serviceToken) {
       additionalHeaders = {
