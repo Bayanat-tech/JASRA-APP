@@ -136,7 +136,7 @@ export async function upsertBudgetRequest(data: TBasicBrequest) {
    const result = await connection.execute<{ CODE: string }>(
   `
   SELECT CODE 
-  FROM GT_SESSION_INFO_JASRA
+  FROM GT_SESSION_INFO
   FETCH FIRST 1 ROW ONLY
   `,
   {}, // No bind variables needed
