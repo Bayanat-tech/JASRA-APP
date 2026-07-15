@@ -18,8 +18,9 @@ type LeaveRow = {
 };
 
 export async function sendLeaveNotifications(requestNumber: string, companyCode?: string) {
-  const connection = await oracleDb.getConnection();
+  let connection: oracledb.Connection | undefined;
   try {
+    connection = await oracleDb.getConnection();
     const sql = `
       SELECT
         TRIM(NVL(REQUEST_NUMBER,'')) AS REQUEST_NUMBER,
@@ -131,10 +132,12 @@ export async function sendLeaveNotifications(requestNumber: string, companyCode?
     console.error("[sendLeaveNotifications] Error:", err);
     throw err;
   } finally {
-    try {
-      await connection.close();
-    } catch (closeErr) {
-      console.warn("[sendLeaveNotifications] Close connection error", closeErr);
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (closeErr) {
+        console.warn("[sendLeaveNotifications] Close connection error", closeErr);
+      }
     }
   }
 }

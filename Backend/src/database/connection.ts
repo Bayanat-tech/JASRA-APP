@@ -19,6 +19,11 @@ try {
 }
 
 // ==================== RAW ORACLE CONFIG ====================
+const toNumber = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 const dbConfig: oracledb.PoolAttributes = {
   user: constants.DATABASE.ORACLE_USER || process.env.ORACLE_USER,
   password:
@@ -27,10 +32,11 @@ const dbConfig: oracledb.PoolAttributes = {
   connectString:
     constants.DATABASE.ORACLE_CONNECTION_STRING ||
     process.env.ORACLE_CONNECTION_STRING,
-  poolMin: 5,
-  poolMax: 50,
-  poolIncrement: 2,
-  poolTimeout: 60,
+  poolMin: toNumber(process.env.CENTRAL_POOL_MIN, 5),
+  poolMax: toNumber(process.env.CENTRAL_POOL_MAX, 50),
+  poolIncrement: toNumber(process.env.CENTRAL_POOL_INCREMENT, 2),
+  poolTimeout: toNumber(process.env.POOL_TIMEOUT, 60),
+  queueTimeout: toNumber(process.env.ORACLE_QUEUE_TIMEOUT, 30000),
 };
 
 let oraclePool: oracledb.Pool | null = null;
@@ -55,45 +61,57 @@ export const AppDataSource = new DataSource({
   migrations: [useCompiledEntities ? "build/src/migration/**/*.js" : "src/migration/**/*.ts"],
   subscribers: [useCompiledEntities ? "build/src/subscriber/**/*.js" : "src/subscriber/**/*.ts"],
   extra: {
-    poolMin: 5,
-    poolMax: 50,
-    poolIncrement: 2,
-    poolTimeout: 60,
+    poolMin: toNumber(process.env.CENTRAL_POOL_MIN, 5),
+    poolMax: toNumber(process.env.CENTRAL_POOL_MAX, 50),
+    poolIncrement: toNumber(process.env.CENTRAL_POOL_INCREMENT, 2),
+    poolTimeout: toNumber(process.env.POOL_TIMEOUT, 60),
+    queueTimeout: toNumber(process.env.ORACLE_QUEUE_TIMEOUT, 30000),
   },
 });
 
 // ==================== TYPEORM SERVICE ====================
 class TypeORMService {
   private static initialized = false;
+  private static initializing: Promise<void> | null = null;
 
   static async initialize(): Promise<void> {
     if (this.initialized) return;
-
-    try {
-      if (!AppDataSource.isInitialized) {
-        console.log("Attempting TypeORM connection...");
-        console.log("TypeORM Config:", {
-          type: "oracle",
-          connectString:
-            constants.DATABASE.ORACLE_CONNECTION_STRING ||
-            process.env.ORACLE_CONNECTION_STRING,
-          username: process.env.ORACLE_USER,
-        });
-
-        await AppDataSource.initialize();
-        console.log("TypeORM Connected to Oracle Database");
-
-        // Set session parameters
-        await AppDataSource.query(
-          "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'"
-        );
-
-        this.initialized = true;
-      }
-    } catch (error) {
-      console.error("TypeORM connection failed:", error);
-      console.log("TypeORM failed, but raw Oracle connection may be active");
+    if (this.initializing) {
+      await this.initializing;
+      return;
     }
+
+    this.initializing = (async () => {
+      try {
+        if (!AppDataSource.isInitialized) {
+          console.log("Attempting TypeORM connection...");
+          console.log("TypeORM Config:", {
+            type: "oracle",
+            connectString:
+              constants.DATABASE.ORACLE_CONNECTION_STRING ||
+              process.env.ORACLE_CONNECTION_STRING,
+            username: process.env.ORACLE_USER,
+          });
+
+          await AppDataSource.initialize();
+          console.log("TypeORM Connected to Oracle Database");
+
+          // Set session parameters
+          await AppDataSource.query(
+            "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'"
+          );
+
+          this.initialized = true;
+        }
+      } catch (error) {
+        console.error("TypeORM connection failed:", error);
+        console.log("TypeORM failed, but raw Oracle connection may be active");
+      } finally {
+        this.initializing = null;
+      }
+    })();
+
+    await this.initializing;
   }
 
   static getRepository<T extends ObjectLiteral>(
@@ -176,7 +194,24 @@ export const oracleDb = {
   getConnection: async (): Promise<oracledb.Connection> => {
     if (!oraclePool)
       throw new Error("Database not connected. Call authenticate() first.");
-    return await oraclePool.getConnection();
+    try {
+      return await oraclePool.getConnection();
+    } catch (error: any) {
+      const poolStats =
+        typeof oraclePool.getStatistics === "function"
+          ? oraclePool.getStatistics()
+          : undefined;
+      console.error("Oracle getConnection failed:", {
+        message: error?.message || String(error),
+        code: error?.code,
+        poolAlias: oraclePool.poolAlias,
+        connectionsOpen: oraclePool.connectionsOpen,
+        connectionsInUse: oraclePool.connectionsInUse,
+        queueTimeout: dbConfig.queueTimeout,
+        poolStats,
+      });
+      throw error;
+    }
   },
 
   withTransaction: async <T>(

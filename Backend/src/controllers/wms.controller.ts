@@ -341,7 +341,6 @@ export const executeRawSqlbody = async (req: Request, res: Response): Promise<vo
 export const proc_build_dynamic_sql_wms = async (req: Request, res: Response): Promise<void> => {
 
   let connection: oracledb.Connection | undefined;
- connection = await oracleDb.getConnection(); // ✅ assign first
   try {
     const {
       parameter,
@@ -367,8 +366,8 @@ export const proc_build_dynamic_sql_wms = async (req: Request, res: Response): P
       return;
     }
 
-    // Use raw Oracle connection - no TypeORM dependency
-    connection = await oracledb.getConnection();
+    // Use the shared Oracle pool so the connection is always returned in finally.
+    connection = await oracleDb.getConnection();
 
     // 1️⃣ Call procedure to generate SQL using proper Oracle syntax
     const result = await connection.execute(
