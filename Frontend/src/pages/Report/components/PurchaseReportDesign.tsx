@@ -5,6 +5,7 @@ import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from './dynamicData';
 import { cancel, draft, POsignatureImg as signatureImg } from './img';
 import { spellNumber, formatAmount } from './functions';
+import useAuth from 'hooks/useAuth';
 export interface PurchaseOrderData {
   PO_CANCEL: string;
   REQUEST_NUMBER: string;
@@ -66,7 +67,9 @@ export interface PurchaseReportDesignProps {
 
 const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProps>(
   ({ required_values }, ref) => {
-    let { divCode, refDocNo, companyCode } = required_values;
+    const {user} = useAuth();
+    let { divCode, refDocNo } = required_values;
+    const companyCode = user?.company_code;
     console.log('Rendering PurchaseReportDesign with:', { divCode, refDocNo, companyCode });
 
     const div_code_sql = useMemo(()=> `
@@ -107,7 +110,23 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     const buyer_sql = useMemo(() => `
     SELECT FUN_GET_REAL_NAME('${companyCode}', '${refDocNo}') AS BUYER_NAME FROM DUAL
     `, [refDocNo, divCode, companyCode]);
-    
+   
+    const contact_sql = useMemo(()=>`
+      SELECT
+          STORE_NAME,
+          CONTACT_NUMBER,
+          CONTACT_PERSON
+      FROM MS_PS_PROJECT_MASTER
+      WHERE PROJECT_CODE IN (
+          SELECT
+              PROJECT_CODE
+          FROM VW_BO_PO_PRINT PO_REGISTER
+          WHERE COMPANY_CODE IN ('${companyCode}')
+            AND REPLACE(REF_DOC_NO, '/', '$') IN (
+                REPLACE('${refDocNo}', '/', '$')
+            )
+      )
+    `,[])
     // ── Queries ───────────────────────────────────────────────────────────
     const { data, isFetching: isDeptdataLoading } = useQuery<PurchaseOrderData[]>({
       queryKey: ['purchase_report_raw_sql', refDocNo],
@@ -131,6 +150,15 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       enabled: !!refDocNo && !!divCode,
     });
 
+    const { data: contactData } = useQuery({
+      queryKey: ['purchase_report_contact_info', refDocNo],
+      staleTime: 1000 * 60 * 5,
+      queryFn: () =>
+        WmsSerivceInstance.executeRawSql(contact_sql).then((res: any) => res?.[0] || null),
+      enabled: !!refDocNo && !!divCode,
+    });
+
+    console.log('PurchaseReportDesign data:', { data, isSignatureRequired, buyerNameData, contactData });
     // ── Derived values ────────────────────────────────────────────────────
     const poItems  = useMemo(() => (Array.isArray(data) ? data : []), [data]);
     const poData   = useMemo(() => (poItems.length > 0 ? poItems[0] : null), [poItems]);
@@ -279,9 +307,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                         <Typography sx={{ fontWeight: 600, mt: 0.5 }}>Delivery Address :</Typography>
                         <Typography sx={{ mt: 0.5 }}>{poData.DELIVERY_ADDRESS || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>Contact Name :</Typography>
-                        <Typography>{poData.SUPP_CONTACT1 || '-'}</Typography>
+                        <Typography>{poData.SUPP_CONTACT1 || contactData?.CONTACT_PERSON || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>Contact No :</Typography>
-                        <Typography>{poData.SUPP_TELNO1 || '-'}</Typography>
+                        <Typography>{poData.SUPP_TELNO1 || contactData?.CONTACT_NUMBER || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>PR. No :</Typography>
                         <Typography>{poData.REQUEST_NUMBER || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>WO No :</Typography>

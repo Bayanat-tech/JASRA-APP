@@ -495,7 +495,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {handleReportOpen.open && (
         <ReportDialogPage
         Report={PurchaseReportDesign}
-        required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber, companyCode: user?.company_code || '' }}
+        required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber }}
         title="Purchase Order"
         onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '' })}
       />
