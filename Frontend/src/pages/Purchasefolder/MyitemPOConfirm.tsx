@@ -30,6 +30,8 @@ import { useDispatch } from 'store'; // adjust this path based on your folder st
 
 import CustomAgGrid from 'components/grid/CustomAgGrid';
 import { ColDef } from 'ag-grid-community';
+import ReportDialogPage from 'pages/Report/ReportDialogPage';
+import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 const filter: ISearch = {
   sort: { field_name: 'last_updated', desc: true },
@@ -42,6 +44,11 @@ interface MyitemPOConfirmProps {
 }
 
 const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
+  const [handleReportOpen, setHandleReportOpen] = useState({
+    open: false,
+    poNumber: '',
+    divCode: ''
+  });
   console.log('Userlevel in after sending:', userlevel);
   //--------------constants----------
   const { permissions, user_permission, user } = useAuth();
@@ -129,7 +136,20 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
         }
-      }
+      },
+      {
+        headerName: 'React PO Report',
+        field: 'actions',
+        cellStyle: { fontSize: '12px' },
+        cellRenderer: (params: any) => {
+          const actionButtons: TAvailableActionButtons[] = ['view'];
+          return (
+              <div className="flex flex-col gap-1">
+              <ActionButtonsGroup handleActions={()=>{setHandleReportOpen({ open: true, poNumber: params.data.document_number, divCode: params.data.division_code })}} buttons={actionButtons} /> 
+              </div>
+        );
+        }
+      },
     ],
     [userlevel]
   );
@@ -470,6 +490,15 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
             )}
           </div>
         </UniversalDialog>
+      )}
+
+      {handleReportOpen.open && (
+        <ReportDialogPage
+        Report={PurchaseReportDesign}
+        required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber, companyCode: user?.company_code || '' }}
+        title="Purchase Order"
+        onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '' })}
+      />
       )}
     </div>
   );
