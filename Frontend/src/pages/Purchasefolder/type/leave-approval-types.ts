@@ -18,6 +18,7 @@ export type TLeaveApproval = {
   alternate_id?: string;
   HOD?: string;
   IMMEDIATE_SUPERVISOR?: string;
+  ENGNR_EMPID?:string;
   DEPT_HEAD?: string;
   LEAVE_ALLOWANCE?: number;
   ADV_PAYMENT?: number;
@@ -44,8 +45,9 @@ export type TLeaveApproval = {
   CANCEL_REMARK?: string;
   AIR_ROUTE?: string;
   AIR_TICKET?: string;
-  IMMEDIATE_SUPERVISOR_NAME: string;
-  HOD_NAME: string;
-  DEPT_HEAD_NAME: string;
+  IMMEDIATE_SUPERVISOR_NAME?: string;
+  ENGRTHEAD_NAME?: string;
+  HOD_NAME?: string;
+  DEPT_HEAD_NAME?: string;
 
 };
