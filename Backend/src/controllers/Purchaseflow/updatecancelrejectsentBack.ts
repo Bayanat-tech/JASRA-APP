@@ -14,19 +14,10 @@ interface EmailRow {
 
 
 export const updateCancelRejectSentBack = async (req: Request, res: Response): Promise<void> => {
-    // Sandeep changes made on 23042026 for connection error.
   let connection: oracledb.Connection | undefined;
- connection = await oracleDb.getConnection(); // ✅ assign first
- // changes end.
 
   try {
     const { LAST_ACTION, REQUEST_NUMBER, COMPANY_CODE, loginid, REMARKS, CREATEPR, LEVEL } = req.body;
-
-   let emailSubject = "";
-   let emailMessage = "";
-   let eventType = "";
-   let finalUserEmails = "";
-   let ccEmail = "";
 
     if (!LAST_ACTION || !REQUEST_NUMBER || !COMPANY_CODE || !loginid || !REMARKS) {
       res.status(400).json({ success: false, message: "Invalid request data" });
@@ -91,15 +82,6 @@ export const updateCancelRejectSentBack = async (req: Request, res: Response): P
 
       await connection.commit();
 
-      await notifyUser({
-      event: eventType,
-      subject: emailSubject,
-      message: emailMessage,
-      request_users: finalUserEmails,
-      cc: ccEmail,
-      htmlMessage: emailMessage,
-    });
-
     res.status(200).json({
         success: true,
         message: generatedRequestNumber
@@ -142,9 +124,6 @@ export const updateCancelRejectSentBack = async (req: Request, res: Response): P
       return;
     }
    console.log('befor sentback');
-   // create a local variable to avoid using reserved word 'level'
-   const l_level = LEVEL;
-
     // 3. NORMAL PR SENT BACK
     if (LAST_ACTION === "SENTBACK") {
       await connection.execute(
@@ -893,20 +872,17 @@ export const updateCancelRejectSentBack = async (req: Request, res: Response): P
       console.log(`Sending email notification for event: ${eventType}`);
       console.log("Email subject:", emailSubject);
 
-    if (emailSubject && emailMessage && eventType) {
-        try {
-          await notifyUser({
-            event: eventType,
-            subject: emailSubject,
-            message: emailMessage,
-            request_users: userEmail,
-            cc: ccEmail,
-            htmlMessage: emailMessage,
-          });
-          console.log("Email notification sent successfully");
-        } catch (error) {
-          console.error("Failed to send email notification:", error);
-        }
+      if (emailSubject && emailMessage && eventType) {
+        notifyUser({
+          event: eventType,
+          subject: emailSubject,
+          message: emailMessage,
+          request_users: userEmail,
+          cc: ccEmails,
+          htmlMessage: emailMessage,
+        })
+          .then(() => console.log("Email notification sent successfully"))
+          .catch((error) => console.error("Failed to send email notification:", error));
       }
     } else {
       console.log("No email addresses found for notification");
@@ -915,7 +891,7 @@ export const updateCancelRejectSentBack = async (req: Request, res: Response): P
     res.status(200).json({
       success: true,
       message: "Updated Successfully",
-      ccEmail
+      ccEmail: ccEmails
     });
   
   } catch (error) {

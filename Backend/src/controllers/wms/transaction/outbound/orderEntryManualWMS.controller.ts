@@ -707,6 +707,7 @@ export const getOutboundOrderDetailManualHandler = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  let connection: oracledb.Connection | undefined;
   try {
     // Extract query parameters as strings
     const company_code = String(req.query.company_code || "");
@@ -723,7 +724,7 @@ export const getOutboundOrderDetailManualHandler = async (
       return;
     }
 
-    const connection = await oracleDb.getConnection();
+    connection = await oracleDb.getConnection();
 
     const query = `
       SELECT *
@@ -745,8 +746,6 @@ export const getOutboundOrderDetailManualHandler = async (
       outFormat: oracledb.OUT_FORMAT_OBJECT,
     });
 
-    await connection.close();
-
     if (!result.rows || result.rows.length === 0) {
       res.status(404).json({
         success: false,
@@ -765,6 +764,14 @@ export const getOutboundOrderDetailManualHandler = async (
       success: false,
       message: error.message || "Failed to fetch order detail",
     });
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error("Error closing Oracle connection:", err);
+      }
+    }
   }
 };
 

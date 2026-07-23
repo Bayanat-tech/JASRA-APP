@@ -74,7 +74,7 @@ export async function upsertPurchaseRequest(data: IPurchaseRequestPf) {
         const result = await connection.execute(
           `
           SELECT CODE 
-          FROM GT_SESSION_INFO_JASRA
+          FROM GT_SESSION_INFO
           WHERE SESSION_ID = SYS_CONTEXT('USERENV','SID') 
           AND ROWNUM = 1
         `,

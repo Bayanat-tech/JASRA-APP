@@ -1,8 +1,18 @@
 import { sendSlackMessage } from "./slackLogger";
 import constants from "../helpers/constants";
 
+const isOraclePoolTimeout = (err: any): boolean => {
+  const message = err?.message || String(err || "");
+  return err?.code === "NJS-040" || message.includes("NJS-040");
+};
+
 export const logError = async (err: any, context: { url?: string; method?: string; note?: string } = {}) => {
   try {
+    if (isOraclePoolTimeout(err) && context.note === "unhandledRejection") {
+      console.warn("Suppressed Slack alert for Oracle pool queue timeout:", err?.message || err);
+      return;
+    }
+
     const env = process.env.NODE_ENV || "LOCAL";
     const parts: string[] = [];
     parts.push(`*${env} ERROR*`);

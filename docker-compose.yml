@@ -27,7 +27,7 @@ services:
         REACT_APP_BASE_URL: /
         REACT_APP_API_URL: /
         GENERATE_SOURCEMAP: ${GENERATE_SOURCEMAP:-false}
-      image: jasra-frontend:${IMAGE_TAG:-prod}
+    image: jasra-frontend:${IMAGE_TAG:-prod}
     container_name: jasra-frontend
     restart: unless-stopped
     depends_on:
