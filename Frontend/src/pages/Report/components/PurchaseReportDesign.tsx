@@ -87,11 +87,11 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     // ── SQL strings ───────────────────────────────────────────────────────
     const sql_string = useMemo(() => `
       SELECT *
-      FROM VW_BO_PO_PRINT PO_REGISTER
+      FROM VW_BO_PO_PRINT 
       WHERE
         div_code = '${divCode}' AND
         REF_DOC_NO = REPLACE('${refDocNo}', '$', '/')
-      ORDER BY REF_DOC_NO
+      ORDER BY ITEM_SEQUENCE_NO
     `, [divCode, refDocNo]);
 
     const sql_for_signature = useMemo(() => `
@@ -277,7 +277,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                       <Typography sx={{ fontWeight: 600, mb: 0.5 }}>Supplier Details:</Typography>
                       <Typography>Supplier Number: {poData.SUPP_CODE}</Typography>
                       <Typography sx={{ fontWeight: 600, textTransform: 'uppercase' }}>{poData.SUPP_NAME}</Typography>
-                      <Typography>{poData.ADDRESS}</Typography>
+                      <Typography>P.O Box No: {poData.ADDRESS}</Typography>
                       <Typography>TEL- {poData.SUPP_TELNO1 || '-'}</Typography>
                       <Typography>FAX- {poData.SUPP_FAXNO1 || '-'}</Typography>
                       <Typography>MOB - {poData.MOBILE || '-'}</Typography>
@@ -307,9 +307,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                         <Typography sx={{ fontWeight: 600, mt: 0.5 }}>Delivery Address :</Typography>
                         <Typography sx={{ mt: 0.5 }}>{poData.DELIVERY_ADDRESS || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>Contact Name :</Typography>
-                        <Typography>{poData.SUPP_CONTACT1 || contactData?.CONTACT_PERSON || '-'}</Typography>
+                        <Typography>{ contactData?.CONTACT_PERSON || poData.SUPP_CONTACT1 || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>Contact No :</Typography>
-                        <Typography>{poData.SUPP_TELNO1 || contactData?.CONTACT_NUMBER || '-'}</Typography>
+                        <Typography>{ contactData?.CONTACT_NUMBER || poData.SUPP_TELNO1 || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>PR. No :</Typography>
                         <Typography>{poData.REQUEST_NUMBER || '-'}</Typography>
                         <Typography sx={{ fontWeight: 600 }}>WO No :</Typography>
