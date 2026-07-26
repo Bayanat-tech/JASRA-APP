@@ -1,1226 +1,842 @@
-import { forwardRef, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { RotateCcw, Printer, ChevronDown, Check, BarChart2 } from 'lucide-react';
 import WmsSerivceInstance from 'service/wms/service.wms';
+import companyLogo from 'assets/Al_jasra_logo.jpg';
+import useAuth from 'hooks/useAuth';
+import GroupedReportTable, {
+  ColumnDef,
+  GroupByConfig,
+  formatAmount,
+} from '../../../components/reports/GroupedReport';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-export interface BudgetStatusData {
-    REQUESTED_AMT: string;
-    REQ_APPROVED_AMT: string;
-    PROJECT_NAME: string;
-    PROJECT_CODE: string;
-    COST_CODE: string;
-    COMPANY_CODE: string;
-    MONTH_BUDGET: string;
-    BUDGET_YEAR: string;
-    APPROVED_AMT: string;
-    PO_AMOUNT: string;
-    PR_AMOUNT: string;
-    COST_NAME: string;
-    DIV_NAME: string;
-    MONTH_NUMBER: string;
-    TOT_UTILISED: string;
-    BALANCE_AMT: string;
-}
-
-export interface BudgetReportDesignProps {
-    required_values: {
-        divCode: string;
-        companyCode?: string;
-    };
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-const MONTH_MAP: Record<string, string> = {
-    '1': 'Jan', '2': 'Feb', '3': 'Mar', '4': 'Apr',
-    '5': 'May', '6': 'Jun', '7': 'Jul', '8': 'Aug',
-    '9': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
-};
-
-const MONTH_OPTIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function fmtAmt(val: string | number | null | undefined): number {
-    if (val === null || val === undefined || val === '') return 0;
-    const n = typeof val === 'number' ? val : parseFloat(String(val));
-    return isNaN(n) ? 0 : n;
-}
-
-function fmtDisplay(n: number): string {
-    if (n === 0) return '0.00';
-    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtBalance(n: number): string {
-    if (n < 0) return `(${fmtDisplay(Math.abs(n))})`;
-    return fmtDisplay(n);
-}
-
-function balanceColor(n: number): string {
-    if (n < 0) return '#c0392b';
-    if (n > 0) return '#27ae60';
-    return '#888';
-}
-
-// ── SQL Builder ────────────────────────────────────────────────────────────────
-
-function buildSqlString(params: {
+// ── Props ──────────────────────────────────────────────────────────────────────
+interface BudgetStatusSummaryProps {
+  required_values: {
     divCode: string;
     companyCode?: string;
-    projects: string[];
-    months: string[];
-    costCodes: string[];
-}): string {
-    const { divCode, companyCode, projects, months, costCodes } = params;
-    const inList = (values: string[]) => values.map(v => `'${v.replace(/'/g, "''")}'`).join(', ');
-    const projectFilter = projects.length === 0 ? `'All' IN ('All')` : `PROJECT_NAME IN (${inList(projects)})`;
-    const monthFilter = months.length === 0 ? `'All' IN ('All')` : `MONTH_BUDGET IN (${inList(months)})`;
-    const costCodeFilter = costCodes.length === 0 ? `'All' IN ('All')` : `COST_CODE IN (${inList(costCodes)})`;
-    const staticConditions: string[] = [];
-    if (divCode) staticConditions.push(`DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
-    if (companyCode) staticConditions.push(`COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
-    const whereClause = [
-        projectFilter, monthFilter, costCodeFilter,
-        `COST_CODE IS NOT NULL`, `COST_NAME IS NOT NULL`,
+  };
+}
+
+// ── Row type ──────────────────────────────────────────────────────────────────
+type BudgetRow = {
+  BUDGET_YEAR:    string;
+  MONTH_NUMBER:   string;
+  MONTH_BUDGET:   string;
+  APPROVED_AMT:   number;
+  PR_AMOUNT:      number;
+  PO_AMOUNT:      number;
+  TOT_UTILISED:   number;
+  BALANCE_AMT:    number;
+  PROJECT_NAME:   string;
+  PROJECT_CODE:   string;
+  COST_CODE:      string;
+  COST_NAME:      string;
+  DIV_NAME:       string;
+};
+
+// ── Month helpers ──────────────────────────────────────────────────────────────
+const MONTH_MAP: Record<string, string> = {
+  '1': 'Jan', '2': 'Feb', '3': 'Mar', '4': 'Apr',
+  '5': 'May', '6': 'Jun', '7': 'Jul', '8': 'Aug',
+  '9': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
+};
+
+const monthLabel = (row: BudgetRow) => MONTH_MAP[row.MONTH_NUMBER] ?? row.MONTH_BUDGET ?? '-';
+
+// ── Column definitions ────────────────────────────────────────────────────────
+const COLUMNS: ColumnDef<BudgetRow>[] = [
+  { key: 'BUDGET_YEAR',  label: 'Year',            width: '9%',  align: 'center' },
+  { key: 'MONTH_NUMBER', label: 'Month',           width: '9%',  align: 'center', format: (_v, row) => monthLabel(row as BudgetRow) },
+  { key: 'APPROVED_AMT', label: 'Approved Amount', width: '20%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
+  { key: 'PR_AMOUNT',    label: 'PR Amount',       width: '17%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
+  { key: 'PO_AMOUNT',    label: 'PO Amount',       width: '17%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
+  { key: 'TOT_UTILISED', label: 'Total Utilised',  width: '14%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
+  { key: 'BALANCE_AMT',  label: 'Balance Amount',  width: '14%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
+];
+
+// ── Grouping: Project → Cost Code (cost level is optional) ───────────────────
+const GROUP_BY_WITH_COST: GroupByConfig<BudgetRow>[] = [
+  { key: 'PROJECT_NAME', label: 'Project',   subKey: 'PROJECT_CODE' },
+  { key: 'COST_NAME',    label: 'Cost Code', subKey: 'COST_CODE'    },
+];
+
+const GROUP_BY_PROJECT_ONLY: GroupByConfig<BudgetRow>[] = [
+  { key: 'PROJECT_NAME', label: 'Project', subKey: 'PROJECT_CODE' },
+];
+
+// ── Parameter form types / helpers ────────────────────────────────────────────
+
+interface Option {
+  value: string;
+  label: string;
+}
+
+interface Filters {
+  project_name:  string[];
+  month:         string[];
+  cost_code:     string[];
+  group_by_cost: 'Yes' | 'No';
+}
+
+const DEFAULT_FILTERS: Filters = {
+  project_name:  ['All'],
+  month:         ['All'],
+  cost_code:     ['All'],
+  group_by_cost: 'Yes',
+};
+
+const uniqueOptions = (rows: BudgetRow[], key: keyof BudgetRow): Option[] =>
+  Array.from(new Set(rows.map((r) => String(r[key] ?? '')).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
+
+const monthOptions = (rows: BudgetRow[]): Option[] => {
+  const seen = new Map<string, string>();
+  rows.forEach((r) => {
+    if (r.MONTH_NUMBER && !seen.has(r.MONTH_NUMBER)) seen.set(r.MONTH_NUMBER, monthLabel(r));
+  });
+  return Array.from(seen.entries())
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([value, label]) => ({ value, label }));
+};
+
+const costCodeOptions = (rows: BudgetRow[]): Option[] => {
+  const seen = new Map<string, string>();
+  rows.forEach((r) => {
+    if (r.COST_CODE && !seen.has(r.COST_CODE)) seen.set(r.COST_CODE, r.COST_NAME);
+  });
+  return Array.from(seen.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([value, name]) => ({ value, label: `${value} | ${name}` }));
+};
+
+// ── Shared field styling (matches PurchaseRequestSummary) ────────────────────
+
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 500,
+  color: '#6b7280',
+  marginBottom: 2,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+};
+
+const BG = '#EEF5FD';
+
+function FloatLabel({ label, required, children, bgColor = '#fff' }: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  bgColor?: string;
+}) {
+  return (
+    <div style={{ position: 'relative', marginTop: 6 }}>
+      <span style={{
+        position: 'absolute',
+        top: -8,
+        left: 10,
+        fontSize: 11,
+        color: '#6b7280',
+        background: bgColor,
+        padding: '0 4px',
+        zIndex: 1,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        fontWeight: 500,
+      }}>
+        {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+// ── Select (plain native <select>, styled) ───────────────────────────────────
+
+const selectBaseStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '7px 10px',
+  fontSize: 12,
+  color: '#111827',
+  border: '1px solid #d1d5db',
+  borderRadius: 6,
+  outline: 'none',
+  background: '#fff',
+  boxSizing: 'border-box',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+};
+
+// ── MultiSelectField (dropdown with checkboxes, "All" support) ──────────────
+
+const MultiSelectField: React.FC<{
+  label: string;
+  options: Option[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  loading?: boolean;
+  placeholder?: string;
+}> = ({ label, options, value, onChange, loading, placeholder }) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const isAll = value.includes('All') || value.length === 0;
+
+  const toggleAll = () => onChange(['All']);
+
+  const toggleValue = (v: string) => {
+    if (isAll) {
+      onChange([v]);
+      return;
+    }
+    if (value.includes(v)) {
+      const next = value.filter((x) => x !== v);
+      onChange(next.length ? next : ['All']);
+    } else {
+      onChange([...value, v]);
+    }
+  };
+
+  const summaryText = isAll
+    ? (placeholder ?? 'All')
+    : value.length === 1
+      ? (options.find((o) => o.value === value[0])?.label ?? value[0])
+      : `${value.length} selected`;
+
+  return (
+    <div ref={rootRef} style={{ marginBottom: 14, position: 'relative' }}>
+      {label && <label style={fieldLabelStyle}>{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={loading}
+        style={{
+          ...selectBaseStyle,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          textAlign: 'left',
+          color: '#111827',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {loading ? 'Loading…' : summaryText}
+        </span>
+        <ChevronDown size={14} style={{ flexShrink: 0, marginLeft: 6, color: '#6b7280' }} />
+      </button>
+
+      {open && !loading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: '#fff',
+            border: '1px solid #d1d5db',
+            borderRadius: 6,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+            zIndex: 50,
+            maxHeight: 220,
+            overflowY: 'auto',
+            padding: 4,
+          }}
+        >
+          <div
+            onClick={toggleAll}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 8px',
+              fontSize: 12,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 600,
+              color: '#185FA5',
+              background: isAll ? '#EEF5FD' : 'transparent',
+            }}
+          >
+            <span style={{
+              width: 14, height: 14, borderRadius: 3,
+              border: '1px solid #185FA5',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isAll ? '#185FA5' : '#fff',
+            }}>
+              {isAll && <Check size={10} color="#fff" />}
+            </span>
+            All
+          </div>
+
+          {options.map((opt) => {
+            const checked = !isAll && value.includes(opt.value);
+            return (
+              <div
+                key={opt.value}
+                onClick={() => toggleValue(opt.value)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 8px',
+                  fontSize: 12,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  color: '#374151',
+                  background: checked ? '#EEF5FD' : 'transparent',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                <span style={{
+                  width: 14, height: 14, borderRadius: 3,
+                  border: '1px solid #d1d5db',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: checked ? '#185FA5' : '#fff',
+                  borderColor: checked ? '#185FA5' : '#d1d5db',
+                  flexShrink: 0,
+                }}>
+                  {checked && <Check size={10} color="#fff" />}
+                </span>
+                {opt.label}
+              </div>
+            );
+          })}
+
+          {options.length === 0 && (
+            <div style={{ padding: '10px 8px', fontSize: 12, color: '#9ca3af' }}>No options</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Simple single-select field (Yes / No — Group by Cost) ────────────────────
+
+const SingleSelectField: React.FC<{
+  label: string;
+  value: string;
+  options: Option[];
+  onChange: (v: string) => void;
+}> = ({ label, value, options, onChange }) => (
+  <div style={{ marginBottom: 14 }}>
+    <label style={fieldLabelStyle}>{label}</label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={selectBaseStyle}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
+const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_values }) => {
+  const { divCode, companyCode } = required_values;
+  const { user } = useAuth();
+  const printUser = user?.username;
+  const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
+  const [activeTab, setActiveTab] = useState<'parameters' | 'report'>('parameters');
+  const [pending, setPending] = useState<Filters>(DEFAULT_FILTERS);
+  const [applied, setApplied] = useState<Filters>(DEFAULT_FILTERS);
+
+  const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
+    setPending((prev) => ({ ...prev, [key]: val }));
+
+  // ── Data fetch ─────────────────────────────────────────────────────────────
+  const { data: allRows = [], isLoading } = useQuery<BudgetRow[]>({
+    queryKey: ['budget_status_all', divCode, companyCode],
+    queryFn: async () => {
+      const staticConditions: string[] = [];
+      if (divCode) staticConditions.push(`DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
+      if (companyCode) staticConditions.push(`COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
+      const whereClause = [
+        `COST_CODE IS NOT NULL`,
+        `COST_NAME IS NOT NULL`,
         ...staticConditions,
-    ].join('\n    AND ');
-    return `
-SELECT
-    REQUESTED_AMT, REQ_APPROVED_AMT, PROJECT_NAME, PROJECT_CODE, COST_CODE,
-    COMPANY_CODE, MONTH_BUDGET, BUDGET_YEAR, APPROVED_AMT, PO_AMOUNT,
-    PR_AMOUNT, COST_NAME, DIV_NAME, MONTH_NUMBER,
-    (PO_AMOUNT + PR_AMOUNT)                  AS TOT_UTILISED,
-    (APPROVED_AMT - (PO_AMOUNT + PR_AMOUNT)) AS BALANCE_AMT
-FROM VW_BO_BASIC_BUDGET_INFO_V1
-WHERE ${whereClause}
-ORDER BY PROJECT_NAME, COST_CODE, BUDGET_YEAR, MONTH_NUMBER
-    `.trim();
-}
-
-// ── Styles ─────────────────────────────────────────────────────────────────────
-
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-
-.bsr-root {
-    font-family: 'DM Sans', sans-serif;
-    background: #f4f6f9;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-/* ── Toolbar ── */
-.bsr-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 28px;
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    flex-shrink: 0;
-    z-index: 100;
-    gap: 12px;
-}
-.bsr-toolbar-left  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.bsr-toolbar-right { display: flex; gap: 8px; flex-shrink: 0; }
-
-.bsr-btn {
-    padding: 7px 13px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s;
-    font-family: 'DM Sans', sans-serif;
-    white-space: nowrap;
-    border: 1.5px solid #d1d5db;
-    background: #fff;
-    color: #374151;
-}
-.bsr-btn:hover        { background: #f9fafb; border-color: #9ca3af; }
-.bsr-btn-primary      { border: none; background: #1e3a5f; color: #fff; }
-.bsr-btn-primary:hover{ background: #162d4a; }
-.bsr-btn-filter       { position: relative; }
-.bsr-btn-filter.active{ border-color: #1e3a5f; color: #1e3a5f; background: #eef2f7; }
-.bsr-filter-dot {
-    width: 7px; height: 7px; border-radius: 50%; background: #ef4444;
-    position: absolute; top: 5px; right: 5px;
-}
-
-/* ── Body ── */
-.bsr-body        { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.bsr-report-area { padding: 12px 28px 0; flex: 1; overflow-y: auto; max-height: calc(100vh - 100px); }
-.bsr-page {
-    background: #fff;
-    border-radius: 8px 8px 0 0;
-    border: 1px solid #e5e7eb;
-    border-bottom: none;
-    overflow: visible;
-    width: 100%;
-}
-
-/* Report header */
-.bsr-report-header {
-    padding: 16px 24px 14px;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-.bsr-company-name  { font-weight: 700; font-size: 13px; color: #111; }
-.bsr-company-sub   { font-size: 11px; color: #6b7280; margin-top: 2px; }
-.bsr-header-right  { text-align: right; font-size: 12px; color: #6b7280; line-height: 2; }
-
-/* Title bar */
-.bsr-title-bar {
-    background: #1e3a5f;
-    color: #fff;
-    text-align: center;
-    padding: 11px;
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-}
-
-/* Meta */
-.bsr-meta {
-    display: flex;
-    gap: 32px;
-    padding: 9px 24px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 12px;
-    color: #6b7280;
-    flex-wrap: wrap;
-    min-height: 10px;
-}
-
-/* Table */
-.bsr-table-wrap { overflow-x: auto; overflow-y: visible; }
-table.bsr-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-    table-layout: fixed;
-}
-.bsr-table col.c0 { width: 9%;  }
-.bsr-table col.c1 { width: 10%; }
-.bsr-table col.c2 { width: 17%; }
-.bsr-table col.c3 { width: 14%; }
-.bsr-table col.c4 { width: 14%; }
-.bsr-table col.c5 { width: 14%; }
-.bsr-table col.c6 { width: 12%; }
-
-.bsr-table thead th {
-    background: #1e3a5f;
-    color: #fff;
-    font-weight: 700;
-    font-size: 13px;
-    padding: 11px 14px;
-    text-align: left;
-    white-space: nowrap;
-    border-right: 1px solid rgba(255,255,255,0.12);
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.bsr-table thead th:last-child { border-right: none; }
-.bsr-table thead th.num { text-align: right; }
-
-/* Project row */
-.bsr-table tr.proj-row td {
-    background: #1e3a5f;
-    color: #fff;
-    font-weight: 700;
-    font-size: 12px;
-    padding: 5px 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    cursor: pointer;
-}
-.bsr-table tr.proj-row:hover td { background: #162d4a; }
-
-/* Cost row */
-.bsr-table tr.cost-row td {
-    background: #e8ecf2;
-    color: #1e3a5f;
-    font-weight: 700;
-    font-size: 12px;
-    padding: 6px 14px 6px 24px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-bottom: 1px solid #d5dce8;
-    cursor: pointer;
-}
-.bsr-table tr.cost-row:hover td { background: #dde3ed; }
-
-/* Data rows */
-.bsr-table tbody tr.data-row td {
-    padding: 4px 10px;
-    border-bottom: 1px solid #e5e7eb;
-    color: #374151;
-    vertical-align: middle;
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.3;
-}
-.bsr-table tbody tr.data-row:hover td { background: #f9fafb; }
-.bsr-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-
-/* Cost subtotal */
-.bsr-table tr.cost-total td {
-    background: #f1f4f8;
-    padding: 3px 14px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #374151;
-    border-top: 1px solid #e5e7eb;
-    white-space: nowrap;
-}
-
-/* Project total */
-.bsr-table tr.proj-total td {
-    background: #d5dce8;
-    padding: 5px 14px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #1e3a5f;
-    white-space: nowrap;
-}
-
-/* Grand total bar */
-.bsr-grand-bar {
-    flex-shrink: 0;
-    margin: 0 28px 20px;
-    background: #1e3a5f;
-    border-radius: 0 0 8px 8px;
-    border: 1px solid #1e3a5f;
-    overflow: hidden;
-}
-.bsr-grand-bar table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.bsr-grand-bar td    { padding: 11px 14px; font-weight: 700; color: #fff; }
-.bsr-grand-bar td.num { text-align: right; font-variant-numeric: tabular-nums; }
-
-.bsr-empty { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: 14px; }
-
-/* Chevron */
-.bsr-chev { display: inline-block; margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
-.bsr-chev.open { transform: rotate(90deg); }
-
-/* Badge */
-.bsr-badge {
-    font-size: 11px;
-    background: #eef2f7;
-    color: #1e3a5f;
-    border-radius: 4px;
-    padding: 3px 9px;
-    font-weight: 600;
-}
-
-/* ── Drawer overlay ── */
-.bsr-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.18);
-    z-index: 199;
-    backdrop-filter: blur(1px);
-}
-
-/* ── Drawer ── */
-.bsr-drawer {
-    position: fixed;
-    top: 0;
-    right: 0;
-    height: 100vh;
-    width: 310px;
-    background: #fff;
-    border-left: 1px solid #e5e7eb;
-    box-shadow: -4px 0 32px rgba(0,0,0,0.12);
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    font-family: 'DM Sans', sans-serif;
-}
-.bsr-drawer-head {
-    padding: 50px 20px 16px;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #fafafa;
-}
-.bsr-drawer-title { font-weight: 700; font-size: 15px; color: #111; display: flex; align-items: center; gap: 8px; }
-.bsr-close-btn {
-    border: none;
-    background: #f3f4f6;
-    cursor: pointer;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    color: #6b7280;
-}
-.bsr-close-btn:hover { background: #fee2e2; color: #ef4444; }
-.bsr-drawer-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
-.bsr-drawer-footer {
-    padding: 16px 20px 40px;
-    border-top: 1px solid #e5e7eb;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    background: #fafafa;
-}
-.bsr-field-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    color: #6b7280;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-/* Project checkbox list */
-.bsr-cb-box {
-    border: 1.5px solid #3b2db5;
-    border-radius: 6px;
-    overflow: hidden;
-}
-.bsr-cb-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: #fff;
-    border-bottom: 1px solid #e0e0e0;
-    font-size: 13px;
-    color: #333;
-}
-.bsr-cb-search {
-    padding: 5px 8px;
-    border-bottom: 1px solid #e8e8e8;
-    background: #fafafa;
-}
-.bsr-cb-search input {
-    width: 100%;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 12px;
-    outline: none;
-    box-sizing: border-box;
-    font-family: 'DM Sans', sans-serif;
-}
-.bsr-cb-list { max-height: 200px; overflow-y: auto; }
-.bsr-cb-item {
-    display: flex;
-    align-items: center;
-    padding: 4px 8px;
-    cursor: pointer;
-    gap: 6px;
-    font-size: 12px;
-    color: #333;
-}
-.bsr-cb-item:hover { background: #f5f5f5; }
-.bsr-cb-item input[type='checkbox'] { accent-color: #3b2db5; }
-
-/* MUI-like select */
-.bsr-select {
-    width: 100%;
-    padding: 9px 10px;
-    font-size: 13px;
-    color: #111;
-    border: 1.5px solid #d1d5db;
-    border-radius: 7px;
-    background: #fff;
-    outline: none;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-}
-.bsr-select:focus { border-color: #1e3a5f; }
-
-/* Drawer action buttons */
-.bsr-drawer-btn {
-    width: 100%;
-    padding: 10px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    text-transform: none;
-}
-.bsr-drawer-btn-primary { background: #3b2db5; color: #fff; border: none; }
-.bsr-drawer-btn-primary:hover { background: #2e22a0; }
-.bsr-drawer-btn-secondary { background: #fff; color: #333; border: 1.5px solid #ccc; }
-.bsr-drawer-btn-secondary:hover { border-color: #999; background: #f5f5f5; }
-
-@media print {
-    @page { margin: 0; size: A4 landscape; }
-
-    /* Hide UI chrome */
-    .bsr-toolbar,
-    .bsr-grand-bar,
-    .no-print { 
-        display: none !important; 
-    }
-
-    /* Kill all flex/overflow constraints so page flows naturally */
-    html, body {
-        margin: 0;
-        padding: 0;
-        background: white;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-
-    .bsr-root {
-        background: white;
-        height: auto;
-        overflow: visible;
-        display: block;
-        margin: 0;
-        padding: 0;
-    }
-    
-    .bsr-body {
-        overflow: visible;
-        display: block;
-        height: auto;
-        margin: 0;
-        padding: 0;
-    }
-    
-    .bsr-report-area {
-        padding: 0;
-        overflow: visible;
-        flex: none;
-        display: block;
-        height: auto;
-        max-height: none;
-        margin: 0;
-    }
-    
-    .bsr-page {
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
-        overflow: visible;
-        height: auto;
-        width: 100%;
-        padding: 0;
-        margin: 0;
-    }
-    
-    .bsr-table-wrap {
-        overflow: visible;
-        height: auto;
-    }
-
-    /* Repeat header on every page */
-    thead { 
-        display: table-header-group; 
-    }
-
-    /* Add right border on data cells so columns are visible when printed */
-    .bsr-table tbody tr.data-row td {
-        border-bottom: 1px solid #e5e7eb !important;
-        border-right: 1px solid #e5e7eb;
-    }
-
-    /* Keep row backgrounds */
-    .bsr-table tr.proj-row td  { background: #1e3a5f !important; color: #fff !important; }
-    .bsr-table tr.cost-row td  { background: #e8ecf2 !important; color: #1e3a5f !important; }
-    .bsr-table tr.cost-total td{ background: #f1f4f8 !important; }
-    .bsr-table tr.proj-total td{ background: #d5dce8 !important; color: #1e3a5f !important; }
-    .bsr-table thead th        { background: #1e3a5f !important; color: #fff !important; }
-
-    /* Avoid page breaks inside a row group */
-    .bsr-table tr { 
-        page-break-inside: avoid; 
-    }
-
-    /* Report header */
-    .bsr-report-header {
-        padding: 16px 24px 14px !important;
-        page-break-inside: avoid;
-    }
-
-    /* Title bar */
-    .bsr-title-bar {
-        page-break-inside: avoid;
-    }
-
-    /* Meta */
-    .bsr-meta {
-        page-break-inside: avoid;
-    }
-}
-`;
-
-// ── Parameter Drawer ───────────────────────────────────────────────────────────
-
-interface ParameterDrawerProps {
-    open: boolean;
-    onClose: () => void;
-    projectOptions: string[];
-    selectedProjects: string[];
-    onProjectsChange: (v: string[]) => void;
-    projectSearch: string;
-    onProjectSearchChange: (v: string) => void;
-    selectedMonths: string[];
-    onMonthsChange: (v: string[]) => void;
-    groupByCost: 'Yes' | 'No';
-    onGroupByCostChange: (v: 'Yes' | 'No') => void;
-    costCodeOptions: [string, string][];
-    selectedCostCodes: string[];
-    onCostCodesChange: (v: string[]) => void;
-    onViewReport: () => void;
-    onSave: () => void;
-}
-
-function ParameterDrawer({
-    open, onClose,
-    projectOptions, selectedProjects, onProjectsChange,
-    projectSearch, onProjectSearchChange,
-    selectedMonths, onMonthsChange,
-    groupByCost, onGroupByCostChange,
-    costCodeOptions, selectedCostCodes, onCostCodesChange,
-    onViewReport, onSave,
-}: ParameterDrawerProps) {
-    if (!open) return null;
-
-    const filteredProjects = projectOptions.filter(p =>
-        p.toLowerCase().includes(projectSearch.toLowerCase())
-    );
-
-    const allSelected = selectedProjects.length === 0 || selectedProjects.length === projectOptions.length;
-
-    const toggleProject = (p: string) => {
-        const next = selectedProjects.includes(p)
-            ? selectedProjects.filter(x => x !== p)
-            : [...selectedProjects, p];
-        onProjectsChange(next);
-    };
-
-    const toggleAllProjects = () => {
-        onProjectsChange(selectedProjects.length === projectOptions.length ? [] : [...projectOptions]);
-    };
-
-    const toggleMonth = (m: string) => {
-        const next = selectedMonths.includes(m)
-            ? selectedMonths.filter(x => x !== m)
-            : [...selectedMonths, m];
-        onMonthsChange(next);
-    };
-
-    const toggleCostCode = (c: string) => {
-        const next = selectedCostCodes.includes(c)
-            ? selectedCostCodes.filter(x => x !== c)
-            : [...selectedCostCodes, c];
-        onCostCodesChange(next);
-    };
-
-    const projLabel =
-        selectedProjects.length === 0 ? 'All Projects' :
-        selectedProjects.length === 1 ? selectedProjects[0] :
-        `${selectedProjects.length} selected`;
-
-    return (
-        <>
-            <div className="bsr-overlay" onClick={onClose} />
-            <div className="bsr-drawer">
-                {/* Header */}
-                <div className="bsr-drawer-head">
-                    <span className="bsr-drawer-title">
-                        <span style={{ fontSize: 16, color: '#1e3a5f' }}>⚙</span>
-                        Parameters
-                    </span>
-                    <button className="bsr-close-btn" onClick={onClose}>×</button>
-                </div>
-
-                {/* Body */}
-                <div className="bsr-drawer-body">
-
-                    {/* Project Name */}
-                    <div>
-                        <span className="bsr-field-label">Project Name</span>
-                        <div className="bsr-cb-box">
-                            <div className="bsr-cb-header">
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{projLabel}</span>
-                                {selectedProjects.length > 0 && (
-                                    <span
-                                        style={{ cursor: 'pointer', fontSize: 13, color: '#555', flexShrink: 0 }}
-                                        onClick={() => onProjectsChange([])}
-                                    >✕</span>
-                                )}
-                            </div>
-                            <div className="bsr-cb-search">
-                                <input
-                                    placeholder="Search…"
-                                    value={projectSearch}
-                                    onChange={e => onProjectSearchChange(e.target.value)}
-                                />
-                            </div>
-                            <div className="bsr-cb-list">
-                                <div className="bsr-cb-item" onClick={toggleAllProjects}>
-                                    <input
-                                        type="checkbox"
-                                        readOnly
-                                        checked={allSelected}
-                                        ref={el => { if (el) el.indeterminate = selectedProjects.length > 0 && selectedProjects.length < projectOptions.length; }}
-                                    />
-                                    <span style={{ fontWeight: 500 }}>Select All</span>
-                                </div>
-                                {filteredProjects.map(p => (
-                                    <div key={p} className="bsr-cb-item" onClick={() => toggleProject(p)}>
-                                        <input type="checkbox" readOnly checked={selectedProjects.length === 0 || selectedProjects.includes(p)} />
-                                        <span>{p}</span>
-                                    </div>
-                                ))}
-                                {filteredProjects.length === 0 && (
-                                    <div style={{ fontSize: 12, color: '#aaa', padding: '8px 16px' }}>No results</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Select Month */}
-                    <div>
-                        <span className="bsr-field-label">Select Month</span>
-                        <div style={{ border: '1.5px solid #d1d5db', borderRadius: 7, overflow: 'hidden' }}>
-                            {MONTH_OPTIONS.map(m => (
-                                <div key={m} className="bsr-cb-item" onClick={() => toggleMonth(m)}>
-                                    <input type="checkbox" readOnly checked={selectedMonths.length === 0 || selectedMonths.includes(m)} />
-                                    <span>{m}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Grouping on Cost */}
-                    <div>
-                        <span className="bsr-field-label">Grouping on Cost</span>
-                        <select
-                            className="bsr-select"
-                            value={groupByCost}
-                            onChange={e => onGroupByCostChange(e.target.value as 'Yes' | 'No')}
-                        >
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                        </select>
-                    </div>
-
-                    {/* Cost Code */}
-                    <div>
-                        <span className="bsr-field-label">Cost Code</span>
-                        <div style={{ border: '1.5px solid #d1d5db', borderRadius: 7, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
-                            {costCodeOptions.map(([code, name]) => (
-                                <div key={code} className="bsr-cb-item" onClick={() => toggleCostCode(code)}>
-                                    <input type="checkbox" readOnly checked={selectedCostCodes.length === 0 || selectedCostCodes.includes(code)} />
-                                    <span>{code} | {name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <div className="bsr-drawer-footer">
-                    <button
-                        className="bsr-drawer-btn bsr-drawer-btn-primary"
-                        onClick={() => { onViewReport(); onClose(); }}
-                    >
-                        View Report
-                    </button>
-                    <button className="bsr-drawer-btn bsr-drawer-btn-secondary" onClick={onSave}>
-                        Save
-                    </button>
-                </div>
-            </div>
-        </>
-    );
-}
-
-// ── Report Content Component ──────────────────────────────────────────────────
-
-interface BudgetReportContentProps {
-    reportRows: BudgetStatusData[];
-    grouped: ProjectMap;
-    appliedFilters: {
-        projects: string[];
-        months: string[];
-        groupByCost: 'Yes' | 'No';
-        costCodes: string[];
-    };
-    collapsedProjects: Set<string>;
-    collapsedCosts: Set<string>;
-    grandTotals: { approved: number; tot: number; bal: number };
-    isFetching: boolean;
-    today: string;
-    isFiltered: boolean;
-    toggleProject: (key: string) => void;
-    toggleCostGroup: (key: string) => void;
-}
-
-const BudgetReportContent = forwardRef<HTMLDivElement, BudgetReportContentProps>(
-    ({
-        reportRows, grouped, appliedFilters, collapsedProjects, collapsedCosts,
-        grandTotals, isFetching, today, isFiltered, toggleProject, toggleCostGroup,
-    }, ref) => {
-        return (
-            <div className="bsr-body">
-                <div className="bsr-report-area" ref={ref}>
-                    <div className="bsr-page" data-report-page>
-
-                        {/* Report header */}
-                        <div className="bsr-report-header">
-                            <div className="bsr-header-right">
-                                <div><b style={{ color: '#374151' }}>Printed on:</b> {today}</div>
-                                <div><b style={{ color: '#374151' }}>Print user:</b> BTADMIN</div>
-                            </div>
-                        </div>
-
-                        <div className="bsr-title-bar">Budget Status Report</div>
-
-                        {/* Table */}
-                        <div className="bsr-table-wrap">
-                            {isFetching ? (
-                                <div className="bsr-empty">Loading report…</div>
-                            ) : reportRows.length === 0 ? (
-                                <div className="bsr-empty">No records found for the selected filters.</div>
-                            ) : (
-                                <table className="bsr-table">
-                                    <colgroup>
-                                        <col className="c0" /><col className="c1" />
-                                        <col className="c2" /><col className="c3" />
-                                        <col className="c4" /><col className="c5" /><col className="c6" />
-                                    </colgroup>
-                                    <thead>
-                                        <tr>
-                                            <th>Year</th>
-                                            <th>Month</th>
-                                            <th className="num">Approved Amount</th>
-                                            <th className="num">PR Amount</th>
-                                            <th className="num">PO Amount</th>
-                                            <th className="num">Total Utilised</th>
-                                            <th className="num">Balance Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {[...grouped.entries()].map(([projName, projData]) => {
-                                            const projOpen = !collapsedProjects.has(projName);
-                                            let projApproved = 0, projTot = 0;
-
-                                            return (
-                                                <>
-                                                    {/* Project row */}
-                                                    <tr key={`proj-${projName}`} className="proj-row" onClick={() => toggleProject(projName)}>
-                                                        <td colSpan={7}>
-                                                            <span className={`bsr-chev${projOpen ? ' open' : ''}`}>▶</span>
-                                                            Project : {projData.projectCode} | {projName}
-                                                        </td>
-                                                    </tr>
-
-                                                    {projOpen && [...projData.costs.entries()].map(([costCode, costData]) => {
-                                                        const costKey = `${projName}|||${costCode}`;
-                                                        const costOpen = !collapsedCosts.has(costKey);
-                                                        let costApproved = 0, costTot = 0;
-
-                                                        costData.rows.forEach(r => {
-                                                            costApproved += fmtAmt(r.APPROVED_AMT);
-                                                            costTot += fmtAmt(r.TOT_UTILISED);
-                                                        });
-                                                        projApproved += costApproved;
-                                                        projTot += costTot;
-                                                        const costBal = costApproved - costTot;
-
-                                                        return (
-                                                            <>
-                                                                {/* Cost row */}
-                                                                {appliedFilters.groupByCost === 'Yes' && (
-                                                                    <tr key={`cost-${costKey}`} className="cost-row" onClick={() => toggleCostGroup(costKey)}>
-                                                                        <td colSpan={7}>
-                                                                            <span className={`bsr-chev${costOpen ? ' open' : ''}`}>▶</span>
-                                                                            Cost : {costCode} | {costData.costName}
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
-
-                                                                {/* Data rows */}
-                                                                {(appliedFilters.groupByCost !== 'Yes' || costOpen) &&
-                                                                    costData.rows.map((row, ri) => {
-                                                                        const approved = fmtAmt(row.APPROVED_AMT);
-                                                                        const po = fmtAmt(row.PO_AMOUNT);
-                                                                        const pr = fmtAmt(row.PR_AMOUNT);
-                                                                        const tot = fmtAmt(row.TOT_UTILISED) || (po + pr);
-                                                                        const bal = fmtAmt(row.BALANCE_AMT) || (approved - tot);
-                                                                        const month = MONTH_MAP[row.MONTH_NUMBER] ?? row.MONTH_BUDGET ?? '-';
-                                                                        return (
-                                                                            <tr key={`data-${costKey}-${ri}`} className="data-row">
-                                                                                <td className="num">{row.BUDGET_YEAR}</td>
-                                                                                <td style={{ textAlign: 'center' }}>{month}</td>
-                                                                                <td className="num">{fmtDisplay(approved)}</td>
-                                                                                <td className="num">{fmtDisplay(pr)}</td>
-                                                                                <td className="num">{fmtDisplay(po)}</td>
-                                                                                <td className="num">{fmtDisplay(tot)}</td>
-                                                                                <td className="num" style={{ color: balanceColor(bal) }}>{fmtBalance(bal)}</td>
-                                                                            </tr>
-                                                                        );
-                                                                    })
-                                                                }
-
-                                                                {/* Cost subtotal */}
-                                                                {appliedFilters.groupByCost === 'Yes' && (
-                                                                    <tr key={`costsub-${costKey}`} className="cost-total">
-                                                                        <td colSpan={2} style={{ paddingLeft: 24 }}>Total for {costData.costName}</td>
-                                                                        <td className="num">{fmtDisplay(costApproved)}</td>
-                                                                        <td className="num" colSpan={2} />
-                                                                        <td className="num">{fmtDisplay(costTot)}</td>
-                                                                        <td className="num" style={{ color: balanceColor(costBal) }}>{fmtBalance(costBal)}</td>
-                                                                    </tr>
-                                                                )}
-                                                            </>
-                                                        );
-                                                    })}
-
-                                                    {/* Project total */}
-                                                    {projOpen && (() => {
-                                                        const projBal = projApproved - projTot;
-                                                        return (
-                                                            <tr key={`projtot-${projName}`} className="proj-total">
-                                                                <td colSpan={2}>Total for {projName}</td>
-                                                                <td className="num">{fmtDisplay(projApproved)}</td>
-                                                                <td className="num" colSpan={2} />
-                                                                <td className="num">{fmtDisplay(projTot)}</td>
-                                                                <td className="num" style={{ color: balanceColor(projBal) }}>{fmtBalance(projBal)}</td>
-                                                            </tr>
-                                                        );
-                                                    })()}
-                                                </>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Pinned Grand Total Bar */}
-                {!isFetching && reportRows.length > 0 && (
-                    <div className="bsr-grand-bar no-print">
-                        <table>
-                            <tbody>
-                                <tr>
-                                    <td colSpan={5}>Grand Total :</td>
-                                    <td className="num">{fmtDisplay(grandTotals.tot)}</td>
-                                    <td className="num" style={{ color: grandTotals.bal < 0 ? '#ff8f8f' : grandTotals.bal > 0 ? '#6ee7b7' : '#ccc' }}>
-                                        {fmtBalance(grandTotals.bal)}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-        );
+      ].join('\n    AND ');
+
+      const sql = `
+        SELECT
+          BUDGET_YEAR, MONTH_NUMBER, MONTH_BUDGET, PROJECT_NAME, PROJECT_CODE,
+          COST_CODE, COST_NAME, DIV_NAME,
+          APPROVED_AMT,
+          PR_AMOUNT,
+          PO_AMOUNT,
+          (PO_AMOUNT + PR_AMOUNT)                  AS TOT_UTILISED,
+          (APPROVED_AMT - (PO_AMOUNT + PR_AMOUNT)) AS BALANCE_AMT
+        FROM VW_BO_BASIC_BUDGET_INFO_V1
+        WHERE ${whereClause}
+        ORDER BY PROJECT_NAME, COST_CODE, BUDGET_YEAR, MONTH_NUMBER
+      `;
+      const response = await WmsSerivceInstance.executeRawSql(sql);
+      return (response as BudgetRow[]) || [];
     },
-);
+  });
 
-BudgetReportContent.displayName = 'BudgetReportContent';
+  // ── Parameter dropdown options, derived from loaded rows ──────────────────
+  const projectOptions  = useMemo(() => uniqueOptions(allRows, 'PROJECT_NAME'), [allRows]);
+  const monthOpts       = useMemo(() => monthOptions(allRows),                  [allRows]);
+  const costOpts        = useMemo(() => costCodeOptions(allRows),               [allRows]);
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+  // ── Apply the *applied* filters to build the rows the report will show ───
+  const filteredRows = useMemo(() => {
+    return allRows.filter((r) => {
+      const inOrAll = (values: string[], rowVal: string) =>
+        values.includes('All') || values.length === 0 || values.includes(rowVal);
 
-type CostMap = Map<string, { costName: string; rows: BudgetStatusData[] }>;
-type ProjectMap = Map<string, { projectCode: string; costs: CostMap }>;
+      if (!inOrAll(applied.project_name, r.PROJECT_NAME)) return false;
+      if (!inOrAll(applied.month, r.MONTH_NUMBER)) return false;
+      if (!inOrAll(applied.cost_code, r.COST_CODE)) return false;
 
-const BudgetStatusReport = forwardRef<HTMLDivElement, BudgetReportDesignProps>(
-    ({ required_values }, ref) => {
-        const { divCode, companyCode } = required_values;
+      return true;
+    });
+  }, [allRows, applied]);
 
-        // ── Drawer / filter state ─────────────────────────────────────────────
-        const [drawerOpen, setDrawerOpen] = useState(false);
-        const [projectSearch, setProjectSearch] = useState('');
-        const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-        const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-        const [groupByCost, setGroupByCost] = useState<'Yes' | 'No'>('Yes');
-        const [selectedCostCodes, setSelectedCostCodes] = useState<string[]>([]);
+  const groupBy = applied.group_by_cost === 'Yes' ? GROUP_BY_WITH_COST : GROUP_BY_PROJECT_ONLY;
 
-        const [appliedFilters, setAppliedFilters] = useState({
-            projects: [] as string[],
-            months: [] as string[],
-            groupByCost: 'Yes' as 'Yes' | 'No',
-            costCodes: [] as string[],
+  const handleGenerateReport = () => {
+    setApplied({ ...pending });
+    setHasGeneratedReport(true);
+    setActiveTab('report');
+  };
+
+  const handleReset = () => {
+    setPending(DEFAULT_FILTERS);
+    setApplied(DEFAULT_FILTERS);
+    setHasGeneratedReport(false);
+    setActiveTab('parameters');
+  };
+
+  // ── Excel export ───────────────────────────────────────────────────────────
+  const handleExcel = async (filteredRows: BudgetRow[]) => {
+    const XLSX = await import('xlsx');
+    const wb   = XLSX.utils.book_new();
+    const withCost = applied.group_by_cost === 'Yes';
+
+    type ProjMap = Record<string, {
+      projectName: string; projectCode: string; approved: number; utilised: number;
+      costs: Record<string, {
+        costName: string; costCode: string; rows: BudgetRow[]; approved: number; utilised: number;
+      }>;
+    }>;
+
+    const projMap: ProjMap = {};
+    for (const r of filteredRows) {
+      const projKey = `${r.PROJECT_NAME}|||${r.PROJECT_CODE}`;
+      const costKey = withCost ? r.COST_CODE : 'ALL';
+      const approved = parseFloat(String(r.APPROVED_AMT)) || 0;
+      const utilised = parseFloat(String(r.TOT_UTILISED)) || 0;
+
+      if (!projMap[projKey])
+        projMap[projKey] = { projectName: r.PROJECT_NAME, projectCode: r.PROJECT_CODE, approved: 0, utilised: 0, costs: {} };
+      if (!projMap[projKey].costs[costKey])
+        projMap[projKey].costs[costKey] = { costName: withCost ? r.COST_NAME : '', costCode: withCost ? r.COST_CODE : '', rows: [], approved: 0, utilised: 0 };
+
+      projMap[projKey].costs[costKey].rows.push(r);
+      projMap[projKey].costs[costKey].approved += approved;
+      projMap[projKey].costs[costKey].utilised += utilised;
+      projMap[projKey].approved                += approved;
+      projMap[projKey].utilised                += utilised;
+    }
+
+    const projects = Object.values(projMap).map((p: any) => ({
+      ...p,
+      costs: Object.values(p.costs),
+    }));
+
+    const grandApproved = projects.reduce((s: number, p: any) => s + p.approved, 0);
+    const grandUtilised = projects.reduce((s: number, p: any) => s + p.utilised, 0);
+
+    const summaryData: any[][] = [
+      ['Budget Status Report — Summary'],
+      [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
+      [],
+      ['Year', 'Month', 'Approved Amount', 'PR Amount', 'PO Amount', 'Total Utilised', 'Balance Amount', 'Cost Code', 'Project'],
+    ];
+
+    projects.forEach((proj: any) => {
+      proj.costs.forEach((cg: any) => {
+        cg.rows.forEach((row: BudgetRow) => {
+          const approved = parseFloat(String(row.APPROVED_AMT)) || 0;
+          const pr       = parseFloat(String(row.PR_AMOUNT)) || 0;
+          const po       = parseFloat(String(row.PO_AMOUNT)) || 0;
+          const util     = parseFloat(String(row.TOT_UTILISED)) || 0;
+          const bal      = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
+          summaryData.push([
+            row.BUDGET_YEAR,
+            monthLabel(row),
+            approved,
+            pr,
+            po,
+            util,
+            bal,
+            withCost ? row.COST_CODE : '',
+            proj.projectName,
+          ]);
         });
+        if (withCost) {
+          summaryData.push(['', '', cg.approved, '', '', cg.utilised, cg.approved - cg.utilised, `Cost Total: ${cg.costName}`, '']);
+        }
+      });
+      summaryData.push(['', '', proj.approved, '', '', proj.utilised, proj.approved - proj.utilised, '', `Project Total: ${proj.projectName}`]);
+    });
+    summaryData.push([]);
+    summaryData.push(['', '', grandApproved, '', '', grandUtilised, grandApproved - grandUtilised, '', 'Grand Total']);
 
-        // ── Collapse state ────────────────────────────────────────────────────
-        const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-        const [collapsedCosts, setCollapsedCosts] = useState<Set<string>>(new Set());
-        const reportContentRef = useRef<HTMLDivElement>(null);
+    const ws = XLSX.utils.aoa_to_sheet(summaryData);
+    ws['!cols'] = [{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Budget Summary');
 
-        // ── SQL ───────────────────────────────────────────────────────────────
-        const initialSql = useMemo(() =>
-            buildSqlString({ divCode, companyCode, projects: [], months: [], costCodes: [] }),
-            [divCode, companyCode],
-        );
+    XLSX.writeFile(wb, 'Budget_Status_Summary.xlsx');
+  };
 
-        const filteredSql = useMemo(() =>
-            buildSqlString({
-                divCode, companyCode,
-                projects: appliedFilters.projects,
-                months: appliedFilters.months,
-                costCodes: appliedFilters.costCodes,
-            }),
-            [divCode, companyCode, appliedFilters.projects, appliedFilters.months, appliedFilters.costCodes],
-        );
+  // ── PDF export ─────────────────────────────────────────────────────────────
+  const handlePDF = async (filteredRows: BudgetRow[]) => {
+    const { jsPDF }               = await import('jspdf');
+    const { default: autoTable }  = await import('jspdf-autotable');
+    const withCost = applied.group_by_cost === 'Yes';
 
-        // ── Queries ───────────────────────────────────────────────────────────
-        const { data: allData } = useQuery<BudgetStatusData[]>({
-            queryKey: ['budget_status_options', divCode, companyCode],
-            staleTime: 1000 * 60 * 5,
-            queryFn: () => WmsSerivceInstance.executeRawSql(initialSql) as Promise<BudgetStatusData[]>,
+    const pdf   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 14;
+
+    const NAVY      = [30, 58, 95]    as [number, number, number];
+    const COST      = [232, 236, 242] as [number, number, number];
+    const CTOT      = [241, 244, 248] as [number, number, number];
+    const PTOT      = [213, 220, 232] as [number, number, number];
+    const WHITE     = [255, 255, 255] as [number, number, number];
+    const DARK      = [55,  65,  81]  as [number, number, number];
+    const NAVY_TEXT = [30,  58,  95]  as [number, number, number];
+    const BORDER    = [209, 213, 219] as [number, number, number];
+
+    const getBase64FromUrl = (url: string): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width  = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext('2d')!.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+
+    let logoBase64 = '';
+    try { logoBase64 = await getBase64FromUrl(companyLogo); } catch { /* skip */ }
+
+    type ProjMap = Record<string, any>;
+    const projMap: ProjMap = {};
+    for (const r of filteredRows) {
+      const projKey = `${r.PROJECT_NAME}|||${r.PROJECT_CODE}`;
+      const costKey = withCost ? r.COST_CODE : 'ALL';
+      const approved = parseFloat(String(r.APPROVED_AMT)) || 0;
+      const utilised = parseFloat(String(r.TOT_UTILISED)) || 0;
+      if (!projMap[projKey])
+        projMap[projKey] = { projectName: r.PROJECT_NAME, approved: 0, utilised: 0, costs: {} };
+      if (!projMap[projKey].costs[costKey])
+        projMap[projKey].costs[costKey] = { costName: withCost ? r.COST_NAME : '', rows: [], approved: 0, utilised: 0 };
+      projMap[projKey].costs[costKey].rows.push(r);
+      projMap[projKey].costs[costKey].approved += approved;
+      projMap[projKey].costs[costKey].utilised += utilised;
+      projMap[projKey].approved                += approved;
+      projMap[projKey].utilised                += utilised;
+    }
+    const projects = Object.values(projMap).map((p: any) => ({ ...p, costs: Object.values(p.costs) }));
+    const grandApproved = projects.reduce((s: number, p: any) => s + p.approved, 0);
+    const grandUtilised = projects.reduce((s: number, p: any) => s + p.utilised, 0);
+
+    const HEADER_H  = 36;
+    const TITLE_Y   = 27;
+    const TABLE_TOP = 39;
+
+    const drawPageHeader = (data: any) => {
+      const pg = data.pageNumber as number;
+      if (logoBase64) pdf.addImage(logoBase64, 'PNG', margin, 5, 32, 16);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(107, 114, 128);
+      pdf.text(`Page ${pg}`,                pageW - margin, 9,  { align: 'right' });
+      pdf.text(`Print Date : ${printDate}`, pageW - margin, 14, { align: 'right' });
+      pdf.text(`Print User : ${printUser}`, pageW - margin, 19, { align: 'right' });
+      pdf.setFillColor(...NAVY);
+      pdf.rect(margin, TITLE_Y, pageW - margin * 2, 8, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...WHITE);
+      pdf.text('Budget Status Report (Summary)', pageW / 2, TITLE_Y + 5.5, { align: 'center' });
+    };
+
+    const body: any[] = [];
+    const cellPad = { top: 3.5, bottom: 3.5, left: 5,  right: 5 };
+    const indPad1 = { top: 3,   bottom: 3,   left: 12, right: 5 };
+
+    const fmtBal = (n: number) => (n < 0 ? `(${formatAmount(Math.abs(n))})` : formatAmount(n));
+
+    projects.forEach((proj: any) => {
+      body.push([{ content: `Project :  ${proj.projectName}`, colSpan: 7, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } }]);
+      proj.costs.forEach((cg: any) => {
+        if (withCost) {
+          body.push([{ content: `Cost :  ${cg.costName}`, colSpan: 7, styles: { fillColor: COST, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: indPad1 } }]);
+        }
+        cg.rows.forEach((row: BudgetRow) => {
+          const approved = parseFloat(String(row.APPROVED_AMT)) || 0;
+          const pr       = parseFloat(String(row.PR_AMOUNT)) || 0;
+          const po       = parseFloat(String(row.PO_AMOUNT)) || 0;
+          const util     = parseFloat(String(row.TOT_UTILISED)) || 0;
+          const bal      = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
+          body.push([
+            { content: row.BUDGET_YEAR,           styles: { fontSize: 8, halign: 'center' } },
+            { content: monthLabel(row),           styles: { fontSize: 8, halign: 'center' } },
+            { content: formatAmount(approved),    styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(pr),          styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(po),          styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(util),        styles: { halign: 'right', fontSize: 8 } },
+            { content: fmtBal(bal),               styles: { halign: 'right', fontSize: 8 } },
+          ]);
         });
+        if (withCost) {
+          body.push([
+            { content: `Cost Total :  ${cg.costName}`, colSpan: 5, styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, cellPadding: indPad1 } },
+            { content: formatAmount(cg.utilised),       styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
+            { content: fmtBal(cg.approved - cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
+          ]);
+        }
+      });
+      body.push([
+        { content: `Project Total :  ${proj.projectName}`, colSpan: 5, styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: cellPad } },
+        { content: formatAmount(proj.utilised),             styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: fmtBal(proj.approved - proj.utilised),   styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+      ]);
+    });
 
-        const { data: filteredData, isFetching, refetch } = useQuery<BudgetStatusData[]>({
-            queryKey: [
-                'budget_status_report',
-                divCode, companyCode,
-                appliedFilters.projects.join(','),
-                appliedFilters.months.join(','),
-                appliedFilters.costCodes.join(','),
-            ],
-            staleTime: 1000 * 60 * 5,
-            queryFn: () => WmsSerivceInstance.executeRawSql(filteredSql) as Promise<BudgetStatusData[]>,
-        });
+    body.push([
+      { content: 'Grand Total :', colSpan: 5, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: formatAmount(grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: fmtBal(grandApproved - grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+    ]);
 
-        const allRows = useMemo(() => (Array.isArray(allData) ? allData : []), [allData]);
-        const reportRows = useMemo(() => (Array.isArray(filteredData) ? filteredData : []), [filteredData]);
+    autoTable(pdf, {
+      startY: TABLE_TOP,
+      margin: { left: margin, right: margin, top: HEADER_H + 4 },
+      columnStyles: { 0: { cellWidth: 18 }, 1: { cellWidth: 20 }, 2: { cellWidth: 32 }, 3: { cellWidth: 28 }, 4: { cellWidth: 28 }, 5: { cellWidth: 28 }, 6: { cellWidth: 28 } },
+      head: [[
+        { content: 'Year',            styles: { halign: 'center', fontSize: 10 } },
+        { content: 'Month',           styles: { halign: 'center', fontSize: 10 } },
+        { content: 'Approved Amount', styles: { halign: 'right',  fontSize: 10 } },
+        { content: 'PR Amount',       styles: { halign: 'right',  fontSize: 10 } },
+        { content: 'PO Amount',       styles: { halign: 'right',  fontSize: 10 } },
+        { content: 'Total Utilised',  styles: { halign: 'right',  fontSize: 10 } },
+        { content: 'Balance Amount',  styles: { halign: 'right',  fontSize: 10 } },
+      ]],
+      body,
+      headStyles:    { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
+      bodyStyles:    { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'ellipsize', minCellHeight: 0 },
+      alternateRowStyles: {},
+      tableLineColor: BORDER,
+      tableLineWidth: 0.25,
+      didDrawPage: drawPageHeader,
+      didDrawCell: (data) => {
+        const { cell, doc } = data;
+        doc.setDrawColor(...BORDER); doc.setLineWidth(0.2);
+        doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
+        doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
+      },
+    });
 
-        // ── Dropdown options ──────────────────────────────────────────────────
-        const projectOptions = useMemo(
-            () => [...new Set(allRows.map(r => r.PROJECT_NAME))].filter(Boolean).sort(),
-            [allRows],
-        );
-        const costCodeOptions = useMemo(
-            () => [...new Map(allRows.map(r => [r.COST_CODE, r.COST_NAME])).entries()]
-                .sort((a, b) => a[0].localeCompare(b[0])),
-            [allRows],
-        );
+    pdf.save('Budget_Status_Summary.pdf');
+  };
 
-        // ── Grouping ──────────────────────────────────────────────────────────
-        const grouped = useMemo<ProjectMap>(() => {
-            const map: ProjectMap = new Map();
-            reportRows.forEach(row => {
-                if (!map.has(row.PROJECT_NAME))
-                    map.set(row.PROJECT_NAME, { projectCode: row.PROJECT_CODE, costs: new Map() });
-                const proj = map.get(row.PROJECT_NAME)!;
-                if (!proj.costs.has(row.COST_CODE))
-                    proj.costs.set(row.COST_CODE, { costName: row.COST_NAME, rows: [] });
-                proj.costs.get(row.COST_CODE)!.rows.push(row);
-            });
-            return map;
-        }, [reportRows]);
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ background: '#f3f4f6', padding: '6px 10px', fontFamily: 'system-ui, sans-serif', minHeight: '100vh' }}>
+      <style>{`
+        .action-btn-primary:hover { background: #1e40af !important; }
+        .action-btn-ghost:hover { background: #EBF4FF !important; border-color: #185FA5 !important; color: #185FA5 !important; }
+        .field-row { background: #EEF5FD; border-radius: 8px; padding: 10px 12px; }
+      `}</style>
 
-        // ── Grand totals ──────────────────────────────────────────────────────
-        const grandTotals = useMemo(() => {
-            let approved = 0, tot = 0;
-            reportRows.forEach(r => { approved += fmtAmt(r.APPROVED_AMT); tot += fmtAmt(r.TOT_UTILISED); });
-            return { approved, tot, bal: approved - tot };
-        }, [reportRows]);
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
-        // ── Collapse helpers ──────────────────────────────────────────────────
-        const allProjKeys = [...grouped.keys()];
-        const allCollapsed = allProjKeys.length > 0 && allProjKeys.every(k => collapsedProjects.has(k));
+        {/* Tab bar — always visible. Report tab is only clickable once a
+            report has actually been generated; until then it stays disabled. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10,
+          padding: 5, marginBottom: 10,
+        }}>
+          <button
+            onClick={() => setActiveTab('parameters')}
+            style={{
+              flex: 1, padding: '8px 14px', borderRadius: 7, border: 'none',
+              cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              background: activeTab === 'parameters' ? '#185FA5' : 'transparent',
+              color: activeTab === 'parameters' ? '#fff' : '#374151',
+              transition: 'background 0.15s',
+            }}
+          >
+            ⚙ Parameters
+          </button>
+          <button
+            onClick={() => hasGeneratedReport && setActiveTab('report')}
+            disabled={!hasGeneratedReport}
+            title={hasGeneratedReport ? undefined : 'Generate a report first'}
+            style={{
+              flex: 1, padding: '8px 14px', borderRadius: 7, border: 'none',
+              cursor: hasGeneratedReport ? 'pointer' : 'not-allowed',
+              fontSize: 12.5, fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              background: activeTab === 'report' ? '#185FA5' : 'transparent',
+              color: !hasGeneratedReport ? '#9ca3af' : (activeTab === 'report' ? '#fff' : '#374151'),
+              transition: 'background 0.15s',
+            }}
+          >
+            <BarChart2 size={13} /> Report
+            {hasGeneratedReport && (
+              <span style={{
+                fontSize: 9.5, background: activeTab === 'report' ? 'rgba(255,255,255,0.25)' : '#d1fae5',
+                color: activeTab === 'report' ? '#fff' : '#065f46',
+                padding: '1px 7px', borderRadius: 10, fontWeight: 600,
+              }}>
+                Generated
+              </span>
+            )}
+          </button>
+        </div>
 
-        const toggleProject = (key: string) => {
-            setCollapsedProjects(prev => {
-                const n = new Set(prev);
-                n.has(key) ? n.delete(key) : n.add(key);
-                return n;
-            });
-        };
+        <div style={{
+          display: activeTab === 'parameters' ? 'block' : 'none',
+          background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '8px 12px',
+          marginBottom: 12,
+        }}>
 
-        const toggleCostGroup = (key: string) => {
-            setCollapsedCosts(prev => {
-                const n = new Set(prev);
-                n.has(key) ? n.delete(key) : n.add(key);
-                return n;
-            });
-        };
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Budget Status Report — Summary</span>
+            {hasGeneratedReport && (
+              <span style={{
+                fontSize: 10, background: '#d1fae5', color: '#065f46',
+                padding: '2px 10px', borderRadius: 12, fontWeight: 500,
+              }}>
+                Report Generated
+              </span>
+            )}
+          </div>
 
-        const handleCollapseAll = () => {
-            if (allCollapsed) {
-                setCollapsedProjects(new Set());
-                setCollapsedCosts(new Set());
-            } else {
-                setCollapsedProjects(new Set(allProjKeys));
-            }
-        };
-
-        const handlePrint = () => {
-            if (!reportContentRef.current) {
-                console.warn('Report content not found');
-                return;
-            }
-
-            // Clone the report element
-            const reportElement = reportContentRef.current.cloneNode(true) as HTMLElement;
-
-            // Create a new window for printing
-            const printWindow = window.open('', '', 'width=1200,height=800');
-            if (!printWindow) return;
-
-            // Prepare HTML with complete styles
-            const styles = `
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; }
-                    html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                    .bsr-page { width: 100%; padding: 20px; }
-                    .bsr-report-header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
-                    .bsr-company-name { font-size: 18px; font-weight: bold; color: #1e3a5f; }
-                    .bsr-company-sub { font-size: 12px; color: #666; }
-                    .bsr-header-right { text-align: right; font-size: 12px; color: #666; }
-                    .bsr-title-bar { font-size: 16px; font-weight: bold; color: #fff; background: #1e3a5f; padding: 10px 15px; margin: 15px 0; }
-                    .bsr-meta { font-size: 12px; color: #666; margin: 10px 0; padding: 10px; background: #f5f5f5; }
-                    .bsr-table-wrap { margin-top: 15px; }
-                    .bsr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                    .bsr-table th, .bsr-table td { padding: 8px; text-align: left; border: 1px solid #ddd; }
-                    .bsr-table th { background: #1e3a5f; color: white; font-weight: bold; }
-                    .bsr-table tr.proj-row td { background: #1e3a5f; color: white; font-weight: bold; }
-                    .bsr-table tr.cost-row td { background: #e8ecf2; color: #1e3a5f; font-weight: 600; }
-                    .bsr-table tr.data-row td { background: white; }
-                    .bsr-table td.amount { text-align: right; }
-                    .bsr-grand-bar { display: none !important; }
-                    .no-print { display: none !important; }
-                    @page { size: A4 landscape; margin: 10mm; }
-                    @media print {
-                        body { margin: 0; padding: 0; }
-                        .bsr-page { padding: 0; }
-                    }
-                </style>
-            `;
-
-            printWindow.document.open();
-            printWindow.document.write(`<!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Budget Status Report</title>
-                    ${styles}
-                </head>
-                <body>
-                    ${reportElement.innerHTML}
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
-
-            // Wait for content to load, then print
-            setTimeout(() => {
-                printWindow.print();
-                printWindow.close();
-            }, 250);
-        };
-
-        const handleViewReport = () => {
-            setAppliedFilters({
-                projects: selectedProjects,
-                months: selectedMonths,
-                groupByCost,
-                costCodes: selectedCostCodes,
-            });
-        };
-
-        const isFiltered =
-            appliedFilters.projects.length > 0 ||
-            appliedFilters.months.length > 0 ||
-            appliedFilters.costCodes.length > 0;
-
-        const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-        // ── Render ────────────────────────────────────────────────────────────
-        return (
-            <>
-                <style>{CSS}</style>
-
-                <ParameterDrawer
-                    open={drawerOpen}
-                    onClose={() => setDrawerOpen(false)}
-                    projectOptions={projectOptions}
-                    selectedProjects={selectedProjects}
-                    onProjectsChange={setSelectedProjects}
-                    projectSearch={projectSearch}
-                    onProjectSearchChange={setProjectSearch}
-                    selectedMonths={selectedMonths}
-                    onMonthsChange={setSelectedMonths}
-                    groupByCost={groupByCost}
-                    onGroupByCostChange={setGroupByCost}
-                    costCodeOptions={costCodeOptions}
-                    selectedCostCodes={selectedCostCodes}
-                    onCostCodesChange={setSelectedCostCodes}
-                    onViewReport={handleViewReport}
-                    onSave={() => console.log('Save', { selectedProjects, selectedMonths, groupByCost, selectedCostCodes })}
+          {/* Parameter form */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              <FloatLabel label="Project Name" bgColor={BG}>
+                <MultiSelectField
+                  label=""
+                  options={projectOptions}
+                  value={pending.project_name}
+                  onChange={(v) => setPendingField('project_name', v)}
                 />
+              </FloatLabel>
+              <FloatLabel label="Month" bgColor={BG}>
+                <MultiSelectField
+                  label=""
+                  options={monthOpts}
+                  value={pending.month}
+                  onChange={(v) => setPendingField('month', v)}
+                />
+              </FloatLabel>
+            </div>
 
-                <div className="bsr-root">
+            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              <FloatLabel label="Cost Code" bgColor={BG}>
+                <MultiSelectField
+                  label=""
+                  options={costOpts}
+                  value={pending.cost_code}
+                  onChange={(v) => setPendingField('cost_code', v)}
+                />
+              </FloatLabel>
+              <FloatLabel label="Grouping on Cost" bgColor={BG}>
+                <SingleSelectField
+                  label=""
+                  value={pending.group_by_cost}
+                  options={[{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }]}
+                  onChange={(v) => setPendingField('group_by_cost', v as 'Yes' | 'No')}
+                />
+              </FloatLabel>
+            </div>
+          </div>
 
-                    {/* ── Toolbar ── */}
-                    <div className="bsr-toolbar no-print">
-                        <div className="bsr-toolbar-left">
-                            <span style={{ fontSize: 15, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
-                                Budget Status Report
-                            </span>
-                            {isFiltered && <span className="bsr-badge">Filtered</span>}
-                        </div>
-                        <div className="bsr-toolbar-right">
-                            <button className="bsr-btn" onClick={handleCollapseAll}>
-                                {allCollapsed ? '⊞ Expand All' : '⊟ Collapse All'}
-                            </button>
-                            <button
-                                className={`bsr-btn bsr-btn-filter${isFiltered ? ' active' : ''}`}
-                                onClick={() => setDrawerOpen(true)}
-                            >
-                                {isFiltered && <span className="bsr-filter-dot" />}
-                                ⚙ Parameters
-                            </button>
-                            <button className="bsr-btn" onClick={() => refetch()}>↻ Refresh</button>
-                            <button className="bsr-btn" onClick={handlePrint}>🖨 Print</button>
-                        </div>
-                    </div>
+          {/* Action bar */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10, paddingTop: 8, borderTop: '0.5px solid #e5e7eb' }}>
+            <button
+              className="action-btn-ghost"
+              onClick={handleReset}
+              disabled={isLoading}
+              style={{
+                padding: '7px 16px', border: '0.5px solid #d1d5db', background: '#fff',
+                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
+                gap: 6, fontSize: 12, borderRadius: 6, color: '#374151', opacity: isLoading ? 0.6 : 1,
+              }}
+            >
+              <RotateCcw size={13} /> Reset
+            </button>
 
-                    <BudgetReportContent
-                        ref={reportContentRef}
-                        reportRows={reportRows}
-                        grouped={grouped}
-                        appliedFilters={appliedFilters}
-                        collapsedProjects={collapsedProjects}
-                        collapsedCosts={collapsedCosts}
-                        grandTotals={grandTotals}
-                        isFetching={isFetching}
-                        today={today}
-                        isFiltered={isFiltered}
-                        toggleProject={toggleProject}
-                        toggleCostGroup={toggleCostGroup}
-                    />
-                </div>
-            </>
-        );
-    },
-);
+            <button
+              className="action-btn-primary"
+              onClick={handleGenerateReport}
+              disabled={isLoading}
+              style={{
+                padding: '7px 16px', border: '0.5px solid #185FA5', background: isLoading ? '#94a3b8' : '#185FA5',
+                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
+                gap: 6, fontSize: 12, borderRadius: 6, color: '#fff', transition: 'background 0.2s',
+              }}
+            >
+              <Printer size={13} /> {isLoading ? 'Loading data…' : 'Generate Report'}
+            </button>
+          </div>
+        </div>
 
-BudgetStatusReport.displayName = 'BudgetStatusReport';
-export default BudgetStatusReport;
+        {/* Report only appears after Generate Report is clicked, and only while the Report tab is active */}
+        {hasGeneratedReport && activeTab === 'report' && (
+          <GroupedReportTable<BudgetRow>
+            title="Budget Status Report — Summary"
+            rows={filteredRows}
+            isLoading={isLoading}
+            columns={COLUMNS}
+            groupBy={groupBy}
+            amountKey="TOT_UTILISED"
+            filterDefs={[]}
+            searchKeys={['PROJECT_NAME', 'COST_NAME']}
+            logo={companyLogo}
+            printUser={printUser}
+            onExcel={handleExcel}
+            onPDF={handlePDF}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default BudgetStatusSummary;
