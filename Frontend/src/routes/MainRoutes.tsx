@@ -94,7 +94,6 @@ import PurchaseRequestReport from 'components/reports/PurchaseRequestReport';
 import PurchaseRequestSummary from 'components/reports/purchase/PurchaseRequestSummary';
 import PurchaseRequestDetail from 'components/reports/purchase/PurchaseRequestDetail';
 // import report Budget
-import ProjectwiseCurrentStatus from 'components/reports/purchase/ProjectwiseCurrentStatus';
 import CostwiseCurrentStatus from 'components/reports/purchase/CostwiseCurrentStatus';
 
 import CustomersReport from 'components/reports/purchase/masters/CustomersReport';
@@ -146,6 +145,7 @@ import BoldPurchaseOrderReport from 'components/reports/purchase/BoldPurchaseOrd
 import BoldPurchaseRequestSummary from 'components/reports/purchase/BoldPurchaseRequestSummaryReport';
 import BudgetStatusReport from 'pages/Report/components/BudgetStatusReport';
 import ItemInformationReport from 'pages/Report/item_information/ItemInformationReport';
+const BudgetStatusSummary = BudgetStatusReport;
 // import BTHRMainPage from 'BT_INDIA/pages/BTHRMainPages';
 // import MyTaskPage from 'pages/Purchasefolder/MyitemPage_history';
 // import VendorDashboard from 'pages/VendorSystem/dashboard/VendorDashboard'
@@ -643,7 +643,7 @@ const MainRoutes = {
                 {
                   path: 'Budget',
                   children: [
-                    { path: 'budget_status_report', element: <ProjectwiseCurrentStatus /> },
+                    { path: 'budget_status_report', element: <BudgetStatusSummary required_values={{ divCode: '', companyCode: '' }} /> },
                     { path: 'budget_allocation_report', element: <CostwiseCurrentStatus /> },
                     { path: '*', element: <MaintenanceError /> }
                   ]
