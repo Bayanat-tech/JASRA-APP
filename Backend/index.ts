@@ -44,13 +44,14 @@ import wmsRoutes from "./src/routes/wms.routes";
 import boldReportsRoutes from "./src/routes/boldreports.routes";
 import cfsRoutes from "./src/routes/SMS/sms.routes";
 import qrRoutes from "./src/routes/qr.routes";
-
+import reportsRoutes from "./src/routes/reports_routes";
 // Public QR Authentication Routes
 app.use("/api/qr", qrRoutes);
 
 app.use("/api/files", fileRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", boldReportsRoutes);
+app.use("/api/report", reportsRoutes);
 app.use("/api/security", secRoutes);
 app.use("/api/hr", hrRoutes);
 app.use("/api/pf", pfRoutes);
