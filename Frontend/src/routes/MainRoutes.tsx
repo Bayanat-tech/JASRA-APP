@@ -89,7 +89,7 @@ import MyTaskPage from 'pages/Purchasefolder/MyTaskPage';
 import PurchaserequestheaderPfPage_Al from '../components/forms/Purchaseflow_AL/PurchasereqestheaderPfPage_Al';
 import CustomerMasterPage from 'pages/Purchasefolder/CustomerMasterPage';
 // import report ledger
-import PurchaseOrderReport from 'components/reports/PurchaseOrderReport';
+import PurchaseOrderReport from 'components/reports/purchase_order_register/detail/PurchaseOrderReport';
 import PurchaseRequestReport from 'components/reports/PurchaseRequestReport';
 import PurchaseRequestSummary from 'components/reports/purchase/PurchaseRequestSummary';
 import PurchaseRequestDetail from 'components/reports/purchase/PurchaseRequestDetail';
