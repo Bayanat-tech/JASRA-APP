@@ -32,7 +32,14 @@ type BudgetRow = {
   PROJECT_CODE:   string;
   COST_CODE:      string;
   COST_NAME:      string;
+  DIV_CODE:       string;
   DIV_NAME:       string;
+};
+
+// ── Division row type (from MS_HR_DIVISION) ──────────────────────────────────
+type DivisionRow = {
+  DIV_CODE: string;
+  DIV_NAME: string;
 };
 
 // ── Month helpers ──────────────────────────────────────────────────────────────
@@ -73,6 +80,7 @@ interface Option {
 }
 
 interface Filters {
+  division:      string[];
   project_name:  string[];
   month:         string[];
   cost_code:     string[];
@@ -80,6 +88,7 @@ interface Filters {
 }
 
 const DEFAULT_FILTERS: Filters = {
+  division:      ['All'],
   project_name:  ['All'],
   month:         ['All'],
   cost_code:     ['All'],
@@ -110,6 +119,15 @@ const costCodeOptions = (rows: BudgetRow[]): Option[] => {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([value, name]) => ({ value, label: `${value} | ${name}` }));
 };
+
+// Division options come from MS_HR_DIVISION (separate query), not from the
+// budget view rows — this gives the full division master list rather than
+// only divisions that happen to already have budget rows.
+const divisionOptionsFromMaster = (rows: DivisionRow[]): Option[] =>
+  rows
+    .filter((r) => r.DIV_CODE)
+    .sort((a, b) => a.DIV_CODE.localeCompare(b.DIV_CODE))
+    .map((r) => ({ value: r.DIV_CODE, label: `${r.DIV_CODE} | ${r.DIV_NAME}` }));
 
 // ── Shared field styling (matches PurchaseRequestSummary) ────────────────────
 
@@ -366,13 +384,30 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setPending((prev) => ({ ...prev, [key]: val }));
 
-  // ── Data fetch ─────────────────────────────────────────────────────────────
+  // ── Division master list (MS_HR_DIVISION) ─────────────────────────────────
+  const { data: divisionRows = [], isLoading: isDivisionLoading } = useQuery<DivisionRow[]>({
+    queryKey: ['ms_hr_division_all'],
+    queryFn: async () => {
+      const sql = `
+        SELECT DIV_CODE, DIV_NAME
+        FROM MS_HR_DIVISION
+        WHERE DIV_CODE IS NOT NULL
+        ORDER BY DIV_CODE
+      `;
+      const response = await WmsSerivceInstance.executeRawSql(sql);
+      return (response as DivisionRow[]) || [];
+    },
+  });
+
+  const divisionOptions = useMemo(() => divisionOptionsFromMaster(divisionRows), [divisionRows]);
+
+  // ── Data fetch (budget rows) ───────────────────────────────────────────────
   const { data: allRows = [], isLoading } = useQuery<BudgetRow[]>({
     queryKey: ['budget_status_all', divCode, companyCode],
     queryFn: async () => {
       const staticConditions: string[] = [];
-      if (divCode) staticConditions.push(`DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
-      if (companyCode) staticConditions.push(`COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
+      if (divCode) staticConditions.push(`D.DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
+      if (companyCode) staticConditions.push(`V.COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
       const whereClause = [
         `COST_CODE IS NOT NULL`,
         `COST_NAME IS NOT NULL`,
@@ -380,17 +415,30 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
       ].join('\n    AND ');
 
       const sql = `
-        SELECT
-          BUDGET_YEAR, MONTH_NUMBER, MONTH_BUDGET, PROJECT_NAME, PROJECT_CODE,
-          COST_CODE, COST_NAME, DIV_NAME,
-          APPROVED_AMT,
-          PR_AMOUNT,
-          PO_AMOUNT,
-          (PO_AMOUNT + PR_AMOUNT)                  AS TOT_UTILISED,
-          (APPROVED_AMT - (PO_AMOUNT + PR_AMOUNT)) AS BALANCE_AMT
-        FROM VW_BO_BASIC_BUDGET_INFO_V1
-        WHERE ${whereClause}
-        ORDER BY PROJECT_NAME, COST_CODE, BUDGET_YEAR, MONTH_NUMBER
+       SELECT
+  V.BUDGET_YEAR,
+  V.MONTH_NUMBER,
+  V.MONTH_BUDGET,
+  V.PROJECT_NAME,
+  V.PROJECT_CODE,
+  V.COST_CODE,
+  V.COST_NAME,
+  D.DIV_CODE,
+  V.DIV_NAME,
+  V.APPROVED_AMT,
+  V.PR_AMOUNT,
+  V.PO_AMOUNT,
+  (V.PO_AMOUNT + V.PR_AMOUNT)                  AS TOT_UTILISED,
+  (V.APPROVED_AMT - (V.PO_AMOUNT + V.PR_AMOUNT)) AS BALANCE_AMT
+FROM VW_BO_BASIC_BUDGET_INFO_V1 V
+LEFT JOIN MS_HR_DIVISION D
+  ON UPPER(TRIM(V.DIV_NAME)) = UPPER(TRIM(D.DIV_NAME))
+WHERE ${whereClause}
+ORDER BY
+  V.PROJECT_NAME,
+  V.COST_CODE,
+  V.BUDGET_YEAR,
+  V.MONTH_NUMBER
       `;
       const response = await WmsSerivceInstance.executeRawSql(sql);
       return (response as BudgetRow[]) || [];
@@ -398,7 +446,17 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   });
 
   // ── Parameter dropdown options, derived from loaded rows ──────────────────
-  const projectOptions  = useMemo(() => uniqueOptions(allRows, 'PROJECT_NAME'), [allRows]);
+  const projectOptions = useMemo(() => {
+  const selectedDivisions = pending.division;
+
+  const rows =
+    selectedDivisions.includes("All") || selectedDivisions.length === 0
+      ? allRows
+      : allRows.filter((r) => selectedDivisions.includes(r.DIV_CODE));
+
+  return uniqueOptions(rows, "PROJECT_NAME");
+}, [allRows, pending.division]);
+
   const monthOpts       = useMemo(() => monthOptions(allRows),                  [allRows]);
   const costOpts        = useMemo(() => costCodeOptions(allRows),               [allRows]);
 
@@ -408,6 +466,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
       const inOrAll = (values: string[], rowVal: string) =>
         values.includes('All') || values.length === 0 || values.includes(rowVal);
 
+      if (!inOrAll(applied.division, r.DIV_CODE)) return false;
       if (!inOrAll(applied.project_name, r.PROJECT_NAME)) return false;
       if (!inOrAll(applied.month, r.MONTH_NUMBER)) return false;
       if (!inOrAll(applied.cost_code, r.COST_CODE)) return false;
@@ -749,6 +808,21 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
           {/* Parameter form */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              <FloatLabel label="Division" bgColor={BG}>
+                <MultiSelectField
+                  label=""
+                  options={divisionOptions}
+                  value={pending.division}
+                  onChange={(v) => {
+  setPending((prev) => ({
+    ...prev,
+    division: v,
+    project_name: ['All'],
+  }));
+}}
+                  loading={isDivisionLoading}
+                />
+              </FloatLabel>
               <FloatLabel label="Project Name" bgColor={BG}>
                 <MultiSelectField
                   label=""
@@ -757,6 +831,9 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   onChange={(v) => setPendingField('project_name', v)}
                 />
               </FloatLabel>
+            </div>
+
+            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Month" bgColor={BG}>
                 <MultiSelectField
                   label=""
@@ -765,9 +842,6 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   onChange={(v) => setPendingField('month', v)}
                 />
               </FloatLabel>
-            </div>
-
-            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Cost Code" bgColor={BG}>
                 <MultiSelectField
                   label=""
@@ -776,6 +850,9 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   onChange={(v) => setPendingField('cost_code', v)}
                 />
               </FloatLabel>
+            </div>
+
+            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Grouping on Cost" bgColor={BG}>
                 <SingleSelectField
                   label=""
@@ -784,6 +861,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   onChange={(v) => setPendingField('group_by_cost', v as 'Yes' | 'No')}
                 />
               </FloatLabel>
+              <div />
             </div>
           </div>
 
