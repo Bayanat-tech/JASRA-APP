@@ -1,17 +1,8 @@
-// import React from 'react';
-// import PfReportView from './PfReportView';
-// //Po Register (Summary)
-// const PurchaseOrderReport: React.FC = () => {
-//   return <PfReportView reportPath="d0568077-6f2a-47fa-9552-cdc0ff7adaea" />;
-// };
-
-// export default PurchaseOrderReport;
-
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import WmsSerivceInstance from 'service/wms/service.wms';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
+import axiosServices from 'utils/axios';
 
 // ── Types ────────────────────────────────────────────────
 type PORow = {
@@ -36,25 +27,39 @@ type PORow = {
   COMPANY_LOGO_AWSURL: string;
   MAIL_EMAIL:        string;
   COMPANY_NAME:      string;
+  DIV_CODE:          string;
 };
 
 type ItemGroup   = { itemCode: string; itemDesp: string; addlDesc: string; rows: PORow[]; total: number };
 type SupplierGroup = { suppName: string; supplier: string; items: ItemGroup[]; total: number };
 type POGroup     = { poNo: string; poDate: string; status: string; serviceFlag: string; suppliers: SupplierGroup[]; total: number };
 
+interface MultiSelectComboProps {
+  value: string[];
+  options: string[];
+  onChange: (value: string[]) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
 type Filters = {
-  supp_name:   string;
-  status:      string;
-  ref_doc_no:  string;
-  amount_from: string;
-  amount_to:   string;
-  date_from:   string;
-  date_to:     string;
+  supp_name:    string[];
+  status:       string[];
+  ref_doc_no:   string[];
+  project_name: string[];
+  div_code:    string[];
+  amount_from:  string;
+  amount_to:    string;
+  date_from:    string;
+  date_to:      string;
 };
 
 type FilterOptions = {
-  suppNames: string[];
-  statuses:  string[];
+  suppNames:    string[];
+  statuses:     string[];
+  poNumbers:    string[];
+  projectNames: string[];
+  divCodes:    string[];
 };
 
 type SortConfig = { col: keyof PORow | null; dir: 'asc' | 'desc' };
@@ -74,6 +79,31 @@ function formatDate(d: string) {
 function parseDateStr(d: string): number {
   if (!d) return 0;
   return new Date(d).getTime() || 0;
+}
+function formatFilterValue(v: string | string[]): string {
+  return Array.isArray(v) ? v.join(', ') : v;
+}
+
+// Normalize an API response that *should* be a string[] but might come back
+// as an array of row objects (e.g. [{ PO_NO: "PO-001" }, ...]) or contain
+// null/undefined/duplicate entries. This is what was crashing the combo box:
+// calling `.toLowerCase()` on a non-string value.
+function normalizeStringList(raw: any, keys: string[] = []): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    let val: any = item;
+    if (item && typeof item === 'object') {
+      for (const k of keys) {
+        if (item[k] !== undefined && item[k] !== null) { val = item[k]; break; }
+      }
+      if (val && typeof val === 'object') continue; // couldn't resolve to a primitive
+    }
+    if (val === null || val === undefined) continue;
+    const str = String(val).trim();
+    if (str) out.push(str);
+  }
+  return [...new Set(out)];
 }
 
 // ── Grouping: PO → Supplier → Item ───────────────────────
@@ -112,116 +142,372 @@ function SortArrow({ col, sort }: { col: keyof PORow; sort: SortConfig }) {
   return <span style={{ marginLeft: 4 }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
-// ── Filter Panel ──────────────────────────────────────────
-function FilterPanel({
-  options, filters, onChange, onApply, onReset, open, onClose,
+// ── Shared parameter-form field styling ──────────────────
+const paramLabelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280',
+  marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em',
+};
+const paramInputStyle: React.CSSProperties = {
+  width: '100%', padding: '9px 10px', fontSize: 13, color: '#111',
+  border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff',
+  outline: 'none', boxSizing: 'border-box', fontFamily: "'DM Sans', sans-serif",
+};
+
+
+function MultiSelectCombo({
+  value,
+  options,
+  onChange,
+  placeholder = 'Select...',
+  disabled = false,
+}: MultiSelectComboProps) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown + clear search if disabled mid-interaction
+  React.useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearch('');
+    }
+  }, [disabled]);
+
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const filteredOptions = options.filter(o =>
+    o.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleOption = (opt: string) => {
+    if (disabled) return;
+    if (value.includes(opt)) {
+      onChange(value.filter(v => v !== opt));
+    } else {
+      onChange([...value, opt]);
+    }
+  };
+
+  const handleTriggerClick = () => {
+    if (disabled) return;
+    setIsOpen(prev => !prev);
+  };
+
+  const displayText = value.length === 0
+    ? placeholder
+    : value.length === 1
+      ? value[0]
+      : `${value.length} selected`;
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={handleTriggerClick}
+        disabled={disabled}
+        aria-disabled={disabled}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          padding: '8px 12px',
+          borderRadius: 6,
+          border: '1px solid #d0d5dd',
+          background: disabled ? '#f2f4f7' : '#fff',
+          color: disabled ? '#98a2b3' : (value.length === 0 ? '#98a2b3' : '#101828'),
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          fontSize: 14,
+        }}
+      >
+        {displayText}
+      </button>
+
+      {isOpen && !disabled && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: '#fff',
+            border: '1px solid #d0d5dd',
+            borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            zIndex: 20,
+            maxHeight: 260,
+            overflowY: 'auto',
+          }}
+        >
+          <input
+            autoFocus
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search..."
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '8px 12px',
+              border: 'none',
+              borderBottom: '1px solid #eaecf0',
+              outline: 'none',
+              fontSize: 14,
+            }}
+          />
+          {filteredOptions.length === 0 ? (
+            <div style={{ padding: '8px 12px', color: '#98a2b3', fontSize: 14 }}>No options</div>
+          ) : (
+            filteredOptions.map(opt => (
+              <label
+                key={opt}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(opt)}
+                  onChange={() => toggleOption(opt)}
+                />
+                {opt}
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildFilterParams(
+  company_code: string | undefined,
+  filters: Filters,
+  exclude?: keyof Filters,
+) {
+  const params = new URLSearchParams();
+  if (company_code) params.set('company_code', company_code);
+
+  if (exclude !== 'ref_doc_no' && filters.ref_doc_no?.length) {
+    params.set('ref_doc_no', filters.ref_doc_no.join(','));
+  }
+  if (exclude !== 'project_name' && filters.project_name?.length) {
+    params.set('project_name', filters.project_name.join(','));
+  }
+  if (exclude !== 'supp_name' && filters.supp_name?.length) {
+    params.set('supp_name', filters.supp_name.join(','));
+  }
+  if (exclude !== 'status' && filters.status?.length) {
+    params.set('status', filters.status.join(','));
+  }
+  if (exclude !== 'div_code' && filters.div_code?.length) {
+    params.set('div_code', filters.div_code.join(','));
+  }
+  if (exclude !== 'date_from' && filters.date_from) params.set('date_from', filters.date_from);
+  if (exclude !== 'date_to' && filters.date_to) params.set('date_to', filters.date_to);
+  if (exclude !== 'amount_from' && filters.amount_from) params.set('amount_from', filters.amount_from);
+  if (exclude !== 'amount_to' && filters.amount_to) params.set('amount_to', filters.amount_to);
+
+  return params.toString();
+}
+
+function ParameterForm({
+  options, filters, onChange,
 }: {
   options:  FilterOptions;
   filters:  Filters;
   onChange: (f: Filters) => void;
-  onApply:  () => void;
-  onReset:  () => void;
-  open:     boolean;
-  onClose:  () => void;
 }) {
-  if (!open) return null;
+  const { user } = useAuth();
+  const row2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 };
+
+  const itemCodeParams = buildFilterParams(user?.company_code, filters, 'div_code');
+
+  const { data: divCodes = [], isLoading: isItemCodesLoading } = useQuery<string[]>({
+    queryKey: ['div_codes', itemCodeParams],
+    queryFn: async () => {
+      const response = await axiosServices.get(`/api/report/div-codes?${itemCodeParams}`);
+      return normalizeStringList(response.data, ['DIV_CODE', 'div_code', 'value', 'label']);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Params for PO numbers = every filter EXCEPT ref_doc_no itself
+  const poParams = buildFilterParams(user?.company_code, filters, 'ref_doc_no');
+
+  const { data: poNumbers = [], isLoading: isPoNumbersLoading } = useQuery<string[]>({
+    queryKey: ['po_numbers', poParams],
+    queryFn: async () => {
+      const response = await axiosServices.get(`/api/report/po-no?${poParams}`);
+      return normalizeStringList(response.data, ['PO_NO', 'po_no', 'poNo', 'value', 'label']);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Params for Project Names = every filter EXCEPT project_name itself
+  const projectParams = buildFilterParams(user?.company_code, filters, 'project_name');
+
+  const { data: projectNames = [], isLoading: isProjectNamesLoading } = useQuery<string[]>({
+    queryKey: ['project_names', projectParams],
+    queryFn: async () => {
+      const response = await axiosServices.get(`/api/report/project-names?${projectParams}`);
+      return normalizeStringList(response.data, ['PROJECT_NAME', 'project_name', 'value', 'label']);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const supplierParams = buildFilterParams(user?.company_code, filters, 'supp_name');
+
+  const { data: supplierNames = [], isLoading: isSupplierNamesLoading } = useQuery<string[]>({
+    queryKey: ['supplier_names', supplierParams],
+    queryFn: async () => {
+      const response = await axiosServices.get(`/api/report/supplier-names?${supplierParams}`);
+      return normalizeStringList(response.data, ['SUPP_NAME', 'supp_name', 'value', 'label']);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const statusParams = buildFilterParams(user?.company_code, filters, 'status');
+
+  const { data: statusOptions = [], isLoading: isStatusOptionsLoading } = useQuery<string[]>({
+    queryKey: ['status_options', statusParams],
+    queryFn: async () => {
+      const response = await axiosServices.get(`/api/report/status-options?${statusParams}`);
+      return normalizeStringList(response.data, ['STATUS', 'status', 'value', 'label']);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  
+
+  const isLoading = isPoNumbersLoading || isProjectNamesLoading || isSupplierNamesLoading || isStatusOptionsLoading || isItemCodesLoading;
   return (
-    <>
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)',
-        zIndex: 199, backdropFilter: 'blur(1px)',
-      }} />
-      <div style={{
-        position: 'fixed', top: 0, right: 0, height: '100vh', width: 310,
-        background: '#fff', borderLeft: '1px solid #e5e7eb',
-        boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', zIndex: 200,
-        display: 'flex', flexDirection: 'column', fontFamily: "'DM Sans', sans-serif",
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: '50px 20px 16px', borderBottom: '1px solid #e5e7eb',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: '#fafafa',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 16, color: '#1e3a5f' }}>⚙</span>
-            <span style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>Parameters</span>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              border: 'none', background: '#f3f4f6', cursor: 'pointer',
-              width: 30, height: 30, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, color: '#6b7280', marginRight: 8, flexShrink: 0,
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fee2e2'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLButtonElement).style.color = '#6b7280'; }}
-          >×</button>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        cursor: isLoading ? 'wait' : 'default',
+        opacity: isLoading ? 0.6 : 1,
+        pointerEvents: isLoading ? 'none' : 'auto',
+        transition: 'opacity 0.15s ease',
+      }}
+    >
+      <div style={row2}>
+        <div>
+          <label style={paramLabelStyle}>Div Code</label>
+          <MultiSelectCombo
+            value={filters.div_code}
+            options={divCodes}
+            onChange={(v) => onChange({ ...filters, div_code: v })}
+            placeholder='Div Code'
+            disabled={isLoading}
+          />
         </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {/* PO Number search */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>PO Number</label>
-            <input
-              type="text"
-              placeholder="Search PO No…"
-              value={filters.ref_doc_no}
-              onChange={e => onChange({ ...filters, ref_doc_no: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
-
-          {/* Date Range */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>PO Date From</label>
-            <input type="date" value={filters.date_from} onChange={e => onChange({ ...filters, date_from: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>PO Date To</label>
-            <input type="date" value={filters.date_to} onChange={e => onChange({ ...filters, date_to: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-
-          {/* Amount Range */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Amount From</label>
-            <input type="number" placeholder="0" value={filters.amount_from} onChange={e => onChange({ ...filters, amount_from: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Amount To</label>
-            <input type="number" placeholder="No limit" value={filters.amount_to} onChange={e => onChange({ ...filters, amount_to: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-
-          {/* Dropdowns */}
-          {([
-            { label: 'Supplier',  key: 'supp_name', opts: options.suppNames },
-            { label: 'Status',    key: 'status',    opts: options.statuses  },
-          ] as { label: string; key: keyof Filters; opts: string[] }[]).map(({ label, key, opts }) => (
-            <div key={key}>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
-              <select value={filters[key]} onChange={e => onChange({ ...filters, [key]: e.target.value })}
-                style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', cursor: 'pointer' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#1e3a5f')}
-                onBlur={e  => (e.currentTarget.style.borderColor = '#d1d5db')}>
-                <option value="">All</option>
-                {opts.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-          ))}
+        <div>
+          <label style={paramLabelStyle}>PO Number</label>
+          <MultiSelectCombo
+            value={filters.ref_doc_no}
+            options={poNumbers}
+            onChange={(v) => onChange({ ...filters, ref_doc_no: v })}
+            placeholder='PO NO'
+            disabled={isLoading}
+          />
         </div>
-
-        <div style={{ padding: '16px 20px 40px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 10, background: '#fafafa' }}>
-          <button onClick={onReset} style={{ flex: 1, padding: '9px', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', cursor: 'pointer', fontSize: 13, color: '#374151', fontWeight: 600 }}>Reset</button>
-          <button onClick={() => { onApply(); onClose(); }} style={{ flex: 2, padding: '9px', border: 'none', borderRadius: 7, background: '#1e3a5f', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 700 }}>Apply Filters</button>
+        <div>
+          <label style={paramLabelStyle}>Project Name</label>
+          <MultiSelectCombo
+            value={filters.project_name}
+            options={projectNames}
+            onChange={(v) => onChange({ ...filters, project_name: v })}
+            placeholder="All Projects"
+            disabled={isLoading}
+          />
         </div>
       </div>
-    </>
+
+      <div style={row2}>
+        <div>
+          <label style={paramLabelStyle}>PO Date From</label>
+          <input
+            type="date"
+            value={filters.date_from}
+            onChange={e => onChange({ ...filters, date_from: e.target.value })}
+            style={paramInputStyle}
+            disabled={isLoading}
+          />
+        </div>
+        <div>
+          <label style={paramLabelStyle}>PO Date To</label>
+          <input
+            type="date"
+            value={filters.date_to}
+            onChange={e => onChange({ ...filters, date_to: e.target.value })}
+            style={paramInputStyle}
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+
+      <div style={row2}>
+        <div>
+          <label style={paramLabelStyle}>Amount From</label>
+          <input
+            type="number"
+            placeholder="0"
+            value={filters.amount_from}
+            onChange={e => onChange({ ...filters, amount_from: e.target.value })}
+            style={paramInputStyle}
+            disabled={isLoading}
+          />
+        </div>
+        <div>
+          <label style={paramLabelStyle}>Amount To</label>
+          <input
+            type="number"
+            placeholder="No limit"
+            value={filters.amount_to}
+            onChange={e => onChange({ ...filters, amount_to: e.target.value })}
+            style={paramInputStyle}
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+
+      <div style={row2}>
+        <div>
+          <label style={paramLabelStyle}>Supplier</label>
+          <MultiSelectCombo
+            value={filters.supp_name}
+            options={supplierNames}
+            onChange={(v) => onChange({ ...filters, supp_name: v })}
+            placeholder="All Suppliers"
+            disabled={isLoading}
+          />
+        </div>
+        <div>
+          <label style={paramLabelStyle}>Status</label>
+          <MultiSelectCombo
+            value={filters.status}
+            options={statusOptions}
+            onChange={(v) => onChange({ ...filters, status: v })}
+            placeholder="All Statuses"
+            disabled={isLoading}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -230,13 +516,18 @@ const PurchaseOrderReport: React.FC = () => {
   const printRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
-  const EMPTY_FILTERS: Filters = { supp_name: '', status: '', ref_doc_no: '', amount_from: '', amount_to: '', date_from: '', date_to: '' };
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [applied,   setApplied]   = useState<Filters>(EMPTY_FILTERS);
-  const [pending,   setPending]   = useState<Filters>(EMPTY_FILTERS);
+  const EMPTY_FILTERS: Filters = {
+    supp_name: [], status: [], ref_doc_no: [], project_name: [],
+    amount_from: '', amount_to: '', date_from: '', date_to: '', div_code: [],
+  };
+
+  const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
+  const [activeTab, setActiveTab] = useState<'parameters' | 'report'>('parameters');
+  const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
+  const [pending, setPending] = useState<Filters>(EMPTY_FILTERS);
 
   const [collapsedPOs,   setCollapsedPOs]   = useState<Set<string>>(new Set());
-  const [collapsedSupps, setCollapsedSupps] = useState<Set<string>>(new Set());
+  // const [collapsedSupps, setCollapsedSupps] = useState<Set<string>>(new Set());
 
   const [search, setSearch] = useState('');
   const [sort,   setSort]   = useState<SortConfig>({ col: null, dir: 'asc' });
@@ -244,56 +535,47 @@ const PurchaseOrderReport: React.FC = () => {
   const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const printUser = user?.username;
 
-  // ── Fetch all rows (no server-side filter for client-side flexibility) ──
-  const { data: allRows = [], isLoading } = useQuery<PORow[]>({
+  const appliedFiltersRef = useRef<Filters>(EMPTY_FILTERS);
+
+  const {
+    data: allRows = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery<PORow[]>({
     queryKey: ['po_detail_register'],
-queryFn: async () => {
-const sql = `
-  SELECT
-      r.ref_doc_no    AS PO_NO,
-      r.doc_date      AS PO_DATE,
-      r.supplier,
-      r.SERVICE_RM_FLAG,
-      r.supp_name,
-      r.status,
-      r.item_code,
-      r.addl_item_desc,
-      r.item_desp,
-      r.p_uom,
-      r.appr_item_p_qty,
-      r.l_uom,
-      r.appr_item_l_qty,
-      r.item_rate,
-      r.currency_rate,
-      r.amount,
-      r.project_name
-  FROM VW_BO_PO_REGISTER_JASRA r
-`;
-  const sqlCount = `SELECT COUNT(*) AS CNT FROM VW_BO_PO_REGISTER_JASRA`;
-  console.log(sqlCount, "sqlCount")
-  const response = await WmsSerivceInstance.executeRawSql(sql);
-  console.log('RAW RESPONSE:', response);        // <-- add this
-  console.log('TYPE:', typeof response);         // <-- and this
-  return (response as PORow[]) || [];
-},
+    queryFn: async () => {
+      const params = buildFilterParams(user?.company_code, appliedFiltersRef.current);
+      const response: { data: PORow[] } = await axiosServices.get(`/api/report/po-detail-register?${params}`);
+      return response.data || [];
+    },
+    enabled: false,
+    staleTime: Infinity,
   });
+
+  const dataLoading = isLoading || isFetching;
 
   // ── Filter options ──
   const filterOptions: FilterOptions = useMemo(() => {
     const uniq = (key: keyof PORow) =>
       [...new Set(allRows.map(r => r[key]).filter(Boolean))].sort() as string[];
-    return { suppNames: uniq('SUPP_NAME'), statuses: uniq('STATUS') };
+    return {
+      suppNames:    uniq('SUPP_NAME'),
+      statuses:     uniq('STATUS'),
+      poNumbers:    uniq('PO_NO'),
+      projectNames: uniq('PROJECT_NAME'),
+      divCodes:     uniq('DIV_CODE'),
+    };
   }, [allRows]);
 
-  // ── Client-side filtering ──
+  // ── Client-side filtering (based on the *applied* filters, set on Generate) ──
   const filteredRows = useMemo(() => {
     return allRows.filter(r => {
-      if (applied.supp_name && r.SUPP_NAME !== applied.supp_name) return false;
-      if (applied.status    && r.STATUS    !== applied.status)    return false;
-      if (applied.ref_doc_no) {
-        const q = applied.ref_doc_no.toLowerCase();
-        if (!r.PO_NO?.toLowerCase().includes(q)) return false;
-      }
+      if (applied.div_code.length && !applied.div_code.includes(r.DIV_CODE)) return false;
+      if (applied.supp_name.length && !applied.supp_name.includes(r.SUPP_NAME)) return false;
+      if (applied.project_name.length && !applied.project_name.includes(r.PROJECT_NAME)) return false;
+      if (applied.status.length && !applied.status.includes(r.STATUS)) return false;
+      if (applied.ref_doc_no.length && !applied.ref_doc_no.includes(r.PO_NO)) return false;
       if (applied.amount_from) {
         if ((parseFloat(String(r.AMOUNT)) || 0) < parseFloat(applied.amount_from)) return false;
       }
@@ -342,23 +624,23 @@ const sql = `
 
   const poGroups   = useMemo(() => groupRows(filteredRows), [filteredRows]);
   const grandTotal = poGroups.reduce((s, p) => s + p.total, 0);
-  const isFiltered = Object.values(applied).some(Boolean) || search.trim().length > 0;
+  const isFiltered = Object.values(applied).some(v => Array.isArray(v) ? v.length > 0 : Boolean(v)) || search.trim().length > 0;
 
   // ── Collapse helpers ──
   const togglePO   = (key: string) => setCollapsedPOs(prev   => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  const toggleSupp = (key: string) => setCollapsedSupps(prev  => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  // const toggleSupp = (key: string) => setCollapsedSupps(prev  => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const allPOKeys   = poGroups.map(p => p.poNo);
-  const allSuppKeys = poGroups.flatMap(p => p.suppliers.map(s => `${p.poNo}|||${s.supplier}`));
+  // const allSuppKeys = poGroups.flatMap(p => p.suppliers.map(s => `${p.poNo}|||${s.supplier}`));
   const allCollapsed = collapsedPOs.size === allPOKeys.length;
 
   const handleCollapseAll = () => {
     if (allCollapsed) {
       setCollapsedPOs(new Set());
-      setCollapsedSupps(new Set());
+      // setCollapsedSupps(new Set());
     } else {
       setCollapsedPOs(new Set(allPOKeys));
-      setCollapsedSupps(new Set(allSuppKeys));
+      // setCollapsedSupps(new Set(allSuppKeys));
     }
   };
 
@@ -367,6 +649,25 @@ const sql = `
   };
 
   const handlePrint = () => window.print();
+
+  // ── Generate / Reset ──
+  const handleGenerateReport = async () => {
+    setApplied({ ...pending });
+    appliedFiltersRef.current = { ...pending };   // keep ref in sync before refetching
+    try {
+      await refetch();
+    } finally {
+      setHasGeneratedReport(true);
+      setActiveTab('report');
+    }
+  };
+
+  const handleReset = () => {
+    setPending(EMPTY_FILTERS);
+    setApplied(EMPTY_FILTERS);
+    setHasGeneratedReport(false);
+    setActiveTab('parameters');
+  };
 
   // ── Excel Export ──
   const handleExcel = async () => {
@@ -472,7 +773,10 @@ const sql = `
       pdf.text('PO Detail Register', pageW / 2, TITLE_Y + 5.5, { align: 'center' });
       if (pg === 1 && isFiltered) {
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(107, 114, 128);
-        const parts = Object.entries(applied).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ');
+        const parts = Object.entries(applied)
+          .filter(([, v]) => Array.isArray(v) ? v.length > 0 : Boolean(v))
+          .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`)
+          .join(' | ');
         if (parts) pdf.text(`Filter: ${parts}`, margin, TABLE_TOP - 2);
       }
     };
@@ -595,7 +899,6 @@ const sql = `
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-    
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -608,10 +911,54 @@ const sql = `
           overflow: hidden;
         }
 
-        /* ── Toolbar ── */
+        /* ── Page shell (holds tab bar + parameters/report) ── */
+        .po-shell {
+          font-family: 'DM Sans', sans-serif;
+          background: #f4f6f9;
+          min-height: 100vh;
+          padding: 14px 28px;
+          box-sizing: border-box;
+        }
+
+        /* ── Tab bar ── */
+        .po-tabbar {
+          display: flex; align-items: center; gap: 6px;
+          background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+          padding: 5px; margin-bottom: 14px;
+        }
+        .po-tab {
+          flex: 1; padding: 9px 14px; border-radius: 7px; border: none;
+          cursor: pointer; font-size: 13px; font-weight: 600;
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          font-family: 'DM Sans', sans-serif; transition: background 0.15s;
+          background: transparent; color: #374151;
+        }
+        .po-tab.active { background: #1e3a5f; color: #fff; }
+        .po-tab:disabled { color: #9ca3af; cursor: not-allowed; }
+        .po-tab-badge {
+          font-size: 9.5px; padding: 1px 7px; border-radius: 10px; font-weight: 600;
+          background: #dcfce7; color: #16a34a;
+        }
+        .po-tab.active .po-tab-badge { background: rgba(255,255,255,0.25); color: #fff; }
+
+        /* ── Parameters card ── */
+        .po-param-card {
+          background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+          padding: 22px 24px;
+        }
+        .po-param-title {
+          font-size: 15px; font-weight: 700; color: #111; margin-bottom: 18px;
+          display: flex; align-items: center; gap: 8px;
+        }
+        .po-param-actions {
+          display: flex; justify-content: flex-end; gap: 10px;
+          margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;
+        }
+
+        /* ── Toolbar (report tab) ── */
         .po-toolbar {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 10px 28px; background: #fff; border-bottom: 1px solid #e5e7eb;
+          padding: 10px 0; background: #fff; border-bottom: 1px solid #e5e7eb;
           flex-shrink: 0; z-index: 100; gap: 12px;
         }
         .po-toolbar-left  { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
@@ -625,14 +972,9 @@ const sql = `
         .po-btn-ghost:hover { background: #f9fafb; border-color: #9ca3af; }
         .po-btn-primary { border: none; background: #1e3a5f; color: #fff; }
         .po-btn-primary:hover { background: #162d4a; }
+        .po-btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
         .po-btn-success { border: none; background: #16a34a; color: #fff; }
         .po-btn-success:hover { background: #15803d; }
-        .po-btn-filter  { border: 1.5px solid #d1d5db; background: #fff; color: #374151; position: relative; }
-        .po-btn-filter.active { border-color: #1e3a5f; color: #1e3a5f; background: #eef2f7; }
-        .filter-dot {
-          width: 7px; height: 7px; border-radius: 50%; background: #ef4444;
-          position: absolute; top: 5px; right: 5px;
-        }
 
         /* Search */
         .po-search {
@@ -645,8 +987,8 @@ const sql = `
         .po-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 14px; pointer-events: none; }
 
         /* ── Body layout ── */
-        .po-body        { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .po-report-area { padding: 12px 28px 0; flex: 1; overflow-y: auto; }
+        .po-body        { display: flex; flex-direction: column; }
+        .po-report-area { padding-top: 12px; }
         .po-page        {
           background: #fff; border-radius: 8px 8px 0 0;
           border: 1px solid #e5e7eb; border-bottom: none; overflow: hidden;
@@ -654,7 +996,7 @@ const sql = `
 
         /* Grand total bar */
         .po-grand-total-bar {
-          flex-shrink: 0; margin: 0 28px 20px;
+          margin: 0 0 20px;
           background: #1e3a5f; border-radius: 0 0 8px 8px;
           border: 1px solid #1e3a5f; overflow: hidden;
         }
@@ -684,108 +1026,103 @@ const sql = `
 
         /* ── Table ── */
         .po-table-wrap { overflow-x: auto; }
+/* ── Grid-style table (matches legacy PO Detail Register) ── */
+.po-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #9d9db3;
+}
 
-        table.po-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-          table-layout: fixed;
-        }
+table.po-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
 
-        /* Column widths */
-        .po-table col.c0 { width: 9%;  }  /* PUOM */
-        .po-table col.c1 { width: 10%; }  /* P Qty */
-        .po-table col.c2 { width: 9%;  }  /* LUOM */
-        .po-table col.c3 { width: 10%; }  /* L Qty */
-        .po-table col.c4 { width: 12%; }  /* Item Rate */
-        .po-table col.c5 { width: 8%;  }  /* Currency */
-        .po-table col.c6 { width: 11%; }  /* Ex Rate */
-        .po-table col.c7 { width: 12%; }  /* Amount */
-        .po-table col.c8 { width: 19%; }  /* Project */
+.po-table col.c0 { width: 15%; } /* PO Number */
+.po-table col.c1 { width: 15%; } /* Supplier */
+.po-table col.c2 { width: 7%;  } /* PUOM */
+.po-table col.c3 { width: 8%;  } /* P Qty */
+.po-table col.c4 { width: 7%;  } /* LUOM */
+.po-table col.c5 { width: 8%;  } /* L Qty */
+.po-table col.c6 { width: 10%; } /* Item Rate */
+.po-table col.c7 { width: 11%; } /* Amount */
+.po-table col.c8 { width: 8%;  } /* Currency */
+.po-table col.c9 { width: 6%;  } /* Ex Rate */
+.po-table col.c10 { width: 5%; } /* Local Amount label spacer (kept 10 cols even) */
 
-        .po-table thead th {
-          background: #1e3a5f; color: #fff; font-weight: 700;
-          font-size: 13px; padding: 11px 14px; text-align: left;
-          white-space: nowrap; border-right: 1px solid rgba(255,255,255,0.12);
-          overflow: hidden; text-overflow: ellipsis; user-select: none; cursor: pointer;
-        }
-        .po-table thead th:last-child { border-right: none; }
-        .po-table thead th.num { text-align: right; }
-        .po-table thead th:hover { background: #162d4a; }
+.po-table th, .po-table td {
+  border: 1px solid #9d9db3;
+  padding: 7px 10px;
+  vertical-align: top;
+}
 
-        /* PO group row */
-        .po-table tr.po-row td {
-          background: #1e3a5f; color: #fff; font-weight: 700;
-          font-size: 12px; padding: 5px 14px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          border-bottom: 1px solid rgba(255,255,255,0.08); cursor: pointer;
-        }
-        .po-table tr.po-row:hover td { background: #162d4a; }
+.po-table thead th {
+  background: #d9d6e8;
+  color: #1f1f2e;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.po-table thead th:hover { background: #cbc7e0; }
+.po-table thead th.num  { text-align: right; }
+.po-table thead th.left { text-align: left; padding-left: 12px; }
+.po-table thead tr:first-child th { border-bottom: 1px solid #9d9db3; }
 
-        /* Supplier group row */
-        .po-table tr.supp-row td {
-          background: #e8ecf2; color: #1e3a5f; font-weight: 700;
-          font-size: 12px; padding: 6px 14px 6px 24px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          border-bottom: 1px solid #d5dce8; cursor: pointer;
-        }
-        .po-table tr.supp-row:hover td { background: #dde3ed; }
+/* PO / Supplier banner row */
+.po-table tr.po-banner td {
+  background: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #111;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-left: 1px solid #9d9db3;
+  border-right: 1px solid #9d9db3;
+}
+.po-table tr.po-banner:hover td { background: #f7f7fa; }
 
-        /* Item group row */
-        .po-table tr.item-row td {
-          background: #f1f4f8; color: #374151; font-weight: 600;
-          font-size: 12px; padding: 4px 14px 4px 36px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          border-bottom: 1px solid #e5e7eb;
-        }
+/* Data row */
+.po-table tr.data-row td {
+  background: #fff;
+  color: #1f1f2e;
+  vertical-align: top;
+  line-height: 1.55;
+}
+.po-table tr.data-row td.item-desc {
+  white-space: pre-line;
+  }
+.po-table tr.data-row td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.po-table tr.data-row td.currency-cell { text-align: center; white-space: nowrap; }
 
-        /* Data rows */
-        .po-table tbody tr.data-row td {
-          padding: 4px 10px; border-bottom: 1px solid #e5e7eb;
-          color: #374151; vertical-align: middle; font-size: 12px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
-        }
-        .po-table tbody tr.data-row:hover td { background: #f9fafb; }
-        .po-table td.num  { text-align: right; font-variant-numeric: tabular-nums; }
-        .po-table td.mono { font-family: 'Courier New', monospace; font-size: 11.5px; }
+/* Totals */
+.po-table tr.item-total td,
+.po-table tr.supp-total td,
+.po-table tr.po-total td {
+  background: #ece9f3;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+.po-table tr.item-total td { font-size: 12px; }
+.po-table tr.supp-total td,
+.po-table tr.po-total td   { font-size: 12.5px; }
 
-        /* Totals */
-        .po-table tr.item-total td {
-          background: #f1f4f8; padding: 3px 14px; font-size: 12px;
-          font-weight: 600; color: #374151; border-top: 1px solid #e5e7eb;
-          white-space: nowrap;
-        }
-        .po-table tr.supp-total td {
-          background: #e8ecf2; padding: 5px 14px; font-size: 12px;
-          font-weight: 700; color: #1e3a5f; white-space: nowrap;
-        }
-        .po-table tr.po-total td {
-          background: #d5dce8; padding: 5px 14px; font-size: 12px;
-          font-weight: 700; color: #1e3a5f; white-space: nowrap;
-        }
-
-        .po-empty { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: 14px; }
-
-        /* Status badge */
-        .status-badge {
-          display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
-        }
-        .status-badge.approved  { background: #dcfce7; color: #16a34a; }
-        .status-badge.pending   { background: #fef9c3; color: #ca8a04; }
-        .status-badge.rejected  { background: #fee2e2; color: #dc2626; }
-        .status-badge.default   { background: #f1f4f8; color: #374151; }
-
-        /* Chevron */
-        .chevron { display: inline-block; margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
-        .chevron.open { transform: rotate(90deg); }
+.po-empty { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: 14px; }
+.chevron { display: inline-block; margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
+.chevron.open { transform: rotate(90deg); }
 
         /* Print */
         @media print {
           @page { margin: 0; size: A4 landscape; }
-          .po-toolbar, .no-print, .po-grand-total-bar { display: none !important; }
-          .po-report-root { background: white; height: auto; overflow: visible; }
-          .po-body        { overflow: visible; }
-          .po-report-area { padding: 0; overflow: visible; flex: none; }
+          .po-tabbar, .po-toolbar, .no-print, .po-grand-total-bar, .po-param-card { display: none !important; }
+          .po-shell       { background: white; padding: 0; }
           .po-page        { border: none; border-radius: 0; box-shadow: none; }
           .po-table tbody tr.data-row td { border-bottom: 1px solid #e5e7eb !important; border-right: 1px solid #e5e7eb; }
           .print-logo-only { display: block !important; }
@@ -793,221 +1130,238 @@ const sql = `
         .print-logo-only { display: none; }
       `}</style>
 
-      <div className="po-report-root">
-        {/* ── Toolbar ── */}
-        <div className="po-toolbar no-print">
-          <div className="po-toolbar-left">
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
-              PO Detail Register
-            </span>
-            {isFiltered && (
-              <span style={{ fontSize: 11, background: '#eef2f7', color: '#1e3a5f', borderRadius: 4, padding: '3px 9px', fontWeight: 600 }}>
-                Filtered
-              </span>
-            )}
-            <div className="po-search-wrap">
-              <span className="po-search-icon">🔍</span>
-              <input
-                className="po-search"
-                placeholder="Search PO no / supplier / item…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="po-toolbar-right">
-            <button className="po-btn po-btn-ghost" onClick={handleCollapseAll}>
-              {allCollapsed ? '⊞ Expand All' : '⊟ Collapse All'}
-            </button>
-            <button className={`po-btn po-btn-filter ${isFiltered ? 'active' : ''}`} onClick={() => setPanelOpen(true)}>
-              {isFiltered && <span className="filter-dot" />}
-              ⚙ Parameters
-            </button>
-            <button className="po-btn po-btn-ghost"   onClick={handlePrint}>🖨 Print</button>
-            <button className="po-btn po-btn-success" onClick={handleExcel}>📊 Excel</button>
-            <button className="po-btn po-btn-primary" onClick={handleDownloadPDF}>⬇ PDF</button>
-          </div>
+      <div className="po-shell">
+
+        {/* ── Tab bar — always visible ── */}
+        <div className="po-tabbar no-print">
+          <button
+            className={`po-tab ${activeTab === 'parameters' ? 'active' : ''}`}
+            onClick={() => setActiveTab('parameters')}
+          >
+            ⚙ Parameters
+          </button>
+          <button
+            className={`po-tab ${activeTab === 'report' ? 'active' : ''}`}
+            onClick={() => hasGeneratedReport && setActiveTab('report')}
+            disabled={!hasGeneratedReport}
+            title={hasGeneratedReport ? undefined : 'Generate a report first'}
+          >
+            📊 Report
+            {hasGeneratedReport && <span className="po-tab-badge">Generated</span>}
+          </button>
         </div>
 
-        {/* ── Body ── */}
-        <div className="po-body">
-          <div className="po-report-area">
-            <div className="po-page" ref={printRef}>
+        {/* ── Parameters tab ── */}
+        {activeTab === 'parameters' && (
+          <div className="po-param-card">
+            <div className="po-param-title">
+              PO Detail Register
+              {hasGeneratedReport && <span className="po-tab-badge">Report Generated</span>}
+            </div>
 
-              {/* Report header */}
-              <div className="po-report-header">
-                <img src={companyLogo} alt="Logo" className="print-logo-only" style={{ height: 54, width: 200, objectFit: 'fill' }} />
-                <div className="po-report-header-right">
-                  <div><b style={{ color: '#374151' }}>Print Date:</b> {printDate}</div>
-                  <div><b style={{ color: '#374151' }}>Print User:</b> {printUser}</div>
+            <ParameterForm
+              options={filterOptions}
+              filters={pending}
+              onChange={setPending}
+            />
+
+            <div className="po-param-actions">
+              <button className="po-btn po-btn-ghost" onClick={handleReset} disabled={dataLoading}>
+                Reset
+              </button>
+              <button className="po-btn po-btn-primary" onClick={handleGenerateReport} disabled={dataLoading}>
+                {dataLoading ? 'Loading data…' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Report tab ── */}
+        {activeTab === 'report' && hasGeneratedReport && (
+          <div className="po-report-root" style={{ height: 'auto' }}>
+            {/* Toolbar */}
+            <div className="po-toolbar no-print">
+              <div className="po-toolbar-left">
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>
+                  PO Detail Register
+                </span>
+                {isFiltered && (
+                  <span style={{ fontSize: 11, background: '#eef2f7', color: '#1e3a5f', borderRadius: 4, padding: '3px 9px', fontWeight: 600 }}>
+                    Filtered
+                  </span>
+                )}
+                <div className="po-search-wrap">
+                  <span className="po-search-icon">🔍</span>
+                  <input
+                    className="po-search"
+                    placeholder="Search PO no / supplier / item…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="po-toolbar-right">
+                <button className="po-btn po-btn-ghost" onClick={handleCollapseAll}>
+                  {allCollapsed ? '⊞ Expand All' : '⊟ Collapse All'}
+                </button>
+                <button className="po-btn po-btn-ghost"   onClick={handlePrint}>🖨 Print</button>
+                <button className="po-btn po-btn-success" onClick={handleExcel}>📊 Excel</button>
+                <button className="po-btn po-btn-primary" onClick={handleDownloadPDF}>⬇ PDF</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="po-body">
+              <div className="po-report-area">
+                <div className="po-page" ref={printRef}>
+
+                  {/* Report header */}
+                  <div className="po-report-header">
+                    <img src={companyLogo} alt="Logo" className="print-logo-only" style={{ height: 54, width: 200, objectFit: 'fill' }} />
+                    <div className="po-report-header-right">
+                      <div><b style={{ color: '#374151' }}>Print Date:</b> {printDate}</div>
+                      <div><b style={{ color: '#374151' }}>Print User:</b> {printUser}</div>
+                    </div>
+                  </div>
+
+                  <div className="po-title-bar">PO Detail Register</div>
+
+                  <div className="po-meta">
+                    {isFiltered && (
+                      <span>
+                        <b>Filter:</b>{' '}
+                        {[
+                          ...Object.entries(applied)
+                            .filter(([, v]) => Array.isArray(v) ? v.length > 0 : Boolean(v))
+                            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`),
+                          ...(search.trim() ? [`search: "${search.trim()}"`] : []),
+                        ].join(' | ')}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Table */}
+                  <div className="po-table-wrap">
+                    {dataLoading ? (
+                      <div className="po-empty">Loading data…</div>
+                    ) : poGroups.length === 0 ? (
+                      <div className="po-empty">No records found.</div>
+                    ) : (
+<table className="po-table">
+  <colgroup>
+    <col className="c0" /><col className="c1" /><col className="c2" />
+    <col className="c3" /><col className="c4" /><col className="c5" />
+    <col className="c6" /><col className="c7" /><col className="c8" /><col className="c9" />
+  </colgroup>
+<thead>
+  <tr>
+    <th className="left" colSpan={2}>Item Code</th>
+    <th onClick={() => handleSort('P_UOM')}>PUOM</th>
+    <th className="num" onClick={() => handleSort('APPR_ITEM_P_QTY')}>P Qty</th>
+    <th onClick={() => handleSort('L_UOM')}>LUOM</th>
+    <th className="num" onClick={() => handleSort('APPR_ITEM_L_QTY')}>L Qty</th>
+    <th className="num" onClick={() => handleSort('ITEM_RATE')}>Item Rate <SortArrow col="ITEM_RATE" sort={sort} /></th>
+    <th className="num" onClick={() => handleSort('AMOUNT')}>Amount <SortArrow col="AMOUNT" sort={sort} /></th>
+    <th>Currency</th>
+    <th className="num" onClick={() => handleSort('CURRENCY_RATE')}>Ex Rate <SortArrow col="CURRENCY_RATE" sort={sort} /></th>
+  </tr>
+</thead>
+  <tbody>
+    {dataLoading ? (
+      <tr><td colSpan={10} className="po-empty">Loading data…</td></tr>
+    ) : poGroups.length === 0 ? (
+      <tr><td colSpan={10} className="po-empty">No records found.</td></tr>
+    ) : (
+      poGroups.map(po => {
+        const poOpen = !collapsedPOs.has(po.poNo);
+        return (
+          <React.Fragment key={po.poNo}>
+            {po.suppliers.map(supp => {
+              const suppKey = `${po.poNo}|||${supp.supplier}`;
+              return (
+                <React.Fragment key={suppKey}>
+                  {/* Banner row */}
+                  <tr className="po-banner" onClick={() => togglePO(po.poNo)}>
+                    <td colSpan={10}>
+                      <span className={`chevron ${poOpen ? 'open' : ''}`}>▶</span>
+                      PO NO = {po.poNo} &nbsp;|&nbsp; PO Date = {formatDate(po.poDate)}
+                      &nbsp;|&nbsp; Supplier = {supp.suppName} &nbsp;|&nbsp; Status = {po.status}
+                    </td>
+                  </tr>
+
+                  {poOpen && supp.items.map(item => (
+                    <React.Fragment key={item.itemCode}>
+                      {sortedRows(item.rows).map((row, ri) => (
+                        <tr key={`${row.PO_NO}-${row.ITEM_CODE}-${ri}`} className="data-row">
+                          <td className="item-desc" colSpan={2}>
+                            {row.ITEM_DESP?.trim()}
+                            {row.ADDL_ITEM_DESC?.trim() ? `${row.ADDL_ITEM_DESC?.trim()}` : ''}
+                          </td>
+                          <td>{row.P_UOM || ''}</td>
+                          <td className="num">{row.APPR_ITEM_P_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_P_QTY))) : ''}</td>
+                          <td>{row.L_UOM || ''}</td>
+                          <td className="num">{row.APPR_ITEM_L_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_L_QTY))) : ''}</td>
+                          <td className="num">{formatAmount(parseFloat(String(row.ITEM_RATE)) || 0)}</td>
+                          <td className="num">{formatAmount(parseFloat(String(row.AMOUNT)) || 0)}</td>
+                          <td className="currency-cell">QAR</td>
+                          <td className="num">{formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0)}</td>
+                        </tr>
+                      ))}
+                      <tr className="item-total">
+                        <td colSpan={8}>Item Total : {item.itemCode}</td>
+                        <td className="num">{formatAmount(item.total)}</td>
+                        <td />
+                      </tr>
+                    </React.Fragment>
+                  ))}
+
+                  {poOpen && (
+                    <tr className="supp-total">
+                      <td colSpan={8}>Supplier Total : {supp.suppName}</td>
+                      <td className="num">{formatAmount(supp.total)}</td>
+                      <td />
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            {poOpen && (
+              <tr className="po-total">
+                <td colSpan={8}>PO Total : {po.poNo}</td>
+                <td className="num">{formatAmount(po.total)}</td>
+                <td />
+              </tr>
+            )}
+          </React.Fragment>
+        );
+      })
+    )}
+  </tbody>
+</table>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="po-title-bar">PO Detail Register</div>
-
-              <div className="po-meta">
-                {isFiltered && (
-                  <span>
-                    <b>Filter:</b>{' '}
-                    {[
-                      ...Object.entries(applied).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`),
-                      ...(search.trim() ? [`search: "${search.trim()}"`] : []),
-                    ].join(' | ')}
-                  </span>
-                )}
-              </div>
-
-              {/* Table */}
-              <div className="po-table-wrap">
-                {isLoading ? (
-                  <div className="po-empty">Loading data…</div>
-                ) : poGroups.length === 0 ? (
-                  <div className="po-empty">No records found.</div>
-                ) : (
-                  <table className="po-table">
-                    <colgroup>
-                      <col className="c0" /><col className="c1" /><col className="c2" />
-                      <col className="c3" /><col className="c4" /><col className="c5" />
-                      <col className="c6" /><col className="c7" /><col className="c8" />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th onClick={() => handleSort('P_UOM')}>PUOM <SortArrow col="P_UOM" sort={sort} /></th>
-                        <th className="num" onClick={() => handleSort('APPR_ITEM_P_QTY')}>P Qty <SortArrow col="APPR_ITEM_P_QTY" sort={sort} /></th>
-                        <th onClick={() => handleSort('L_UOM')}>LUOM <SortArrow col="L_UOM" sort={sort} /></th>
-                        <th className="num" onClick={() => handleSort('APPR_ITEM_L_QTY')}>L Qty <SortArrow col="APPR_ITEM_L_QTY" sort={sort} /></th>
-                        <th className="num" onClick={() => handleSort('ITEM_RATE')}>Item Rate <SortArrow col="ITEM_RATE" sort={sort} /></th>
-                        <th>Currency</th>
-                        <th className="num" onClick={() => handleSort('CURRENCY_RATE')}>Ex Rate <SortArrow col="CURRENCY_RATE" sort={sort} /></th>
-                        <th className="num" onClick={() => handleSort('AMOUNT')}>Amount <SortArrow col="AMOUNT" sort={sort} /></th>
-                        <th onClick={() => handleSort('PROJECT_NAME')}>Project <SortArrow col="PROJECT_NAME" sort={sort} /></th>
-                      </tr>
-                    </thead>
+              {/* Pinned Grand Total */}
+              {!dataLoading && poGroups.length > 0 && (
+                <div className="po-grand-total-bar no-print">
+                  <table>
                     <tbody>
-                      {poGroups.map(po => {
-                        const poOpen = !collapsedPOs.has(po.poNo);
-                        const statusClass =
-                          po.status?.toLowerCase().includes('approv') ? 'approved' :
-                          po.status?.toLowerCase().includes('pend')   ? 'pending'  :
-                          po.status?.toLowerCase().includes('reject')  ? 'rejected' : 'default';
-
-                        return (
-                          <React.Fragment key={po.poNo}>
-                            {/* PO header */}
-                            <tr className="po-row" onClick={() => togglePO(po.poNo)}>
-                              <td colSpan={9}>
-                                <span className={`chevron ${poOpen ? 'open' : ''}`}>▶</span>
-                                PO No : {po.poNo}
-                                &nbsp;&nbsp;|&nbsp;&nbsp;Date : {formatDate(po.poDate)}
-                                &nbsp;&nbsp;|&nbsp;&nbsp;
-                                <span className={`status-badge ${statusClass}`}>{po.status}</span>
-                                &nbsp;&nbsp;|&nbsp;&nbsp;Type : {po.serviceFlag}
-                              </td>
-                            </tr>
-
-                            {poOpen && po.suppliers.map(supp => {
-                              const suppKey  = `${po.poNo}|||${supp.supplier}`;
-                              const suppOpen = !collapsedSupps.has(suppKey);
-                              return (
-                                <React.Fragment key={suppKey}>
-                                  {/* Supplier row */}
-                                  <tr className="supp-row" onClick={() => toggleSupp(suppKey)}>
-                                    <td colSpan={9}>
-                                      <span className={`chevron ${suppOpen ? 'open' : ''}`}>▶</span>
-                                      Supplier : {supp.suppName}
-                                    </td>
-                                  </tr>
-
-                                  {suppOpen && supp.items.map(item => (
-                                    <React.Fragment key={item.itemCode}>
-                                      {/* Item row */}
-                                      <tr className="item-row">
-                                        <td colSpan={9}>
-                                          Item : {item.itemCode} — {item.itemDesp}
-                                          {item.addlDesc ? ` (${item.addlDesc})` : ''}
-                                        </td>
-                                      </tr>
-
-                                      {/* Data rows */}
-                                      {sortedRows(item.rows).map((row, ri) => (
-                                        <tr key={`${row.PO_NO}-${row.ITEM_CODE}-${ri}`} className="data-row">
-                                          <td>{row.P_UOM}</td>
-                                          <td className="num">{formatQty(parseFloat(String(row.APPR_ITEM_P_QTY)) || 0)}</td>
-                                          <td>{row.L_UOM}</td>
-                                          <td className="num">{formatQty(parseFloat(String(row.APPR_ITEM_L_QTY)) || 0)}</td>
-                                          <td className="num">{formatAmount(parseFloat(String(row.ITEM_RATE)) || 0)}</td>
-                                          <td>QAR</td>
-                                          <td className="num">{formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0)}</td>
-                                          <td className="num" style={{ fontWeight: 600 }}>{formatAmount(parseFloat(String(row.AMOUNT)) || 0)}</td>
-                                          <td>{row.PROJECT_NAME || '-'}</td>
-                                        </tr>
-                                      ))}
-
-                                      {/* Item total */}
-                                      <tr className="item-total">
-                                        <td colSpan={7} style={{ paddingLeft: 36 }}>Item Total : {item.itemCode}</td>
-                                        <td className="num">{formatAmount(item.total)}</td>
-                                        <td />
-                                      </tr>
-                                    </React.Fragment>
-                                  ))}
-
-                                  {/* Supplier total */}
-                                  {suppOpen && (
-                                    <tr className="supp-total">
-                                      <td colSpan={7} style={{ paddingLeft: 24 }}>Supplier Total : {supp.suppName}</td>
-                                      <td className="num">{formatAmount(supp.total)}</td>
-                                      <td />
-                                    </tr>
-                                  )}
-                                </React.Fragment>
-                              );
-                            })}
-
-                            {/* PO total */}
-                            {poOpen && (
-                              <tr className="po-total">
-                                <td colSpan={7}>PO Total : {po.poNo}</td>
-                                <td className="num">{formatAmount(po.total)}</td>
-                                <td />
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
+                      <tr>
+                        <td colSpan={7}>Grand Total :</td>
+                        <td className="num">{formatAmount(grandTotal)}</td>
+                        <td style={{ width: 120 }} />
+                      </tr>
                     </tbody>
                   </table>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Pinned Grand Total */}
-          {!isLoading && poGroups.length > 0 && (
-            <div className="po-grand-total-bar no-print">
-              <table>
-                <tbody>
-                  <tr>
-                    <td colSpan={7}>Grand Total :</td>
-                    <td className="num">{formatAmount(grandTotal)}</td>
-                    <td style={{ width: 120 }} />
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-
-      <FilterPanel
-        options={filterOptions}
-        filters={pending}
-        onChange={setPending}
-        onApply={() => setApplied({ ...pending })}
-        onReset={() => { setPending(EMPTY_FILTERS); setApplied(EMPTY_FILTERS); }}
-        open={panelOpen}
-        onClose={() => setPanelOpen(false)}
-      />
     </>
   );
 };
