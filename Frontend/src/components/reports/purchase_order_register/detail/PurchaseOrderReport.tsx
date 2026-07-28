@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
 import axiosServices from 'utils/axios';
+import { ReportPage } from '../common/ReportPage';
 import { ReportParameterForm, ParamFieldConfig } from '../common/ReportParameterForm';
 import {
   formatAmount, formatQty, formatDate, parseDateStr, formatFilterValue,
-  buildFilterParams, isFiltersActive, ReportFilters,
+  buildFilterParams, isFiltersActive, normalizeStringList, ReportFilters,
 } from '../common/reportHelpers';
 
 // ── Types ────────────────────────────────────────────────
@@ -50,12 +51,22 @@ function groupRows(rows: PORow[]): POGroup[] {
   }));
 }
 
+// ── Small helper so each field only has to say endpoint + keys — this is what
+//    "fetchOptions" resolves to for the common case of "GET + normalize".
+//    A field that needs something else (POST, a different client, a static
+//    list) just writes its own function instead of calling this. ──────────
+const getOptions = (endpoint: string, responseKeys: string[]) =>
+  (filters: ReportFilters, companyCode?: string) =>
+    axiosServices
+      .get(`${endpoint}?${buildFilterParams(companyCode, filters)}`)
+      .then(res => normalizeStringList(res.data, responseKeys));
+
 // ── Parameter config for THIS report — every other report just writes its own ──
 const poReportFields: ParamFieldConfig[][] = [
   [
-    { type: 'multiselect', key: 'div_code', label: 'Div Code', endpoint: '/api/report/div-codes', responseKeys: ['DIV_CODE', 'div_code', 'value', 'label'], placeholder: 'Div Code' },
-    { type: 'multiselect', key: 'ref_doc_no', label: 'PO Number', endpoint: '/api/report/po-no', responseKeys: ['PO_NO', 'po_no', 'poNo', 'value', 'label'], placeholder: 'PO NO' },
-    { type: 'multiselect', key: 'project_name', label: 'Project Name', endpoint: '/api/report/project-names', responseKeys: ['PROJECT_NAME', 'project_name', 'value', 'label'], placeholder: 'All Projects' },
+    { type: 'multiselect', key: 'div_code', label: 'Div Code', fetchOptions: getOptions('/api/report/div-codes', ['DIV_CODE', 'div_code', 'value', 'label']), placeholder: 'Div Code' },
+    { type: 'multiselect', key: 'ref_doc_no', label: 'PO Number', fetchOptions: getOptions('/api/report/po-no', ['PO_NO', 'po_no', 'poNo', 'value', 'label']), placeholder: 'PO NO' },
+    { type: 'multiselect', key: 'project_name', label: 'Project Name', fetchOptions: getOptions('/api/report/project-names', ['PROJECT_NAME', 'project_name', 'value', 'label']), placeholder: 'All Projects' },
   ],
   [
     { type: 'date', key: 'date_from', label: 'PO Date From' },
@@ -66,8 +77,8 @@ const poReportFields: ParamFieldConfig[][] = [
     { type: 'number', key: 'amount_to', label: 'Amount To', placeholder: 'No limit' },
   ],
   [
-    { type: 'multiselect', key: 'supp_name', label: 'Supplier', endpoint: '/api/report/supplier-names', responseKeys: ['SUPP_NAME', 'supp_name', 'value', 'label'], placeholder: 'All Suppliers' },
-    { type: 'multiselect', key: 'status', label: 'Status', endpoint: '/api/report/status-options', responseKeys: ['STATUS', 'status', 'value', 'label'], placeholder: 'All Statuses' },
+    { type: 'multiselect', key: 'supp_name', label: 'Supplier', fetchOptions: getOptions('/api/report/supplier-names', ['SUPP_NAME', 'supp_name', 'value', 'label']), placeholder: 'All Suppliers' },
+    { type: 'multiselect', key: 'status', label: 'Status', fetchOptions: getOptions('/api/report/status-options', ['STATUS', 'status', 'value', 'label']), placeholder: 'All Statuses' },
   ],
 ];
 
@@ -76,8 +87,45 @@ const EMPTY_FILTERS: ReportFilters = {
   amount_from: '', amount_to: '', date_from: '', date_to: '', div_code: [],
 };
 
+// ── CSS specific to this report's table — passed into <ReportPage css={...}/>.
+//    Reports that don't need a custom table layout can simply omit this prop
+//    and get the plain default look from ReportPage. ──────────────────────
+const PO_TABLE_CSS = `
+  .po-print-logo-row td { padding: 10px 24px; }
+  .po-print-logo-flex { display: flex; justify-content: space-between; align-items: center; }
+  .po-print-logo-flex img { height: 44px; width: auto; object-fit: contain; }
+  .po-print-meta-text { text-align: right; font-size: 11px; color: #6b7280; line-height: 1.8; }
+  .po-title-bar td { background: #1e3a5f; color: #fff; text-align: center; padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+  .po-meta-row td { padding: 9px 24px; background: #f9fafb; font-size: 12px; color: #6b7280; }
+
+  table.po-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  .po-table col.c0 { width: 15%; } .po-table col.c1 { width: 15%; } .po-table col.c2 { width: 7%; }
+  .po-table col.c3 { width: 8%; } .po-table col.c4 { width: 7%; } .po-table col.c5 { width: 8%; }
+  .po-table col.c6 { width: 10%; } .po-table col.c7 { width: 11%; } .po-table col.c8 { width: 8%; } .po-table col.c9 { width: 6%; }
+
+  .po-table th, .po-table td { border: 1px solid #9d9db3; padding: 7px 10px; vertical-align: top; }
+  .po-table thead th { background: #d9d6e8; color: #1f1f2e; font-weight: 700; font-size: 12.5px; text-align: center; white-space: nowrap; cursor: pointer; user-select: none; }
+  .po-table thead th:hover { background: #cbc7e0; }
+  .po-table thead th.num { text-align: right; }
+  .po-table thead th.left { text-align: left; padding-left: 12px; }
+
+  .po-table tr.po-banner td { background: #fff; font-weight: 700; font-size: 12.5px; color: #111; padding: 8px 10px; }
+  .po-table tr.data-row td { background: #fff; color: #1f1f2e; vertical-align: top; line-height: 1.55; }
+  .po-table tr.data-row td.item-desc { white-space: pre-line; }
+  .po-table tr.data-row td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .po-table tr.data-row td.currency-cell { text-align: center; white-space: nowrap; }
+
+  .po-table tr.item-total td, .po-table tr.supp-total td, .po-table tr.po-total td { background: #ece9f3; font-weight: 700; color: #1e3a5f; }
+  .po-table tr.item-total td { font-size: 12px; }
+  .po-table tr.supp-total td, .po-table tr.po-total td { font-size: 12.5px; }
+
+  @media print {
+    table.po-table thead { display: table-header-group; }
+    table.po-table tr { page-break-inside: avoid; }
+  }
+`;
+
 const PurchaseOrderReport: React.FC = () => {
-  const printRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
 
   const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
@@ -215,7 +263,7 @@ const PurchaseOrderReport: React.FC = () => {
     XLSX.writeFile(wb, 'PO_Detail_Register.xlsx');
   };
 
-  // ── PDF Export (unchanged logic — jsPDF paginates & repeats its own header via didDrawPage) ──
+// ── PDF Export (now mirrors the on-screen report table exactly) ──
   const handleDownloadPDF = async () => {
     const { jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
@@ -223,8 +271,6 @@ const PurchaseOrderReport: React.FC = () => {
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 14;
     const NAVY = [30, 58, 95] as [number, number, number];
-    const SUPP = [232, 236, 242] as [number, number, number];
-    const ITEM = [241, 244, 248] as [number, number, number];
     const DTOT = [213, 220, 232] as [number, number, number];
     const WHITE = [255, 255, 255] as [number, number, number];
     const DARK = [55, 65, 81] as [number, number, number];
@@ -270,55 +316,48 @@ const PurchaseOrderReport: React.FC = () => {
       }
     };
 
-    const body: any[] = [];
-    const cellPad = { top: 3.5, bottom: 3.5, left: 5, right: 5 };
-    const indPad1 = { top: 3, bottom: 3, left: 12, right: 5 };
-    const indPad2 = { top: 2.5, bottom: 2.5, left: 20, right: 5 };
+const body: any[] = [];
+    const cellPad = { top: 1.5, bottom: 1.5, left: 5, right: 5 }; // tightened from 3.5/3.5
 
     poGroups.forEach(po => {
-      body.push([{
-        content: `PO No :  ${po.poNo}     |     Date : ${formatDate(po.poDate)}     |     Status : ${po.status}     |     Type : ${po.serviceFlag}`,
-        colSpan: 9, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
-      }]);
       po.suppliers.forEach(supp => {
-        body.push([{ content: `Supplier :  ${supp.suppName}`, colSpan: 9, styles: { fillColor: SUPP, textColor: NAVY, fontStyle: 'bold', fontSize: 9, cellPadding: indPad1 } }]);
+        body.push([{
+          content: `PO NO = ${po.poNo}     |     PO Date = ${formatDate(po.poDate)}     |     Supplier = ${supp.suppName}     |     Status = ${po.status}`,
+          colSpan: 9,
+          styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
+        }]);
+
         supp.items.forEach(item => {
-          body.push([{ content: `Item :  ${item.itemCode}  —  ${item.itemDesp}${item.addlDesc ? '  (' + item.addlDesc + ')' : ''}`, colSpan: 9, styles: { fillColor: ITEM, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, cellPadding: indPad2 } }]);
           sortedRows(item.rows).forEach(row => {
+            const desc = `${row.ITEM_DESP?.trim() || ''}${row.ADDL_ITEM_DESC?.trim() ? row.ADDL_ITEM_DESC.trim() : ''}`;
             body.push([
-              { content: row.P_UOM, styles: { fontSize: 8 } },
-              { content: formatQty(parseFloat(String(row.APPR_ITEM_P_QTY)) || 0), styles: { halign: 'right', fontSize: 8 } },
-              { content: row.L_UOM, styles: { fontSize: 8 } },
-              { content: formatQty(parseFloat(String(row.APPR_ITEM_L_QTY)) || 0), styles: { halign: 'right', fontSize: 8 } },
-              { content: formatAmount(parseFloat(String(row.ITEM_RATE)) || 0), styles: { halign: 'right', fontSize: 8 } },
-              { content: 'QAR', styles: { fontSize: 8 } },
-              { content: formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0), styles: { halign: 'right', fontSize: 8 } },
-              { content: formatAmount(parseFloat(String(row.AMOUNT)) || 0), styles: { halign: 'right', fontSize: 8, fontStyle: 'bold' } },
-              { content: row.PROJECT_NAME || '-', styles: { fontSize: 7.5 } },
+              { content: desc, styles: { fontSize: 9, halign: 'left' } },
+              { content: row.P_UOM || '', styles: { fontSize: 9 } },
+              { content: row.APPR_ITEM_P_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_P_QTY))) : '', styles: { halign: 'right', fontSize: 9 } },
+              { content: row.L_UOM || '', styles: { fontSize: 9 } },
+              { content: row.APPR_ITEM_L_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_L_QTY))) : '', styles: { halign: 'right', fontSize: 9 } },
+              { content: formatAmount(parseFloat(String(row.ITEM_RATE)) || 0), styles: { halign: 'right', fontSize: 9 } },
+              { content: formatAmount(parseFloat(String(row.AMOUNT)) || 0), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
+              { content: 'QAR', styles: { fontSize: 9, halign: 'center' } },
+              { content: formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0), styles: { halign: 'right', fontSize: 9 } },
             ]);
           });
-            body.push([
-              { content: `Item Total :  ${item.itemCode}`, colSpan: 7, styles: { fillColor: ITEM, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, cellPadding: indPad2 } },
-              { content: formatAmount(item.total), styles: { fillColor: ITEM, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
-              { content: '', styles: { fillColor: ITEM } },
-            ]);
         });
-        body.push([
-          { content: `Supplier Total :  ${supp.suppName}`, colSpan: 7, styles: { fillColor: SUPP, textColor: NAVY, fontStyle: 'bold', fontSize: 9, cellPadding: indPad1 } },
-          { content: formatAmount(supp.total), styles: { fillColor: SUPP, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
-          { content: '', styles: { fillColor: SUPP } },
-        ]);
       });
+
       body.push([
-        { content: `PO Total :  ${po.poNo}`, colSpan: 7, styles: { fillColor: DTOT, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } },
+        { content: `Total for : ${po.poNo}`, colSpan: 6, styles: { fillColor: DTOT, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } },
         { content: formatAmount(po.total), styles: { fillColor: DTOT, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
         { content: '', styles: { fillColor: DTOT } },
+        { content: '', styles: { fillColor: DTOT } },
       ]);
-    });
+    });    
+
     body.push([{ content: '', colSpan: 9, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
     body.push([
-      { content: 'Grand Total :', colSpan: 7, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: 'Grand Total :', colSpan: 6, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
       { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: '', styles: { fillColor: NAVY } },
       { content: '', styles: { fillColor: NAVY } },
     ]);
 
@@ -326,23 +365,30 @@ const PurchaseOrderReport: React.FC = () => {
       startY: TABLE_TOP,
       margin: { left: margin, right: margin, top: HEADER_H + 4 },
       columnStyles: {
-        0: { cellWidth: 18 }, 1: { cellWidth: 20 }, 2: { cellWidth: 18 }, 3: { cellWidth: 20 },
-        4: { cellWidth: 26 }, 5: { cellWidth: 16 }, 6: { cellWidth: 26 }, 7: { cellWidth: 28 }, 8: { cellWidth: 'auto' as any },
+        0: { cellWidth: 'auto' as any },
+        1: { cellWidth: 16 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 16 },
+        4: { cellWidth: 18 },
+        5: { cellWidth: 22 },
+        6: { cellWidth: 24 },
+        7: { cellWidth: 18 },
+        8: { cellWidth: 18 },
       },
       head: [[
+        { content: 'Item Description', styles: { halign: 'left', fontSize: 9 } },
         { content: 'PUOM', styles: { halign: 'left', fontSize: 9 } },
         { content: 'P Qty', styles: { halign: 'right', fontSize: 9 } },
         { content: 'LUOM', styles: { halign: 'left', fontSize: 9 } },
         { content: 'L Qty', styles: { halign: 'right', fontSize: 9 } },
         { content: 'Item Rate', styles: { halign: 'right', fontSize: 9 } },
+        { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
         { content: 'Currency', styles: { halign: 'left', fontSize: 9 } },
         { content: 'Ex Rate', styles: { halign: 'right', fontSize: 9 } },
-        { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
-        { content: 'Project', styles: { halign: 'left', fontSize: 9 } },
       ]],
       body,
       headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
-      bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'ellipsize', minCellHeight: 0 },
+      bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
       tableLineColor: BORDER, tableLineWidth: 0.25,
       didDrawPage: drawPageHeader,
       didDrawCell: (data) => {
@@ -355,271 +401,121 @@ const PurchaseOrderReport: React.FC = () => {
     pdf.save('PO_Detail_Register.pdf');
   };
 
-  return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-
-        .po-shell { font-family: 'DM Sans', sans-serif; background: #f4f6f9; height: 100vh; display: flex; flex-direction: column; padding: 14px 28px; box-sizing: border-box; overflow: hidden; }
-
-        .po-tabbar { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 5px; margin-bottom: 14px; flex-shrink: 0; }
-        .po-tab { flex: 1; padding: 9px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: 'DM Sans', sans-serif; transition: background 0.15s; background: transparent; color: #374151; }
-        .po-tab.active { background: #1e3a5f; color: #fff; }
-        .po-tab:disabled { color: #9ca3af; cursor: not-allowed; }
-        .po-tab-badge { font-size: 9.5px; padding: 1px 7px; border-radius: 10px; font-weight: 600; background: #dcfce7; color: #16a34a; }
-        .po-tab.active .po-tab-badge { background: rgba(255,255,255,0.25); color: #fff; }
-
-        .po-param-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 22px 24px; overflow-y: auto; }
-        .po-param-title { font-size: 15px; font-weight: 700; color: #111; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
-        .po-param-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
-
-        /* Report tab occupies all remaining height; only .po-report-scroll scrolls */
-        .po-report-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-        .po-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; background: #fff; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; gap: 12px; }
-        .po-toolbar-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-        .po-toolbar-right { display: flex; gap: 8px; flex-shrink: 0; }
-        .po-btn { padding: 7px 13px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s; font-family: 'DM Sans', sans-serif; white-space: nowrap; }
-        .po-btn-ghost { border: 1.5px solid #d1d5db; background: #fff; color: #374151; }
-        .po-btn-ghost:hover { background: #f9fafb; border-color: #9ca3af; }
-        .po-btn-primary { border: none; background: #1e3a5f; color: #fff; }
-        .po-btn-primary:hover { background: #162d4a; }
-        .po-btn-success { border: none; background: #16a34a; color: #fff; }
-        .po-btn-success:hover { background: #15803d; }
-
-        .po-search { padding: 7px 12px 7px 34px; border: 1.5px solid #d1d5db; border-radius: 7px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #111; outline: none; width: 240px; background: #fff; }
-        .po-search:focus { border-color: #1e3a5f; }
-        .po-search-wrap { position: relative; display: flex; align-items: center; }
-        .po-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 14px; pointer-events: none; }
-
-        /* THE scroll container — full remaining height, only this scrolls */
-        .po-report-scroll { flex: 1; min-height: 0; overflow-y: auto; margin-top: 12px; }
-        .po-page { background: #fff; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden; }
-
-        .po-grand-total-bar { background: #1e3a5f; border-radius: 8px; border: 1px solid #1e3a5f; overflow: hidden; margin-top: 10px; flex-shrink: 0; }
-        .po-grand-total-bar table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .po-grand-total-bar td { padding: 11px 14px; font-weight: 700; color: #fff; }
-        .po-grand-total-bar td.num { text-align: right; font-variant-numeric: tabular-nums; }
-
-        /* ── Print header content, rendered as rows inside <thead> so it repeats each printed page ── */
-        .po-print-logo-row td { padding: 10px 24px; }
-        .po-print-logo-flex { display: flex; justify-content: space-between; align-items: center; }
-        .po-print-logo-flex img { height: 44px; width: auto; object-fit: contain; }
-        .po-print-meta-text { text-align: right; font-size: 11px; color: #6b7280; line-height: 1.8; }
-        .po-title-bar td { background: #1e3a5f; color: #fff; text-align: center; padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
-        .po-meta-row td { padding: 9px 24px; background: #f9fafb; font-size: 12px; color: #6b7280; }
-
-        table.po-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
-        .po-table col.c0 { width: 15%; } .po-table col.c1 { width: 15%; } .po-table col.c2 { width: 7%; }
-        .po-table col.c3 { width: 8%; } .po-table col.c4 { width: 7%; } .po-table col.c5 { width: 8%; }
-        .po-table col.c6 { width: 10%; } .po-table col.c7 { width: 11%; } .po-table col.c8 { width: 8%; } .po-table col.c9 { width: 6%; }
-
-        .po-table th, .po-table td { border: 1px solid #9d9db3; padding: 7px 10px; vertical-align: top; }
-        .po-table thead th { background: #d9d6e8; color: #1f1f2e; font-weight: 700; font-size: 12.5px; text-align: center; white-space: nowrap; cursor: pointer; user-select: none; }
-        .po-table thead th:hover { background: #cbc7e0; }
-        .po-table thead th.num { text-align: right; }
-        .po-table thead th.left { text-align: left; padding-left: 12px; }
-
-        .po-table tr.po-banner td { background: #fff; font-weight: 700; font-size: 12.5px; color: #111; padding: 8px 10px; }
-        .po-table tr.data-row td { background: #fff; color: #1f1f2e; vertical-align: top; line-height: 1.55; }
-        .po-table tr.data-row td.item-desc { white-space: pre-line; }
-        .po-table tr.data-row td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .po-table tr.data-row td.currency-cell { text-align: center; white-space: nowrap; }
-
-        .po-table tr.item-total td, .po-table tr.supp-total td, .po-table tr.po-total td { background: #ece9f3; font-weight: 700; color: #1e3a5f; }
-        .po-table tr.item-total td { font-size: 12px; }
-        .po-table tr.supp-total td, .po-table tr.po-total td { font-size: 12.5px; }
-
-        .po-empty { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: 14px; }
-
-        /* ── Print: only the report table prints; thead (logo + title + headers) repeats on every page ── */
-        @media print {
-          @page { margin: 10mm; size: A4 landscape; }
-          .po-tabbar, .po-toolbar, .no-print, .po-grand-total-bar, .po-param-card { display: none !important; }
-          .po-shell { height: auto; overflow: visible; padding: 0; background: #fff; }
-          .po-report-root { flex: none; }
-          .po-report-scroll { overflow: visible; height: auto; max-height: none; margin-top: 0; }
-          .po-page { border: none; border-radius: 0; }
-          table.po-table thead { display: table-header-group; }
-          table.po-table tr { page-break-inside: avoid; }
-        }
-      `}</style>
-
-      <div className="po-shell">
-        <div className="po-tabbar no-print">
-          <button className={`po-tab ${activeTab === 'parameters' ? 'active' : ''}`} onClick={() => setActiveTab('parameters')}>
-            ⚙ Parameters
-          </button>
-          <button
-            className={`po-tab ${activeTab === 'report' ? 'active' : ''}`}
-            onClick={() => hasGeneratedReport && setActiveTab('report')}
-            disabled={!hasGeneratedReport}
-            title={hasGeneratedReport ? undefined : 'Generate a report first'}
-          >
-            📊 Report{hasGeneratedReport && <span className="po-tab-badge">Generated</span>}
-          </button>
-        </div>
-
-        {activeTab === 'parameters' && (
-          <div className="po-param-card">
-            <div className="po-param-title">
-              PO Detail Register
-              {hasGeneratedReport && <span className="po-tab-badge">Report Generated</span>}
+  // ── The PO-specific table markup. This is the only piece that changes
+  //    report to report — everything else comes from <ReportPage/>. ──────
+  const tableContent = poGroups.length === 0 ? (
+    <div className="rp-empty">No records found.</div>
+  ) : (
+    <table className="po-table">
+      <colgroup>
+        <col className="c0" /><col className="c1" /><col className="c2" />
+        <col className="c3" /><col className="c4" /><col className="c5" />
+        <col className="c6" /><col className="c7" /><col className="c8" /><col className="c9" />
+      </colgroup>
+      <thead>
+        <tr className="po-print-logo-row">
+          <td colSpan={10}>
+            <div className="po-print-logo-flex">
+              <img src={companyLogo} alt="Logo" />
+              <div className="po-print-meta-text">
+                <div><b>Print Date:</b> {printDate}</div>
+                <div><b>Print User:</b> {printUser}</div>
+              </div>
             </div>
-            <ReportParameterForm rows={poReportFields} filters={pending} onChange={setPending} companyCode={user?.company_code} />
-            <div className="po-param-actions">
-              <button className="po-btn po-btn-ghost" onClick={handleReset} disabled={dataLoading}>Reset</button>
-              <button className="po-btn po-btn-primary" onClick={handleGenerateReport} disabled={dataLoading}>
-                {dataLoading ? 'Loading data…' : 'Generate Report'}
-              </button>
-            </div>
-          </div>
+          </td>
+        </tr>
+        <tr className="po-title-bar"><td colSpan={10}>PO Detail Register</td></tr>
+        {filtersActive && (
+          <tr className="po-meta-row">
+            <td colSpan={10}>
+              <b>Filter:</b>{' '}
+              {[
+                ...Object.entries(applied)
+                  .filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
+                  .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`),
+                ...(search.trim() ? [`search: "${search.trim()}"`] : []),
+              ].join(' | ')}
+            </td>
+          </tr>
         )}
-
-        {activeTab === 'report' && hasGeneratedReport && (
-          <div className="po-report-root">
-            <div className="po-toolbar no-print">
-              <div className="po-toolbar-left">
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>PO Detail Register</span>
-                {filtersActive && (
-                  <span style={{ fontSize: 11, background: '#eef2f7', color: '#1e3a5f', borderRadius: 4, padding: '3px 9px', fontWeight: 600 }}>Filtered</span>
-                )}
-                <div className="po-search-wrap">
-                  <span className="po-search-icon">🔍</span>
-                  <input className="po-search" placeholder="Search PO no / supplier / item…" value={search} onChange={e => setSearch(e.target.value)} />
-                </div>
-              </div>
-              <div className="po-toolbar-right">
-                <button className="po-btn po-btn-ghost" onClick={handlePrint}>🖨 Print</button>
-                <button className="po-btn po-btn-success" onClick={handleExcel}>📊 Excel</button>
-                <button className="po-btn po-btn-primary" onClick={handleDownloadPDF}>⬇ PDF</button>
-              </div>
-            </div>
-
-            {/* Only this div scrolls; on print, overflow is reset so the browser paginates normally */}
-            <div className="po-report-scroll">
-              <div className="po-page" ref={printRef}>
-                {dataLoading ? (
-                  <div className="po-empty">Loading data…</div>
-                ) : poGroups.length === 0 ? (
-                  <div className="po-empty">No records found.</div>
-                ) : (
-                  <table className="po-table">
-                    <colgroup>
-                      <col className="c0" /><col className="c1" /><col className="c2" />
-                      <col className="c3" /><col className="c4" /><col className="c5" />
-                      <col className="c6" /><col className="c7" /><col className="c8" /><col className="c9" />
-                    </colgroup>
-                    <thead>
-                      {/* Logo + print meta — repeats on every printed page */}
-                      <tr className="po-print-logo-row">
-                        <td colSpan={10}>
-                          <div className="po-print-logo-flex">
-                            <img src={companyLogo} alt="Logo" />
-                            <div className="po-print-meta-text">
-                              <div><b>Print Date:</b> {printDate}</div>
-                              <div><b>Print User:</b> {printUser}</div>
-                            </div>
-                          </div>
+        <tr>
+          <th className="left" colSpan={2}>Item Code</th>
+          <th onClick={() => handleSort('P_UOM')}>PUOM</th>
+          <th className="num" onClick={() => handleSort('APPR_ITEM_P_QTY')}>P Qty</th>
+          <th onClick={() => handleSort('L_UOM')}>LUOM</th>
+          <th className="num" onClick={() => handleSort('APPR_ITEM_L_QTY')}>L Qty</th>
+          <th className="num" onClick={() => handleSort('ITEM_RATE')}>Item Rate</th>
+          <th className="num" onClick={() => handleSort('AMOUNT')}>Amount</th>
+          <th>Currency</th>
+          <th className="num" onClick={() => handleSort('CURRENCY_RATE')}>Ex Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {poGroups.map(po => (
+          <React.Fragment key={po.poNo}>
+            {po.suppliers.map(supp => (
+              <React.Fragment key={`${po.poNo}|||${supp.supplier}`}>
+                <tr className="po-banner">
+                  <td colSpan={10}>
+                    PO NO = {po.poNo} &nbsp;|&nbsp; PO Date = {formatDate(po.poDate)}
+                    &nbsp;|&nbsp; Supplier = {supp.suppName} &nbsp;|&nbsp; Status = {po.status}
+                  </td>
+                </tr>
+                {supp.items.map(item => (
+                  <React.Fragment key={item.itemCode}>
+                    {sortedRows(item.rows).map((row, ri) => (
+                      <tr key={`${row.PO_NO}-${row.ITEM_CODE}-${ri}`} className="data-row">
+                        <td className="item-desc" colSpan={2}>
+                          {row.ITEM_DESP?.trim()}{row.ADDL_ITEM_DESC?.trim() ? row.ADDL_ITEM_DESC?.trim() : ''}
                         </td>
+                        <td>{row.P_UOM || ''}</td>
+                        <td className="num">{row.APPR_ITEM_P_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_P_QTY))) : ''}</td>
+                        <td>{row.L_UOM || ''}</td>
+                        <td className="num">{row.APPR_ITEM_L_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_L_QTY))) : ''}</td>
+                        <td className="num">{formatAmount(parseFloat(String(row.ITEM_RATE)) || 0)}</td>
+                        <td className="num">{formatAmount(parseFloat(String(row.AMOUNT)) || 0)}</td>
+                        <td className="currency-cell">QAR</td>
+                        <td className="num">{formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0)}</td>
                       </tr>
-                      <tr className="po-title-bar"><td colSpan={10}>PO Detail Register</td></tr>
-                      {filtersActive && (
-                        <tr className="po-meta-row">
-                          <td colSpan={10}>
-                            <b>Filter:</b>{' '}
-                            {[
-                              ...Object.entries(applied)
-                                .filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
-                                .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`),
-                              ...(search.trim() ? [`search: "${search.trim()}"`] : []),
-                            ].join(' | ')}
-                          </td>
-                        </tr>
-                      )}
-                      <tr>
-                        <th className="left" colSpan={2}>Item Code</th>
-                        <th onClick={() => handleSort('P_UOM')}>PUOM</th>
-                        <th className="num" onClick={() => handleSort('APPR_ITEM_P_QTY')}>P Qty</th>
-                        <th onClick={() => handleSort('L_UOM')}>LUOM</th>
-                        <th className="num" onClick={() => handleSort('APPR_ITEM_L_QTY')}>L Qty</th>
-                        <th className="num" onClick={() => handleSort('ITEM_RATE')}>Item Rate</th>
-                        <th className="num" onClick={() => handleSort('AMOUNT')}>Amount</th>
-                        <th>Currency</th>
-                        <th className="num" onClick={() => handleSort('CURRENCY_RATE')}>Ex Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poGroups.map(po => (
-                        <React.Fragment key={po.poNo}>
-                          {po.suppliers.map(supp => (
-                            <React.Fragment key={`${po.poNo}|||${supp.supplier}`}>
-                              <tr className="po-banner">
-                                <td colSpan={10}>
-                                  PO NO = {po.poNo} &nbsp;|&nbsp; PO Date = {formatDate(po.poDate)}
-                                  &nbsp;|&nbsp; Supplier = {supp.suppName} &nbsp;|&nbsp; Status = {po.status}
-                                </td>
-                              </tr>
-                              {supp.items.map(item => (
-                                <React.Fragment key={item.itemCode}>
-                                  {sortedRows(item.rows).map((row, ri) => (
-                                    <tr key={`${row.PO_NO}-${row.ITEM_CODE}-${ri}`} className="data-row">
-                                      <td className="item-desc" colSpan={2}>
-                                        {row.ITEM_DESP?.trim()}{row.ADDL_ITEM_DESC?.trim() ? row.ADDL_ITEM_DESC?.trim() : ''}
-                                      </td>
-                                      <td>{row.P_UOM || ''}</td>
-                                      <td className="num">{row.APPR_ITEM_P_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_P_QTY))) : ''}</td>
-                                      <td>{row.L_UOM || ''}</td>
-                                      <td className="num">{row.APPR_ITEM_L_QTY ? formatQty(parseFloat(String(row.APPR_ITEM_L_QTY))) : ''}</td>
-                                      <td className="num">{formatAmount(parseFloat(String(row.ITEM_RATE)) || 0)}</td>
-                                      <td className="num">{formatAmount(parseFloat(String(row.AMOUNT)) || 0)}</td>
-                                      <td className="currency-cell">QAR</td>
-                                      <td className="num">{formatAmount(parseFloat(String(row.CURRENCY_RATE)) || 0)}</td>
-                                    </tr>
-                                  ))}
-                                  {/* <tr className="item-total">
-                                    <td colSpan={8}>Item Total : {item.itemCode}</td>
-                                    <td className="num">{formatAmount(item.total)}</td>
-                                    <td />
-                                  </tr> */}
-                                </React.Fragment>
-                              ))}
-                              {/* <tr className="supp-total">
-                                <td colSpan={8}>Supplier Total : {supp.suppName}</td>
-                                <td className="num">{formatAmount(supp.total)}</td>
-                                <td />
-                              </tr> */}
-                            </React.Fragment>
-                          ))}
-                          <tr className="po-total">
-                            <td colSpan={8}>Total for : {po.poNo}</td>
-                            <td className="num">{formatAmount(po.total)}</td>
-                            <td />
-                          </tr>
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </React.Fragment>
+            ))}
+            <tr className="po-total">
+              <td colSpan={8}>Total for : {po.poNo}</td>
+              <td className="num">{formatAmount(po.total)}</td>
+              <td />
+            </tr>
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
 
-            {!dataLoading && poGroups.length > 0 && (
-              <div className="po-grand-total-bar no-print">
-                <table>
-                  <tbody>
-                    <tr>
-                      <td colSpan={7}>Grand Total :</td>
-                      <td className="num">{formatAmount(grandTotal)}</td>
-                      <td style={{ width: 120 }} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </>
+  return (
+    <ReportPage
+      title="PO Detail Register"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      hasGeneratedReport={hasGeneratedReport}
+      dataLoading={dataLoading}
+      filtersActive={filtersActive}
+      paramsContent={<ReportParameterForm rows={poReportFields} filters={pending} onChange={setPending} companyCode={user?.company_code} />}
+      onGenerate={handleGenerateReport}
+      onReset={handleReset}
+      generateDisabled={dataLoading}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder="Search PO no / supplier / item…"
+      onPrint={handlePrint}
+      onExcel={handleExcel}
+      onPdf={handleDownloadPDF}
+      reportContent={tableContent}
+      showGrandTotal={poGroups.length > 0}
+      grandTotalValue={formatAmount(grandTotal)}
+      css={PO_TABLE_CSS}
+    />
   );
 };
 

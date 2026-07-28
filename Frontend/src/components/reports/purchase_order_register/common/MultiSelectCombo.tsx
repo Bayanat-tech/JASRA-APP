@@ -3,13 +3,15 @@ import React from 'react';
 interface MultiSelectComboProps {
   value: string[];
   options: string[];
-  onChange: (value: string[]) => void;
+  onChange: (v: string[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  onOpen?: () => void;   // call once when the dropdown is opened
+  loading?: boolean;     // show a "Loading…" row while true
 }
 
 export function MultiSelectCombo({
-  value, options, onChange, placeholder = 'Select...', disabled = false,
+  value, options, onChange, placeholder = 'Select...', disabled = false, onOpen, loading = false,
 }: MultiSelectComboProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -34,13 +36,22 @@ export function MultiSelectCombo({
     onChange(value.includes(opt) ? value.filter(v => v !== opt) : [...value, opt]);
   };
 
+  const handleTriggerClick = () => {
+    if (disabled) return;
+    setIsOpen(prev => {
+      const next = !prev;
+      if (next) onOpen?.(); // opening now → tell the parent to fetch options
+      return next;
+    });
+  };
+
   const displayText = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} selected`;
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen(p => !p)}
+        onClick={handleTriggerClick}
         disabled={disabled}
         aria-disabled={disabled}
         style={{
@@ -67,7 +78,9 @@ export function MultiSelectCombo({
               borderBottom: '1px solid #eaecf0', outline: 'none', fontSize: 14,
             }}
           />
-          {filteredOptions.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '8px 12px', color: '#98a2b3', fontSize: 14 }}>Loading…</div>
+          ) : filteredOptions.length === 0 ? (
             <div style={{ padding: '8px 12px', color: '#98a2b3', fontSize: 14 }}>No options</div>
           ) : (
             filteredOptions.map(opt => (
