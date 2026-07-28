@@ -72,29 +72,32 @@ const getPoDetailRegister = async (req: Request, res: Response) => {
         const { whereSql, binds } = buildFilterWhere(req.query);
 
         const sql = `
-        SELECT
-            r.ref_doc_no    AS PO_NO,
-            r.doc_date      AS PO_DATE,
-            r.supplier,
-            r.SERVICE_RM_FLAG,
-            r.supp_name,
-            r.status,
-            r.item_code,
-            r.addl_item_desc,
-            r.item_desp,
-            r.p_uom,
-            r.appr_item_p_qty,
-            r.l_uom,
-            r.appr_item_l_qty,
-            r.item_rate,
-            r.currency_rate,
-            r.amount,
-            r.project_name,
-            r.div_code,
-            r.project_code,
-            r.description,
-            r.type_of_pr
-        FROM VW_BO_PO_REGISTER_JASRA r
+SELECT
+    r.ref_doc_no AS PO_NO,
+    r.doc_date AS PO_DATE,
+    r.supplier,
+    r.service_rm_flag,
+    r.supp_name,
+    r.status,
+    r.item_code,
+    r.addl_item_desc,
+    r.item_desp,
+    r.p_uom,
+    r.appr_item_p_qty,
+    r.l_uom,
+    r.appr_item_l_qty,
+    r.item_rate,
+    r.currency_rate,
+    r.amount,
+    r.project_name,
+    r.div_code,
+    r.project_code,
+    r.description,
+    r.type_of_pr,
+    r.request_number AS PR_REF_NO,
+    r.payment_terms,
+    r.wo_number
+FROM VW_BO_PO_REGISTER_JASRA r
         WHERE ${whereSql}
         `;
         console.log("Executing SQL Query:", sql, "with binds:", binds);
