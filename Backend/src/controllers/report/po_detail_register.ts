@@ -90,7 +90,10 @@ const getPoDetailRegister = async (req: Request, res: Response) => {
             r.currency_rate,
             r.amount,
             r.project_name,
-            r.div_code
+            r.div_code,
+            r.project_code,
+            r.description,
+            r.type_of_pr
         FROM VW_BO_PO_REGISTER_JASRA r
         WHERE ${whereSql}
         `;

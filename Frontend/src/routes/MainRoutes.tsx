@@ -89,9 +89,8 @@ import MyTaskPage from 'pages/Purchasefolder/MyTaskPage';
 import PurchaserequestheaderPfPage_Al from '../components/forms/Purchaseflow_AL/PurchasereqestheaderPfPage_Al';
 import CustomerMasterPage from 'pages/Purchasefolder/CustomerMasterPage';
 // import report ledger
-import PurchaseOrderReport from 'components/reports/purchase_order_register/detail/PurchaseOrderReport';
+import PurchaseOrderReport from 'components/reports/purchase_order_register/PurchaseOrderReport';
 import PurchaseRequestReport from 'components/reports/PurchaseRequestReport';
-import PurchaseRequestSummary from 'components/reports/purchase/PurchaseRequestSummary';
 import PurchaseRequestDetail from 'components/reports/purchase/PurchaseRequestDetail';
 // import report Budget
 import ProjectwiseCurrentStatus from 'components/reports/purchase/ProjectwiseCurrentStatus';
@@ -146,6 +145,7 @@ import BoldPurchaseOrderReport from 'components/reports/purchase/BoldPurchaseOrd
 import BoldPurchaseRequestSummary from 'components/reports/purchase/BoldPurchaseRequestSummaryReport';
 import BudgetStatusReport from 'pages/Report/components/BudgetStatusReport';
 import ItemInformationReport from 'pages/Report/item_information/ItemInformationReport';
+import PurchaseRequestRegisterReport from 'components/reports/purchase_order_register/PurchaseRequestRegisterReport';
 // import BTHRMainPage from 'BT_INDIA/pages/BTHRMainPages';
 // import MyTaskPage from 'pages/Purchasefolder/MyitemPage_history';
 // import VendorDashboard from 'pages/VendorSystem/dashboard/VendorDashboard'
@@ -681,8 +681,8 @@ const MainRoutes = {
                 {
                   path: 'ledger_new',
                   children: [
-                    { path: 'purchase_request_register_summary', element: <PurchaseRequestSummary /> },
-                    { path: 'po_register_detail', element: <PurchaseOrderReport /> }
+                    { path: 'purchase_request_register_summary', element: <PurchaseRequestRegisterReport /> },
+                    { path: 'po_register_detail', element: <PurchaseOrderReport /> },
                   ]
                 },
                 {
