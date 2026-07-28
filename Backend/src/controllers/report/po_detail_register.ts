@@ -40,11 +40,11 @@ function buildFilterWhere(
   if (exclude !== 'div_code')     addInClause('div_code', 'div', div_code);
 
   if (date_from) {
-    conditions.push(`po_date >= TO_DATE(:date_from, 'YYYY-MM-DD')`);
+    conditions.push(`updated_at >= TO_DATE(:date_from, 'YYYY-MM-DD')`);
     binds.date_from = date_from;
   }
   if (date_to) {
-    conditions.push(`po_date <= TO_DATE(:date_to, 'YYYY-MM-DD')`);
+    conditions.push(`updated_at <= TO_DATE(:date_to, 'YYYY-MM-DD')`);
     binds.date_to = date_to;
   }
   if (amount_from) {
@@ -90,7 +90,10 @@ const getPoDetailRegister = async (req: Request, res: Response) => {
             r.currency_rate,
             r.amount,
             r.project_name,
-            r.div_code
+            r.div_code,
+            r.project_code,
+            r.description,
+            r.type_of_pr
         FROM VW_BO_PO_REGISTER_JASRA r
         WHERE ${whereSql}
         `;
