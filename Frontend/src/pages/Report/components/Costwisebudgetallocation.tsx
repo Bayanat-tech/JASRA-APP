@@ -711,39 +711,39 @@ const CostwiseBudgetAllocation: React.FC<CostwiseBudgetAllocationProps> = ({ req
             table-layout: fixed !important;
             width: 100% !important;
             max-width: 100% !important;
-            font-size: 6px !important;
+            font-size: 8.5px !important;
           }
           .grt-table thead th {
-            padding: 2px 3px !important;
-            font-size: 6.5px !important;
+            padding: 4px 6px !important;
+            font-size: 9.5px !important;
             white-space: normal !important;
             word-break: break-word !important;
           }
           .grt-table tbody tr.data-row td {
-            padding: 0.5px 3px !important;
-            font-size: 6px !important;
+            padding: 2.5px 6px !important;
+            font-size: 8.5px !important;
             white-space: normal !important;
             word-break: break-word !important;
           }
           .grt-table tr.group-row-0 td,
           .grt-table tr.group-row-1 td,
           .grt-table tr.group-row-2 td {
-            padding: 1px 3px !important;
-            font-size: 6px !important;
+            padding: 3px 6px !important;
+            font-size: 8.5px !important;
             white-space: normal !important;
             word-break: break-word !important;
           }
           .grt-table tr.total-row-0 td,
           .grt-table tr.total-row-1 td,
           .grt-table tr.total-row-2 td {
-            padding: 1px 3px !important;
-            font-size: 6px !important;
+            padding: 3px 6px !important;
+            font-size: 8.5px !important;
             white-space: normal !important;
             word-break: break-word !important;
           }
-          .grt-report-header-right { font-size: 7px !important; }
-          .grt-title-bar { font-size: 9px !important; padding: 4px !important; }
-          .grt-meta { font-size: 6.5px !important; padding: 4px 8px !important; }
+          .grt-report-header-right { font-size: 9.5px !important; }
+          .grt-title-bar { font-size: 13px !important; padding: 7px !important; }
+          .grt-meta { font-size: 9px !important; padding: 6px 10px !important; }
         }
       `}</style>
 
