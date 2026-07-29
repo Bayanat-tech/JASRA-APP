@@ -685,23 +685,65 @@ const CostwiseBudgetAllocation: React.FC<CostwiseBudgetAllocationProps> = ({ req
              never covered it. */
           .cwba-hide-print { display: none !important; }
 
-          /* GroupedReportTable renders a wide 3-column table that clips on
-             portrait A4. Force landscape + shrink the table's own print
-             typography so the right-most (amount) column stays on the page.
-             These class names (.grt-*) are global CSS from GroupedReport.tsx's
-             injected <style>, so overriding them here for print only affects
-             this page while it's mounted — GroupedReport.tsx itself is untouched. */
-          @page { size: landscape; margin: 8mm; }
-          .grt-table { font-size: 10px !important; }
-          .grt-table thead th { padding: 6px 8px !important; font-size: 10.5px !important; }
-          .grt-table tbody tr.data-row td { padding: 2px 6px !important; }
+          /* Force portrait only — landscape is not allowed for this report,
+             regardless of the printer/browser default orientation. */
+          @page { size: portrait; margin: 5mm; }
+          html, body { width: 100% !important; }
+
+          /* GroupedReportTable renders a 3-column table whose widths are
+             percentage-based via <colgroup>, but table-layout defaults to
+             "auto" — meaning long cell text can stretch a column past its
+             intended % and push the last column off the page. Forcing
+             table-layout: fixed makes the browser respect the colgroup
+             percentages strictly, so text truncates (ellipsis) instead of
+             pushing the Amount column out of view. Also let the wrapper
+             shrink to the page width instead of scrolling, and never allow
+             horizontal overflow that could tempt a landscape reflow.
+             These are global .grt-* class overrides scoped inside this
+             file's own <style> tag and only apply while this page is
+             mounted — GroupedReport.tsx itself is never modified. */
+          .grt-table-wrap {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .grt-table {
+            table-layout: fixed !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            font-size: 6px !important;
+          }
+          .grt-table thead th {
+            padding: 2px 3px !important;
+            font-size: 6.5px !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          .grt-table tbody tr.data-row td {
+            padding: 0.5px 3px !important;
+            font-size: 6px !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
           .grt-table tr.group-row-0 td,
           .grt-table tr.group-row-1 td,
-          .grt-table tr.group-row-2 td { padding: 3px 8px !important; }
+          .grt-table tr.group-row-2 td {
+            padding: 1px 3px !important;
+            font-size: 6px !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
           .grt-table tr.total-row-0 td,
           .grt-table tr.total-row-1 td,
-          .grt-table tr.total-row-2 td { padding: 3px 8px !important; }
-          .grt-report-header-right { font-size: 10px !important; }
+          .grt-table tr.total-row-2 td {
+            padding: 1px 3px !important;
+            font-size: 6px !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+          }
+          .grt-report-header-right { font-size: 7px !important; }
+          .grt-title-bar { font-size: 9px !important; padding: 4px !important; }
+          .grt-meta { font-size: 6.5px !important; padding: 4px 8px !important; }
         }
       `}</style>
 
