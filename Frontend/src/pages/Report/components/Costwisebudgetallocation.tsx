@@ -677,13 +677,41 @@ const CostwiseBudgetAllocation: React.FC<CostwiseBudgetAllocationProps> = ({ req
         .action-btn-primary:hover { background: #1e40af !important; }
         .action-btn-ghost:hover { background: #EBF4FF !important; border-color: #185FA5 !important; color: #185FA5 !important; }
         .field-row { background: #EEF5FD; border-radius: 8px; padding: 10px 12px; }
+
+        /* Print fixes — scoped to this page only, does not touch GroupedReport.tsx */
+        @media print {
+          /* Hide this page's own tab bar (Parameters / Report Generated) —
+             it lives outside GroupedReportTable so its internal .no-print rule
+             never covered it. */
+          .cwba-hide-print { display: none !important; }
+
+          /* GroupedReportTable renders a wide 3-column table that clips on
+             portrait A4. Force landscape + shrink the table's own print
+             typography so the right-most (amount) column stays on the page.
+             These class names (.grt-*) are global CSS from GroupedReport.tsx's
+             injected <style>, so overriding them here for print only affects
+             this page while it's mounted — GroupedReport.tsx itself is untouched. */
+          @page { size: landscape; margin: 8mm; }
+          .grt-table { font-size: 10px !important; }
+          .grt-table thead th { padding: 6px 8px !important; font-size: 10.5px !important; }
+          .grt-table tbody tr.data-row td { padding: 2px 6px !important; }
+          .grt-table tr.group-row-0 td,
+          .grt-table tr.group-row-1 td,
+          .grt-table tr.group-row-2 td { padding: 3px 8px !important; }
+          .grt-table tr.total-row-0 td,
+          .grt-table tr.total-row-1 td,
+          .grt-table tr.total-row-2 td { padding: 3px 8px !important; }
+          .grt-report-header-right { font-size: 10px !important; }
+        }
       `}</style>
 
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
-        {/* Tab bar — always visible. Report tab is only clickable once a
-            report has actually been generated; until then it stays disabled. */}
-          <div style={{
+        {/* Tab bar — always visible on screen. Report tab is only clickable once a
+            report has actually been generated; until then it stays disabled.
+            Marked cwba-hide-print so it doesn't leak into the printed report
+            (see @media print rules above). */}
+          <div className="cwba-hide-print" style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10,
             padding: 5, marginBottom: 10,
