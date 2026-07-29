@@ -93,7 +93,8 @@ import PurchaseOrderReport from 'components/reports/purchase_order_register/Purc
 import PurchaseRequestReport from 'components/reports/PurchaseRequestReport';
 import PurchaseRequestDetail from 'components/reports/purchase/PurchaseRequestDetail';
 // import report Budget
-import CostwiseCurrentStatus from 'components/reports/purchase/CostwiseCurrentStatus';
+
+import CostwiseBudgetAllocationPage from 'pages/Report/components/Costwisebudgetallocation';
 
 import CustomersReport from 'components/reports/purchase/masters/CustomersReport';
 import SuppliersReport from 'components/reports/purchase/masters/SuppliersReport';
@@ -644,7 +645,7 @@ const MainRoutes = {
                   path: 'Budget',
                   children: [
                     { path: 'budget_status_report', element: <BudgetStatusSummary required_values={{ divCode: '', companyCode: '' }} /> },
-                    { path: 'budget_allocation_report', element: <CostwiseCurrentStatus /> },
+                    { path: 'budget_allocation_report', element: <CostwiseBudgetAllocationPage required_values={{ divCode: '', companyCode: '' }} /> },
                     { path: '*', element: <MaintenanceError /> }
                   ]
                 },
