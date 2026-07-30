@@ -1,917 +1,841 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RotateCcw, Printer, ChevronDown, Check, BarChart2 } from 'lucide-react';
-import WmsSerivceInstance from 'service/wms/service.wms';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
-import GroupedReportTable, {
-  ColumnDef,
-  GroupByConfig,
+import axiosServices from 'utils/axios';
+import { ReportPage } from 'components/reports/purchase_order_register/common/ReportPage';
+import { ReportParameterForm, ParamFieldConfig } from 'components/reports/purchase_order_register/common/ReportParameterForm';
+import {
   formatAmount,
-} from '../../../components/reports/GroupedReport';
+  formatFilterValue,
+  isFiltersActive,
+  ReportFilters,
+} from 'components/reports/purchase_order_register/common/reportHelpers';
 
-// ── Props ──────────────────────────────────────────────────────────────────────
-interface CostwiseBudgetAllocationProps {
-  required_values: {
-    divCode: string;
-    companyCode?: string;
-  };
+type ViewType = 'cost' | 'project';
+
+// ─────────────────────────────────────────────────────────────────────────
+// Raw SQL endpoint - same as PR report
+// ─────────────────────────────────────────────────────────────────────────
+const RAW_SQL_ENDPOINT = '/api/wms/inbound/executeRawSql';
+
+async function runRawSql<T = any>(raw_sql: string): Promise<T[]> {
+  const res = await axiosServices.post(RAW_SQL_ENDPOINT, { raw_sql });
+  return (res.data?.data ?? []) as T[];
 }
 
-// ── Row type ──────────────────────────────────────────────────────────────────
-// Matches actual columns returned by VW_PROJECT_COST_BUDGET_ALLOCATION
-// (per Toad screenshot): COMPANY_CODE, DIV_CODE, DIV_NAME, PROJECT_CODE,
-// PROJECT_NAME, COST_CODE, COST_NAME, TOTAL_APPROVED_AMT.
-type CostAllocationRow = {
-  COMPANY_CODE?:        string;
-  DIV_CODE?:            string;
-  DIV_NAME?:            string;
-  PROJECT_CODE?:        string;
-  PROJECT_NAME?:        string;
-  COST_CODE?:           string;
-  COST_NAME?:           string;
-  TOTAL_APPROVED_AMT?:  number;
-};
-
-// ── Division row type (from MS_HR_DIVISION) ──────────────────────────────────
-type DivisionRow = {
-  DIV_CODE: string;
-  DIV_NAME: string;
-};
-
-// ── Column definitions ────────────────────────────────────────────────────────
-const COSTWISE_COLUMNS: ColumnDef<CostAllocationRow>[] = [
-  { key: 'COST_CODE',          label: 'Cost Code',          width: '15%', align: 'left' },
-  { key: 'COST_NAME',          label: 'Cost Name',          width: '55%', align: 'left' },
-  { key: 'TOTAL_APPROVED_AMT', label: 'Total Approved Amt', width: '30%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
-];
-
-const PROJECTWISE_COLUMNS: ColumnDef<CostAllocationRow>[] = [
-  { key: 'PROJECT_CODE',       label: 'Project Code',       width: '20%', align: 'left' },
-  { key: 'PROJECT_NAME',       label: 'Project Name',       width: '60%', align: 'left' },
-  { key: 'TOTAL_APPROVED_AMT', label: 'Total Approved Amt', width: '20%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
-];
-
-// ── Grouping: Project only (matches screenshot) ───────────────────────────────
-// Grouping: Division -> Project (used for both cost-wise and project-wise views)
-const GROUP_BY_DIVISION_PROJECT: GroupByConfig<CostAllocationRow>[] = [
-  { key: 'DIV_NAME',     label: 'Division', subKey: 'DIV_CODE' },
-  { key: 'PROJECT_NAME', label: 'Project',  subKey: 'PROJECT_CODE' },
-];
-
-// ── Parameter form types / helpers ────────────────────────────────────────────
-
-interface Option {
-  value: string;
-  label: string;
+function sqlStr(v: any): string {
+  return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-interface Filters {
-  division:     string[];
-  project_name: string[];
-}
-
-const DEFAULT_FILTERS: Filters = {
-  division:     ['All'],
-  project_name: ['All'],
+// ── Row type — matches your view ────────────────────────────────────────
+type BudgetRow = {
+  COMPANY_CODE?: string;
+  DIV_CODE?: string;
+  DIV_NAME?: string;
+  PROJECT_CODE?: string;
+  PROJECT_NAME?: string;
+  COST_CODE?: string;
+  COST_NAME?: string;
+  TOTAL_APPROVED_AMT?: number;
 };
 
-const uniqueOptions = (rows: CostAllocationRow[], key: keyof CostAllocationRow): Option[] =>
-  Array.from(new Set(rows.map((r) => String(r[key] ?? '')).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((v) => ({ value: v, label: v }));
-
-// Division options come from MS_HR_DIVISION (separate query), not from the
-// budget view rows — this gives the full division master list rather than
-// only divisions that happen to already have rows.
-const divisionOptionsFromMaster = (rows: DivisionRow[]): Option[] =>
-  rows
-    .filter((r) => r.DIV_CODE)
-    .sort((a, b) => a.DIV_CODE.localeCompare(b.DIV_CODE))
-    .map((r) => ({ value: r.DIV_CODE, label: `${r.DIV_CODE} | ${r.DIV_NAME}` }));
-
-// ── Shared field styling (matches BudgetStatusSummary) ────────────────────────
-
-const fieldLabelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 500,
-  color: '#6b7280',
-  marginBottom: 2,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
+// ── Grouping structures ─────────────────────────────────────────────────
+type CostGroup = {
+  costCode: string;
+  costName: string;
+  amount: number;
 };
 
-const BG = '#EEF5FD';
-
-function FloatLabel({ label, required, children, bgColor = '#fff' }: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-  bgColor?: string;
-}) {
-  return (
-    <div style={{ position: 'relative', marginTop: 6 }}>
-      <span style={{
-        position: 'absolute',
-        top: -8,
-        left: 10,
-        fontSize: 11,
-        color: '#6b7280',
-        background: bgColor,
-        padding: '0 4px',
-        zIndex: 1,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        fontWeight: 500,
-      }}>
-        {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-// ── Select base styling ────────────────────────────────────────────────────────
-
-const selectBaseStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '7px 10px',
-  fontSize: 12,
-  color: '#111827',
-  border: '1px solid #d1d5db',
-  borderRadius: 6,
-  outline: 'none',
-  background: '#fff',
-  boxSizing: 'border-box',
-  fontFamily: 'inherit',
-  cursor: 'pointer',
+type ProjectGroup = {
+  projectCode: string;
+  projectName: string;
+  costs: CostGroup[];
+  total: number;
 };
 
-// ── MultiSelectField (dropdown with checkboxes, "All" support) ──────────────
+type DivisionGroup = {
+  divCode: string;
+  divName: string;
+  projects: ProjectGroup[];
+  total: number;
+};
 
-const MultiSelectField: React.FC<{
-  label: string;
-  options: Option[];
-  value: string[];
-  onChange: (v: string[]) => void;
-  loading?: boolean;
-  placeholder?: string;
-}> = ({ label, options, value, onChange, loading, placeholder }) => {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+// ── Group functions ─────────────────────────────────────────────────────
+function groupByDivisionAndProject(rows: BudgetRow[], viewType: ViewType): DivisionGroup[] {
+  const divMap: Record<string, any> = {};
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
+  for (const r of rows) {
+    const divKey = r.DIV_CODE || 'UNKNOWN';
+    const projKey = r.PROJECT_CODE || 'UNKNOWN';
+    const amount = parseFloat(String(r.TOTAL_APPROVED_AMT)) || 0;
+
+    if (!divMap[divKey]) {
+      divMap[divKey] = {
+        divCode: r.DIV_CODE || '',
+        divName: r.DIV_NAME || '',
+        projects: {},
+        total: 0,
+      };
+    }
+    const div = divMap[divKey];
+
+    if (!div.projects[projKey]) {
+      div.projects[projKey] = {
+        projectCode: r.PROJECT_CODE || '',
+        projectName: r.PROJECT_NAME || '',
+        costs: [],
+        total: 0,
+      };
+    }
+    const proj = div.projects[projKey];
+
+    if (viewType === 'cost') {
+      const costKey = r.COST_CODE || 'UNKNOWN';
+      let cost = proj.costs.find((c: CostGroup) => c.costCode === costKey);
+      if (!cost) {
+        cost = { costCode: r.COST_CODE || '', costName: r.COST_NAME || '', amount: 0 };
+        proj.costs.push(cost);
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const isAll = value.includes('All') || value.length === 0;
-
-  const toggleAll = () => onChange(['All']);
-
-  const toggleValue = (v: string) => {
-    if (isAll) {
-      onChange([v]);
-      return;
+      cost.amount += amount;
     }
-    if (value.includes(v)) {
-      const next = value.filter((x) => x !== v);
-      onChange(next.length ? next : ['All']);
-    } else {
-      onChange([...value, v]);
+
+    proj.total += amount;
+    div.total += amount;
+  }
+
+  return Object.values(divMap).map((div: any) => ({
+    ...div,
+    projects: Object.values(div.projects),
+  }));
+}
+
+// ── Base SQL ─────────────────────────────────────────────────────────────
+function buildDetailQuery(filters: ReportFilters, viewType: ViewType, companyCode?: string) {
+  const viewName = viewType === 'project'
+    ? 'VW_PROJECT_WISE_ALLOCATION'
+    : 'VW_PROJECT_COST_BUDGET_ALLOCATION';
+
+  const where: string[] = [];
+
+  if (companyCode) {
+    where.push(`COMPANY_CODE = ${sqlStr(companyCode)}`);
+  }
+
+  const divName = (filters.div_name as string[]) || [];
+  const projectName = (filters.project_name as string[]) || [];
+  const costCode = (filters.cost_code as string[]) || [];
+
+  if (divName.length) where.push(`DIV_NAME IN (${divName.map(sqlStr).join(', ')})`);
+  if (projectName.length) where.push(`PROJECT_NAME IN (${projectName.map(sqlStr).join(', ')})`);
+  if (costCode.length) where.push(`COST_CODE IN (${costCode.map(sqlStr).join(', ')})`);
+
+  const whereClause = where.length ? `WHERE ${where.join('\n  AND ')}` : '';
+  const orderBy = viewType === 'project'
+    ? 'ORDER BY DIV_CODE, PROJECT_NAME'
+    : 'ORDER BY DIV_CODE, PROJECT_NAME, COST_CODE';
+
+  return `
+    SELECT *
+    FROM ${viewName}
+    ${whereClause}
+    ${orderBy}
+  `;
+}
+
+// ── Parameter dropdown options ──────────────────────────────────────────
+function getDistinctOptions(column: string, filterKey: string, viewType: ViewType) {
+  return async (filters: ReportFilters, companyCode?: string): Promise<string[]> => {
+    const viewName = viewType === 'project'
+      ? 'VW_PROJECT_WISE_ALLOCATION'
+      : 'VW_PROJECT_COST_BUDGET_ALLOCATION';
+
+    const where: string[] = [];
+
+    if (companyCode) {
+      where.push(`COMPANY_CODE = ${sqlStr(companyCode)}`);
     }
+
+    // Build filter clauses excluding the current field
+    const divName = (filters.div_name as string[]) || [];
+    const projectName = (filters.project_name as string[]) || [];
+    const costCode = (filters.cost_code as string[]) || [];
+
+    if (filterKey !== 'div_name' && divName.length) where.push(`DIV_NAME IN (${divName.map(sqlStr).join(', ')})`);
+    if (filterKey !== 'project_name' && projectName.length) where.push(`PROJECT_NAME IN (${projectName.map(sqlStr).join(', ')})`);
+    if (filterKey !== 'cost_code' && costCode.length) where.push(`COST_CODE IN (${costCode.map(sqlStr).join(', ')})`);
+
+    const whereClause = where.length ? `WHERE ${where.join('\n  AND ')}` : '';
+
+    const sql = `
+      SELECT DISTINCT ${column} AS value
+      FROM ${viewName}
+      ${whereClause}
+      ORDER BY ${column}
+    `;
+
+    const rows = await runRawSql<any>(sql);
+    return rows.map((r) => String(r.VALUE ?? r.value ?? '').trim()).filter(Boolean);
   };
+}
 
-  const summaryText = isAll
-    ? (placeholder ?? 'All')
-    : value.length === 1
-      ? (options.find((o) => o.value === value[0])?.label ?? value[0])
-      : `${value.length} selected`;
+// ── Field configurations ────────────────────────────────────────────────
+const budgetReportFields: ParamFieldConfig[][] = [
+  [
+    {
+      type: 'multiselect',
+      key: 'div_name',
+      label: 'Division',
+      fetchOptions: getDistinctOptions('DIV_NAME', 'div_name', 'cost'),
+      placeholder: 'All Divisions',
+    },
+    {
+      type: 'multiselect',
+      key: 'project_name',
+      label: 'Project Name',
+      fetchOptions: getDistinctOptions('PROJECT_NAME', 'project_name', 'cost'),
+      placeholder: 'All Projects',
+    },
+  ],
+  [
+    {
+      type: 'multiselect',
+      key: 'cost_code',
+      label: 'Cost Code',
+      fetchOptions: getDistinctOptions('COST_CODE', 'cost_code', 'cost'),
+      placeholder: 'All Cost Codes',
+    },
+  ],
+];
 
-  return (
-    <div ref={rootRef} style={{ marginBottom: 14, position: 'relative' }}>
-      {label && <label style={fieldLabelStyle}>{label}</label>}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        disabled={loading}
-        style={{
-          ...selectBaseStyle,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          textAlign: 'left',
-          color: '#111827',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {loading ? 'Loading…' : summaryText}
-        </span>
-        <ChevronDown size={14} style={{ flexShrink: 0, marginLeft: 6, color: '#6b7280' }} />
-      </button>
-
-      {open && !loading && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 4,
-            background: '#fff',
-            border: '1px solid #d1d5db',
-            borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-            zIndex: 50,
-            maxHeight: 220,
-            overflowY: 'auto',
-            padding: 4,
-          }}
-        >
-          <div
-            onClick={toggleAll}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 8px',
-              fontSize: 12,
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontWeight: 600,
-              color: '#185FA5',
-              background: isAll ? '#EEF5FD' : 'transparent',
-            }}
-          >
-            <span style={{
-              width: 14, height: 14, borderRadius: 3,
-              border: '1px solid #185FA5',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: isAll ? '#185FA5' : '#fff',
-            }}>
-              {isAll && <Check size={10} color="#fff" />}
-            </span>
-            All
-          </div>
-
-          {options.map((opt) => {
-            const checked = !isAll && value.includes(opt.value);
-            return (
-              <div
-                key={opt.value}
-                onClick={() => toggleValue(opt.value)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 8px',
-                  fontSize: 12,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  color: '#374151',
-                  background: checked ? '#EEF5FD' : 'transparent',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                <span style={{
-                  width: 14, height: 14, borderRadius: 3,
-                  border: '1px solid #d1d5db',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: checked ? '#185FA5' : '#fff',
-                  borderColor: checked ? '#185FA5' : '#d1d5db',
-                  flexShrink: 0,
-                }}>
-                  {checked && <Check size={10} color="#fff" />}
-                </span>
-                {opt.label}
-              </div>
-            );
-          })}
-
-          {options.length === 0 && (
-            <div style={{ padding: '10px 8px', fontSize: 12, color: '#9ca3af' }}>No options</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+const EMPTY_FILTERS: ReportFilters = {
+  div_name: [],
+  project_name: [],
+  cost_code: [],
+  amount_from: '',
+  amount_to: '',
+  date_from: '',
+  date_to: '',
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
-const CostwiseBudgetAllocation: React.FC<CostwiseBudgetAllocationProps> = ({ required_values }) => {
-  const { divCode, companyCode } = required_values;
-  const { user } = useAuth();
-  const printUser = user?.username;
-  const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+const paramLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  fontWeight: 700,
+  color: '#6b7280',
+  marginBottom: 8,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+};
 
+// ── CSS: matches PR report styling ──────────────────────────────────────
+const TABLE_CSS = `
+  .budget-print-logo-row td, .budgets-print-logo-row td { padding: 10px 24px; }
+  .budget-print-logo-flex, .budgets-print-logo-flex { display: flex; justify-content: space-between; align-items: center; }
+  .budget-print-logo-flex img, .budgets-print-logo-flex img { height: 44px; width: auto; object-fit: contain; }
+  .budget-print-meta-text, .budgets-print-meta-text { text-align: right; font-size: 11px; color: #6b7280; line-height: 1.8; }
+  .budget-title-bar td, .budgets-title-bar td { background: #1e3a5f; color: #fff; text-align: center; padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+  .budget-meta-row td, .budgets-meta-row td { padding: 9px 24px; background: #f9fafb; font-size: 12px; color: #6b7280; }
+
+  table.budget-table, table.budgets-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  .budget-table col.c0 { width: 22%; } .budget-table col.c1 { width: 43%; } .budget-table col.c2 { width: 35%; }
+  .budgets-table col.c0 { width: 35%; } .budgets-table col.c1 { width: 65%; }
+
+  .budget-table th, .budget-table td, .budgets-table th, .budgets-table td {
+    border: 1px solid #9d9db3;
+    padding: 7px 10px;
+    vertical-align: top;
+  }
+  .budget-table thead th, .budgets-table thead th {
+    background: #d9d6e8;
+    color: #1f1f2e;
+    font-weight: 700;
+    font-size: 12.5px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .budget-table thead th { cursor: pointer; user-select: none; }
+  .budget-table thead th:hover, .budgets-table thead th:hover { background: #cbc7e0; }
+  .budget-table thead th.num, .budgets-table thead th.num { text-align: right; }
+  .budget-table thead th.left, .budgets-table thead th.left { text-align: left; padding-left: 12px; }
+
+  .budget-table tr.project-banner td, .budgets-table tr.project-banner td {
+    background: #e7eefc;
+    color: #1e3a5f;
+    font-weight: 700;
+    font-size: 12.5px;
+    padding: 8px 10px;
+  }
+  .budget-table tr.data-row td, .budgets-table tr.data-row td {
+    background: #fff;
+    color: #1f1f2e;
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  .budget-table tr.data-row td.num, .budgets-table tr.data-row td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .budget-table tr.project-total td, .budgets-table tr.project-total td {
+    background: #eef1fb;
+    font-weight: 700;
+    color: #1e3a5f;
+    font-size: 12.5px;
+  }
+  .budget-table tr.division-total td, .budgets-table tr.division-total td {
+    background: #ece9f3;
+    font-weight: 700;
+    color: #1e3a5f;
+    font-size: 12.5px;
+  }
+
+  @media print {
+    table.budget-table thead, table.budgets-table thead { display: table-header-group; }
+    table.budget-table tr, table.budgets-table tr { page-break-inside: avoid; }
+  }
+`;
+
+const BudgetAllocationReport: React.FC = () => {
+  const { user } = useAuth();
+
+  const [viewType, setViewType] = useState<ViewType>('cost');
   const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
   const [activeTab, setActiveTab] = useState<'parameters' | 'report'>('parameters');
-  const [pending, setPending] = useState<Filters>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<Filters>(DEFAULT_FILTERS);
-  const [mode, setMode] = useState<'cost' | 'project'>('cost');
-
-  const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
-    setPending((prev) => ({ ...prev, [key]: val }));
-
-  // ── Division master list (MS_HR_DIVISION) ─────────────────────────────────
-  const { data: divisionRows = [], isLoading: isDivisionLoading } = useQuery<DivisionRow[]>({
-    queryKey: ['ms_hr_division_all'],
-    queryFn: async () => {
-      const sql = `
-        SELECT DIV_CODE, DIV_NAME
-        FROM MS_HR_DIVISION
-        WHERE DIV_CODE IS NOT NULL
-        ORDER BY DIV_CODE
-      `;
-      const response = await WmsSerivceInstance.executeRawSql(sql);
-      return (response as DivisionRow[]) || [];
-    },
+  const [applied, setApplied] = useState<ReportFilters>(EMPTY_FILTERS);
+  const [pending, setPending] = useState<ReportFilters>(EMPTY_FILTERS);
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<{ col: keyof CostGroup | keyof ProjectGroup | null; dir: 'asc' | 'desc' }>({
+    col: null,
+    dir: 'asc',
   });
 
-  const divisionOptions = useMemo(() => divisionOptionsFromMaster(divisionRows), [divisionRows]);
+  const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const printUser = user?.username;
+  const appliedFiltersRef = useRef<ReportFilters>(EMPTY_FILTERS);
 
-  // ── Data fetch (cost allocation rows) ──────────────────────────────────────
-  const viewName = mode === 'project' ? 'VW_PROJECT_WISE_ALLOCATION' : 'VW_PROJECT_COST_BUDGET_ALLOCATION';
-  const { data: allRows = [], isLoading } = useQuery<CostAllocationRow[]>({
-    queryKey: ['project_cost_budget_allocation_all', mode, divCode, companyCode, viewName],
+  // ── ONE raw-SQL query powers both views ──
+  const { data: allRows = [], isLoading, isFetching, refetch } = useQuery<BudgetRow[]>({
+    queryKey: ['budget_allocation', viewType],
     queryFn: async () => {
-      const staticConditions: string[] = [];
-      if (divCode) staticConditions.push(`DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
-      if (companyCode) staticConditions.push(`COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
-      const whereClause = staticConditions.length
-        ? `WHERE ${staticConditions.join('\n    AND ')}`
-        : '';
-
-      const orderBy = mode === 'project' ? 'PROJECT_NAME' : 'PROJECT_NAME, COST_CODE';
-
-      const sql = `
-        SELECT *
-        FROM ${viewName}
-        ${whereClause}
-        ORDER BY
-          ${orderBy}
-      `;
-      console.log('BudgetAllocation: executing SQL for view', viewName);
-      const response = await WmsSerivceInstance.executeRawSql(sql);
-      console.log('BudgetAllocation: raw response length', Array.isArray(response) ? response.length : response);
-      return (response as CostAllocationRow[]) || [];
+      const sql = buildDetailQuery(appliedFiltersRef.current, viewType, user?.company_code);
+      return runRawSql<BudgetRow>(sql);
     },
+    enabled: false,
+    staleTime: Infinity,
   });
 
-  useEffect(() => {
-    console.log('BudgetAllocation: fetched rows for', viewName, allRows?.length, allRows?.slice?.(0, 3));
-  }, [allRows, viewName]);
+  const dataLoading = isLoading || isFetching;
 
-  // ── Parameter dropdown options, derived from loaded rows ──────────────────
-  const projectOptions = useMemo(() => {
-    const selectedDivisions = pending.division;
-
-    const rows =
-      selectedDivisions.includes('All') || selectedDivisions.length === 0
-        ? allRows
-        : allRows.filter((r) => selectedDivisions.includes(r.DIV_CODE ?? ''));
-
-    return uniqueOptions(rows, 'PROJECT_NAME');
-  }, [allRows, pending.division]);
-
-  // ── Apply the *applied* filters to build the rows the report will show ───
   const filteredRows = useMemo(() => {
+    if (!search.trim()) return allRows;
+    const q = search.trim().toLowerCase();
     return allRows.filter((r) => {
-      const inOrAll = (values: string[], rowVal: string | undefined) =>
-        values.includes('All') || values.length === 0 || values.includes(rowVal ?? '');
-
-      if (!inOrAll(applied.division, r.DIV_CODE)) return false;
-      if (!inOrAll(applied.project_name, r.PROJECT_NAME)) return false;
-
-      return true;
+      return (
+        r.PROJECT_NAME?.toLowerCase().includes(q) ||
+        r.PROJECT_CODE?.toLowerCase().includes(q) ||
+        r.COST_NAME?.toLowerCase().includes(q) ||
+        r.COST_CODE?.toLowerCase().includes(q) ||
+        r.DIV_NAME?.toLowerCase().includes(q)
+      );
     });
-  }, [allRows, applied]);
+  }, [allRows, search]);
 
-  const handleGenerateReport = () => {
+  // Group data based on view type
+  const groupedData = useMemo(() => {
+    return groupByDivisionAndProject(filteredRows, viewType);
+  }, [filteredRows, viewType]);
+
+  // ── Sorting — mirrors PR Register's column-header sort behaviour.
+  //    For 'cost' view we sort each project's cost rows; for 'project'
+  //    view we sort each division's project rows. ─────────────────────
+  const sortCosts = useCallback((costs: CostGroup[]) => {
+    if (viewType !== 'cost' || !sort.col) return costs;
+    const col = sort.col as keyof CostGroup;
+    return [...costs].sort((a, b) => {
+      let aVal: any = a[col];
+      let bVal: any = b[col];
+      if (col === 'amount') {
+        aVal = parseFloat(String(aVal)) || 0;
+        bVal = parseFloat(String(bVal)) || 0;
+      } else {
+        aVal = String(aVal ?? '').toLowerCase();
+        bVal = String(bVal ?? '').toLowerCase();
+      }
+      if (aVal < bVal) return sort.dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [sort, viewType]);
+
+  const sortProjects = useCallback((projects: ProjectGroup[]) => {
+    if (viewType !== 'project' || !sort.col) return projects;
+    const col = sort.col as keyof ProjectGroup;
+    return [...projects].sort((a, b) => {
+      let aVal: any = a[col];
+      let bVal: any = b[col];
+      if (col === 'total') {
+        aVal = parseFloat(String(aVal)) || 0;
+        bVal = parseFloat(String(bVal)) || 0;
+      } else {
+        aVal = String(aVal ?? '').toLowerCase();
+        bVal = String(bVal ?? '').toLowerCase();
+      }
+      if (aVal < bVal) return sort.dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [sort, viewType]);
+
+  const handleSort = (col: keyof CostGroup | keyof ProjectGroup) => {
+    setSort((prev) => (prev.col === col && prev.dir === 'asc' ? { col, dir: 'desc' } : { col, dir: 'asc' }));
+  };
+
+  const grandTotal = useMemo(
+    () => groupedData.reduce((s, d) => s + d.total, 0),
+    [groupedData]
+  );
+
+  const filtersActive = isFiltersActive(applied, search);
+  const reportTitle = viewType === 'project' ? 'Project Wise Budget Allocation' : 'Cost Wise Budget Allocation';
+
+  const handlePrint = () => window.print();
+
+  const handleGenerateReport = async () => {
     setApplied({ ...pending });
-    setHasGeneratedReport(true);
-    setActiveTab('report');
+    appliedFiltersRef.current = { ...pending };
+    try { await refetch(); } finally { setHasGeneratedReport(true); setActiveTab('report'); }
   };
 
   const handleReset = () => {
-    setPending(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    setPending(EMPTY_FILTERS);
+    setApplied(EMPTY_FILTERS);
     setHasGeneratedReport(false);
     setActiveTab('parameters');
   };
 
-  // ── Excel export ───────────────────────────────────────────────────────────
-  const handleExcel = async (filteredRows: CostAllocationRow[]) => {
+  // ── Excel Export ──
+  const handleExcel = async () => {
     const XLSX = await import('xlsx');
-    const wb   = XLSX.utils.book_new();
+    const wb = XLSX.utils.book_new();
 
-    if (mode === 'project') {
-      // Aggregate by project and write a simple project-wise summary
-      const agg: Record<string, { projectCode?: string; projectName?: string; total: number }> = {};
-      for (const r of filteredRows) {
-        const key = `${r.PROJECT_CODE || ''}|||${r.PROJECT_NAME || ''}`;
-        const amt = parseFloat(String(r.TOTAL_APPROVED_AMT)) || 0;
-        if (!agg[key]) agg[key] = { projectCode: r.PROJECT_CODE, projectName: r.PROJECT_NAME, total: 0 };
-        agg[key].total += amt;
-      }
-      const rows = Object.values(agg);
-      const grandTotal = rows.reduce((s, x) => s + x.total, 0);
-
-      const summaryData: any[][] = [
-        ['Project Wise Budget Allocation'],
-        [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
-        [],
-        ['Project Code', 'Project Name', 'Total Approved Amt'],
-      ];
-      rows.forEach((r) => summaryData.push([r.projectCode, r.projectName, r.total]));
-      summaryData.push([]);
-      summaryData.push(['', 'Grand Total', grandTotal]);
-
-      const ws = XLSX.utils.aoa_to_sheet(summaryData);
-      ws['!cols'] = [{ wch: 18 }, { wch: 50 }, { wch: 18 }];
-      XLSX.utils.book_append_sheet(wb, ws, 'Project Allocation');
-      XLSX.writeFile(wb, 'Projectwise_Budget_Allocation.xlsx');
-      return;
-    }
-
-    // Default: cost-wise detailed export (existing behavior)
-    type ProjMap = Record<string, {
-      projectName?: string; projectCode?: string; rows: CostAllocationRow[]; total: number;
-    }>;
-
-    const projMap: ProjMap = {};
-    for (const r of filteredRows) {
-      const projKey = `${r.PROJECT_NAME || ''}|||${r.PROJECT_CODE || ''}`;
-      const amount = parseFloat(String(r.TOTAL_APPROVED_AMT)) || 0;
-
-      if (!projMap[projKey])
-        projMap[projKey] = { projectName: r.PROJECT_NAME, projectCode: r.PROJECT_CODE, rows: [], total: 0 };
-
-      projMap[projKey].rows.push(r);
-      projMap[projKey].total += amount;
-    }
-
-    const projects = Object.values(projMap);
-    const grandTotal = projects.reduce((s, p) => s + p.total, 0);
-
-    const summaryData: any[][] = [
-      ['Budget Allocation'],
+    const rows: any[][] = [
+      [reportTitle],
       [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
       [],
-      ['Cost Code', 'Cost Name', 'Total Approved Amt', 'Project'],
     ];
 
-    projects.forEach((proj) => {
-      proj.rows.forEach((row) => {
-        const amount = parseFloat(String(row.TOTAL_APPROVED_AMT)) || 0;
-        summaryData.push([
-          row.COST_CODE,
-          row.COST_NAME,
-          amount,
-          `${proj.projectCode} | ${proj.projectName}`,
-        ]);
+    if (viewType === 'cost') {
+      rows.push(['Division', 'Project Code', 'Project Name', 'Cost Code', 'Cost Name', 'Total Approved Amount']);
+
+      groupedData.forEach((div) => {
+        div.projects.forEach((proj: ProjectGroup) => {
+          sortCosts(proj.costs).forEach((cost) => {
+            rows.push([
+              div.divName,
+              proj.projectCode,
+              proj.projectName,
+              cost.costCode,
+              cost.costName,
+              cost.amount,
+            ]);
+          });
+          rows.push(['', '', '', '', `Project Total: ${proj.projectName}`, proj.total]);
+        });
+        rows.push(['', '', '', '', `Division Total: ${div.divName}`, div.total]);
       });
-      summaryData.push(['', `Total For ${proj.projectCode} | ${proj.projectName}`, proj.total, '']);
-    });
-    summaryData.push([]);
-    summaryData.push(['', 'Grand Total', grandTotal, '']);
+    } else {
+      rows.push(['Division', 'Project Code', 'Project Name', 'Total Approved Amount']);
 
-    const ws = XLSX.utils.aoa_to_sheet(summaryData);
-    ws['!cols'] = [{ wch: 14 }, { wch: 34 }, { wch: 18 }, { wch: 50 }];
+      groupedData.forEach((div) => {
+        sortProjects(div.projects).forEach((proj) => {
+          rows.push([
+            div.divName,
+            proj.projectCode,
+            proj.projectName,
+            proj.total,
+          ]);
+        });
+        rows.push(['', '', `Division Total: ${div.divName}`, div.total]);
+      });
+    }
+
+    rows.push([]);
+    rows.push(['', '', '', 'Grand Total', grandTotal]);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = viewType === 'cost'
+      ? [{ wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 16 }, { wch: 35 }, { wch: 18 }]
+      : [{ wch: 20 }, { wch: 18 }, { wch: 35 }, { wch: 18 }];
+
     XLSX.utils.book_append_sheet(wb, ws, 'Budget Allocation');
-
-    XLSX.writeFile(wb, 'Costwise_Budget_Allocation.xlsx');
+    XLSX.writeFile(wb, `Budget_Allocation_${viewType === 'cost' ? 'Cost' : 'Project'}_Wise.xlsx`);
   };
 
-  // ── PDF export ─────────────────────────────────────────────────────────────
-  const handlePDF = async (filteredRows: CostAllocationRow[]) => {
-    const { jsPDF }              = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
+  const getBase64FromUrl = (url: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d')!.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
 
-    const pdf   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  // ── PDF Export ──
+  const handleDownloadPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 14;
-
-    const NAVY      = [30, 58, 95]    as [number, number, number];
-    const PTOT      = [213, 220, 232] as [number, number, number];
-    const WHITE     = [255, 255, 255] as [number, number, number];
-    const DARK      = [55,  65,  81]  as [number, number, number];
-    const BORDER    = [209, 213, 219] as [number, number, number];
-
-    const getBase64FromUrl = (url: string): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width  = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          canvas.getContext('2d')!.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = reject;
-        img.src = url;
-      });
+    const NAVY = [30, 58, 95] as [number, number, number];
+    const WHITE = [255, 255, 255] as [number, number, number];
+    const DARK = [55, 65, 81] as [number, number, number];
+    const BORDER = [209, 213, 219] as [number, number, number];
 
     let logoBase64 = '';
     try { logoBase64 = await getBase64FromUrl(companyLogo); } catch { /* skip */ }
 
-    if (mode === 'project') {
-      // Simple project-wise PDF: list projects with totals
-      const agg: Record<string, { projectCode?: string; projectName?: string; total: number }> = {};
-      for (const r of filteredRows) {
-        const key = `${r.PROJECT_CODE || ''}|||${r.PROJECT_NAME || ''}`;
-        const amt = parseFloat(String(r.TOTAL_APPROVED_AMT)) || 0;
-        if (!agg[key]) agg[key] = { projectCode: r.PROJECT_CODE, projectName: r.PROJECT_NAME, total: 0 };
-        agg[key].total += amt;
+    const HEADER_H = 36, TITLE_Y = 27, TABLE_TOP = filtersActive ? 44 : 39;
+
+    const drawPageHeader = (data: any) => {
+      const pg = data.pageNumber as number;
+      if (logoBase64) pdf.addImage(logoBase64, 'PNG', margin, 5, 32, 16);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 114, 128);
+      pdf.text(`Page ${pg}`, pageW - margin, 9, { align: 'right' });
+      pdf.text(`Print Date : ${printDate}`, pageW - margin, 14, { align: 'right' });
+      pdf.text(`Print User : ${printUser}`, pageW - margin, 19, { align: 'right' });
+      pdf.setFillColor(...NAVY);
+      pdf.rect(margin, TITLE_Y, pageW - margin * 2, 8, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.setTextColor(...WHITE);
+      pdf.text(reportTitle, pageW / 2, TITLE_Y + 5.5, { align: 'center' });
+      if (pg === 1 && filtersActive) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(107, 114, 128);
+        const parts = Object.entries(applied)
+          .filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
+          .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`)
+          .join(' | ');
+        if (parts) pdf.text(`Filter: ${parts}`, margin, TABLE_TOP - 2);
       }
-      const rows = Object.values(agg);
-      const grandTotal = rows.reduce((s, x) => s + x.total, 0);
+    };
 
-      const HEADER_H  = 36;
-      const TITLE_Y   = 27;
-      const TABLE_TOP = 39;
+    const cellPad = { top: 1.5, bottom: 1.5, left: 5, right: 5 };
 
-      const drawPageHeader = (data: any) => {
-        const pg = data.pageNumber as number;
-        if (logoBase64) pdf.addImage(logoBase64, 'PNG', margin, 5, 32, 16);
-        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(107, 114, 128);
-        pdf.text(`Page ${pg}`,                pageW - margin, 9,  { align: 'right' });
-        pdf.text(`Print Date : ${printDate}`, pageW - margin, 14, { align: 'right' });
-        pdf.text(`Print User : ${printUser}`, pageW - margin, 19, { align: 'right' });
-        pdf.setFillColor(...NAVY);
-        pdf.rect(margin, TITLE_Y, pageW - margin * 2, 8, 'F');
-        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...WHITE);
-        pdf.text('Project Wise Budget Allocation', pageW / 2, TITLE_Y + 5.5, { align: 'center' });
-      };
-
+    if (viewType === 'cost') {
       const body: any[] = [];
-      rows.forEach((r) => {
+
+      groupedData.forEach((div) => {
+        div.projects.forEach((proj: ProjectGroup) => {
+          body.push([{
+            content: `Project : ${proj.projectCode} ${proj.projectName ? `| ${proj.projectName}` : ''}`,
+            colSpan: 3,
+            styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
+          }]);
+
+          sortCosts(proj.costs).forEach((cost) => {
+            body.push([
+              { content: cost.costCode || '', styles: { fontSize: 9, halign: 'left' } },
+              { content: cost.costName || '', styles: { fontSize: 9, halign: 'left' } },
+              { content: formatAmount(cost.amount), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
+            ]);
+          });
+
+          body.push([
+            { content: `Project Total : ${proj.projectName}`, colSpan: 2, styles: { fillColor: [213, 220, 232], textColor: NAVY, fontStyle: 'bold', fontSize: 9.5 } },
+            { content: formatAmount(proj.total), styles: { fillColor: [213, 220, 232], textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
+          ]);
+        });
+
         body.push([
-          { content: r.projectCode || '', styles: { halign: 'left', fontSize: 9 } },
-          { content: r.projectName || '', styles: { halign: 'left', fontSize: 9 } },
-          { content: formatAmount(r.total), styles: { halign: 'right', fontSize: 9 } },
+          { content: `Division Total : ${div.divName}`, colSpan: 2, styles: { fillColor: [236, 233, 243], textColor: NAVY, fontStyle: 'bold', fontSize: 9.5 } },
+          { content: formatAmount(div.total), styles: { fillColor: [236, 233, 243], textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
         ]);
       });
 
-      // Grand total row
+      body.push([{ content: '', colSpan: 3, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
       body.push([
-        { content: 'Grand Total', colSpan: 2, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+        { content: 'Grand Total :', colSpan: 2, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
         { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
       ]);
 
       autoTable(pdf, {
         startY: TABLE_TOP,
         margin: { left: margin, right: margin, top: HEADER_H + 4 },
-        columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 110 }, 2: { cellWidth: 40 } },
+        columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 'auto' as any }, 2: { cellWidth: 35 } },
         head: [[
-          { content: 'Project Code', styles: { halign: 'left', fontSize: 10 } },
-          { content: 'Project Name', styles: { halign: 'left', fontSize: 10 } },
-          { content: 'Total Approved Amt', styles: { halign: 'right', fontSize: 10 } },
+          { content: 'Cost Code', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Cost Name', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Total Approved Amount', styles: { halign: 'right', fontSize: 9 } },
         ]],
         body,
-        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10 },
-        didDrawPage: drawPageHeader,
+        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
+        bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
         tableLineColor: BORDER,
+        tableLineWidth: 0.25,
+        didDrawPage: drawPageHeader,
+        didDrawCell: (data) => {
+          const { cell, doc } = data;
+          doc.setDrawColor(...BORDER);
+          doc.setLineWidth(0.2);
+          doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
+          doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
+        },
       });
+    } else {
+      const body: any[] = [];
 
-      pdf.save('Projectwise_Budget_Allocation.pdf');
-      return;
-    }
+      groupedData.forEach((div) => {
+        body.push([{
+          content: `Division : ${div.divName}`,
+          colSpan: 2,
+          styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
+        }]);
 
-    // Default: cost-wise PDF (existing behavior)
-    const projMap: Record<string, any> = {};
-    for (const r of filteredRows) {
-      const projKey = `${r.PROJECT_NAME || ''}|||${r.PROJECT_CODE || ''}`;
-      const amount = parseFloat(String(r.TOTAL_APPROVED_AMT)) || 0;
-      if (!projMap[projKey]) projMap[projKey] = { projectName: r.PROJECT_NAME, projectCode: r.PROJECT_CODE, rows: [], total: 0 };
-      projMap[projKey].rows.push(r);
-      projMap[projKey].total += amount;
-    }
-    const projects = Object.values(projMap);
-    const grandTotal = projects.reduce((s: number, p: any) => s + p.total, 0);
+        sortProjects(div.projects).forEach((proj) => {
+          body.push([
+            { content: proj.projectCode || '', styles: { fontSize: 9, halign: 'left' } },
+            { content: proj.projectName || '', styles: { fontSize: 9, halign: 'left' } },
+            { content: formatAmount(proj.total), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
+          ]);
+        });
 
-    const HEADER_H  = 36;
-    const TITLE_Y   = 27;
-    const TABLE_TOP = 39;
-
-    const drawPageHeader = (data: any) => {
-      const pg = data.pageNumber as number;
-      if (logoBase64) pdf.addImage(logoBase64, 'PNG', margin, 5, 32, 16);
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(107, 114, 128);
-      pdf.text(`Page ${pg}`,                pageW - margin, 9,  { align: 'right' });
-      pdf.text(`Print Date : ${printDate}`, pageW - margin, 14, { align: 'right' });
-      pdf.text(`Print User : ${printUser}`, pageW - margin, 19, { align: 'right' });
-      pdf.setFillColor(...NAVY);
-      pdf.rect(margin, TITLE_Y, pageW - margin * 2, 8, 'F');
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...WHITE);
-      pdf.text('Budget Allocation', pageW / 2, TITLE_Y + 5.5, { align: 'center' });
-    };
-
-    const body: any[] = [];
-    const cellPad = { top: 3.5, bottom: 3.5, left: 5, right: 5 };
-
-    projects.forEach((proj: any) => {
-      body.push([{ content: `Project :  ${proj.projectCode} | ${proj.projectName}`, colSpan: 3, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } }]);
-      proj.rows.forEach((row: CostAllocationRow) => {
-        const amount = parseFloat(String(row.TOTAL_APPROVED_AMT)) || 0;
         body.push([
-          { content: row.COST_CODE || '',          styles: { fontSize: 8, halign: 'left' } },
-          { content: row.COST_NAME || '',          styles: { fontSize: 8, halign: 'left' } },
-          { content: formatAmount(amount),         styles: { halign: 'right', fontSize: 8 } },
+          { content: `Division Total : ${div.divName}`, colSpan: 1, styles: { fillColor: [236, 233, 243], textColor: NAVY, fontStyle: 'bold', fontSize: 9.5 } },
+          { content: formatAmount(div.total), styles: { fillColor: [236, 233, 243], textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
         ]);
       });
+
+      body.push([{ content: '', colSpan: 2, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
       body.push([
-        { content: `Total For ${proj.projectCode} | ${proj.projectName}`, colSpan: 2, styles: { fillColor: PTOT, textColor: DARK, fontStyle: 'bold', fontSize: 9, cellPadding: cellPad } },
-        { content: formatAmount(proj.total), styles: { fillColor: PTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: 'Grand Total :', colSpan: 1, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+        { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
       ]);
-    });
 
-    body.push([
-      { content: 'Grand Total', colSpan: 2, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-      { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-    ]);
+      autoTable(pdf, {
+        startY: TABLE_TOP,
+        margin: { left: margin, right: margin, top: HEADER_H + 4 },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' as any }, 2: { cellWidth: 35 } },
+        head: [[
+          { content: 'Project Code', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Project Name', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Total Approved Amount', styles: { halign: 'right', fontSize: 9 } },
+        ]],
+        body,
+        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
+        bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
+        tableLineColor: BORDER,
+        tableLineWidth: 0.25,
+        didDrawPage: drawPageHeader,
+        didDrawCell: (data) => {
+          const { cell, doc } = data;
+          doc.setDrawColor(...BORDER);
+          doc.setLineWidth(0.2);
+          doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
+          doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
+        },
+      });
+    }
 
-    autoTable(pdf, {
-      startY: TABLE_TOP,
-      margin: { left: margin, right: margin, top: HEADER_H + 4 },
-      columnStyles: { 0: { cellWidth: 32 }, 1: { cellWidth: 98 }, 2: { cellWidth: 42 } },
-      head: [[
-        { content: 'Cost Code',          styles: { halign: 'left',  fontSize: 10 } },
-        { content: 'Cost Name',          styles: { halign: 'left',  fontSize: 10 } },
-        { content: 'Total Approved Amt', styles: { halign: 'right', fontSize: 10 } },
-      ]],
-      body,
-      headStyles:    { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
-      bodyStyles:    { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'ellipsize', minCellHeight: 0 },
-      alternateRowStyles: {},
-      tableLineColor: BORDER,
-      tableLineWidth: 0.25,
-      didDrawPage: drawPageHeader,
-      didDrawCell: (data) => {
-        const { cell, doc } = data;
-        doc.setDrawColor(...BORDER); doc.setLineWidth(0.2);
-        doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
-        doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
-      },
-    });
-
-    pdf.save('Costwise_Budget_Allocation.pdf');
+    pdf.save(`Budget_Allocation_${viewType === 'cost' ? 'Cost' : 'Project'}_Wise.pdf`);
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const filterMetaRow = (colSpan: number, className: string) => filtersActive && (
+    <tr className={className}>
+      <td colSpan={colSpan}>
+        <b>Filter:</b>{' '}
+        {[
+          ...Object.entries(applied)
+            .filter(([, v]) => (Array.isArray(v) ? v.length > 0 : Boolean(v)))
+            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${formatFilterValue(v as string | string[])}`),
+          ...(search.trim() ? [`search: "${search.trim()}"`] : []),
+        ].join(' | ')}
+      </td>
+    </tr>
+  );
+
+  // ── Cost Wise table markup ──
+  const costWiseTable = groupedData.length === 0 ? (
+    <div className="rp-empty">No records found.</div>
+  ) : (
+    <table className="budget-table">
+      <colgroup>
+        <col className="c0" /><col className="c1" /><col className="c2" />
+      </colgroup>
+      <thead>
+        <tr className="budget-print-logo-row">
+          <td colSpan={3}>
+            <div className="budget-print-logo-flex">
+              <img src={companyLogo} alt="Logo" />
+              <div className="budget-print-meta-text">
+                <div><b>Print Date:</b> {printDate}</div>
+                <div><b>Print User:</b> {printUser}</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr className="budget-title-bar"><td colSpan={3}>Cost Wise Budget Allocation</td></tr>
+        {filterMetaRow(3, 'budget-meta-row')}
+        <tr>
+          <th className="left" onClick={() => handleSort('costCode')}>Cost Code</th>
+          <th className="left" onClick={() => handleSort('costName')}>Cost Name</th>
+          <th className="num" onClick={() => handleSort('amount')}>Total Approved Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {groupedData.map((div) => (
+          <React.Fragment key={div.divCode}>
+            {div.projects.map((proj: ProjectGroup) => (
+              <React.Fragment key={proj.projectCode}>
+                <tr className="project-banner">
+                  <td colSpan={3}>
+                    Project : {proj.projectCode} {proj.projectName ? `| ${proj.projectName}` : ''}
+                  </td>
+                </tr>
+                {sortCosts(proj.costs).map((cost, idx) => (
+                  <tr key={`${cost.costCode}-${idx}`} className="data-row">
+                    <td>{cost.costCode || ''}</td>
+                    <td>{cost.costName || ''}</td>
+                    <td className="num">{formatAmount(cost.amount)}</td>
+                  </tr>
+                ))}
+                <tr className="project-total">
+                  <td colSpan={2}>Project Total : {proj.projectName}</td>
+                  <td className="num">{formatAmount(proj.total)}</td>
+                </tr>
+              </React.Fragment>
+            ))}
+            <tr className="division-total">
+              <td colSpan={2}>Division Total : {div.divName}</td>
+              <td className="num">{formatAmount(div.total)}</td>
+            </tr>
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  // ── Project Wise table markup ──
+  const projectWiseTable = groupedData.length === 0 ? (
+    <div className="rp-empty">No records found.</div>
+  ) : (
+    <table className="budgets-table">
+      <colgroup>
+        <col className="c0" /><col className="c1" />
+      </colgroup>
+      <thead>
+        <tr className="budgets-print-logo-row">
+          <td colSpan={2}>
+            <div className="budgets-print-logo-flex">
+              <img src={companyLogo} alt="Logo" />
+              <div className="budgets-print-meta-text">
+                <div><b>Print Date:</b> {printDate}</div>
+                <div><b>Print User:</b> {printUser}</div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr className="budgets-title-bar"><td colSpan={2}>Project Wise Budget Allocation</td></tr>
+        {filterMetaRow(2, 'budgets-meta-row')}
+        <tr>
+          <th className="left" onClick={() => handleSort('projectCode')}>Project Code</th>
+          <th className="num" onClick={() => handleSort('total')}>Total Approved Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {groupedData.map((div) => (
+          <React.Fragment key={div.divCode}>
+            <tr className="project-banner">
+              <td colSpan={2}>Division : {div.divName}</td>
+            </tr>
+            {sortProjects(div.projects).map((proj) => (
+              <tr key={proj.projectCode} className="data-row">
+                <td>{proj.projectCode} {proj.projectName ? `| ${proj.projectName}` : ''}</td>
+                <td className="num">{formatAmount(proj.total)}</td>
+              </tr>
+            ))}
+            <tr className="division-total">
+              <td>Division Total : {div.divName}</td>
+              <td className="num">{formatAmount(div.total)}</td>
+            </tr>
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  const tableContent = viewType === 'cost' ? costWiseTable : projectWiseTable;
+
   return (
-    <div style={{ background: '#f3f4f6', padding: '6px 10px', fontFamily: 'system-ui, sans-serif', minHeight: '100vh' }}>
-      <style>{`
-        .action-btn-primary:hover { background: #1e40af !important; }
-        .action-btn-ghost:hover { background: #EBF4FF !important; border-color: #185FA5 !important; color: #185FA5 !important; }
-        .field-row { background: #EEF5FD; border-radius: 8px; padding: 10px 12px; }
-
-        /* Print fixes — scoped to this page only, does not touch GroupedReport.tsx */
-        @media print {
-          /* Hide this page's own tab bar (Parameters / Report Generated) —
-             it lives outside GroupedReportTable so its internal .no-print rule
-             never covered it. */
-          .cwba-hide-print { display: none !important; }
-
-          /* Force portrait only — landscape is not allowed for this report,
-             regardless of the printer/browser default orientation. */
-          @page { size: portrait; margin: 5mm; }
-          html, body { width: 100% !important; }
-
-          /* GroupedReportTable renders a 3-column table whose widths are
-             percentage-based via <colgroup>, but table-layout defaults to
-             "auto" — meaning long cell text can stretch a column past its
-             intended % and push the last column off the page. Forcing
-             table-layout: fixed makes the browser respect the colgroup
-             percentages strictly, so text truncates (ellipsis) instead of
-             pushing the Amount column out of view. Also let the wrapper
-             shrink to the page width instead of scrolling, and never allow
-             horizontal overflow that could tempt a landscape reflow.
-             These are global .grt-* class overrides scoped inside this
-             file's own <style> tag and only apply while this page is
-             mounted — GroupedReport.tsx itself is never modified. */
-          .grt-table-wrap {
-            overflow-x: hidden !important;
-            width: 100% !important;
-            max-width: 100% !important;
-          }
-          .grt-table {
-            table-layout: fixed !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            font-size: 8.5px !important;
-          }
-          .grt-table thead th {
-            padding: 4px 6px !important;
-            font-size: 9.5px !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .grt-table tbody tr.data-row td {
-            padding: 2.5px 6px !important;
-            font-size: 8.5px !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .grt-table tr.group-row-0 td,
-          .grt-table tr.group-row-1 td,
-          .grt-table tr.group-row-2 td {
-            padding: 3px 6px !important;
-            font-size: 8.5px !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .grt-table tr.total-row-0 td,
-          .grt-table tr.total-row-1 td,
-          .grt-table tr.total-row-2 td {
-            padding: 3px 6px !important;
-            font-size: 8.5px !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-          }
-          .grt-report-header-right { font-size: 9.5px !important; }
-          .grt-title-bar { font-size: 13px !important; padding: 7px !important; }
-          .grt-meta { font-size: 9px !important; padding: 6px 10px !important; }
-        }
-      `}</style>
-
-      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-
-        {/* Tab bar — always visible on screen. Report tab is only clickable once a
-            report has actually been generated; until then it stays disabled.
-            Marked cwba-hide-print so it doesn't leak into the printed report
-            (see @media print rules above). */}
-          <div className="cwba-hide-print" style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10,
-            padding: 5, marginBottom: 10,
-          }}>
-          <button
-            onClick={() => setActiveTab('parameters')}
-            style={{
-              flex: 1, padding: '8px 14px', borderRadius: 7, border: 'none',
-              cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              background: activeTab === 'parameters' ? '#185FA5' : 'transparent',
-              color: activeTab === 'parameters' ? '#fff' : '#374151',
-              transition: 'background 0.15s',
-            }}
-          >
-            ⚙ Parameters
-          </button>
-          <button
-            onClick={() => hasGeneratedReport && setActiveTab('report')}
-            disabled={!hasGeneratedReport}
-            title={hasGeneratedReport ? undefined : 'Generate a report first'}
-            style={{
-              flex: 1, padding: '8px 14px', borderRadius: 7, border: 'none',
-              cursor: hasGeneratedReport ? 'pointer' : 'not-allowed',
-              fontSize: 12.5, fontWeight: 600,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              background: activeTab === 'report' ? '#185FA5' : 'transparent',
-              color: !hasGeneratedReport ? '#9ca3af' : (activeTab === 'report' ? '#fff' : '#374151'),
-              transition: 'background 0.15s',
-            }}
-          >
-            <BarChart2 size={13} /> Report
-            {hasGeneratedReport && (
-              <span style={{
-                fontSize: 9.5, background: activeTab === 'report' ? 'rgba(255,255,255,0.25)' : '#d1fae5',
-                color: activeTab === 'report' ? '#fff' : '#065f46',
-                padding: '1px 7px', borderRadius: 10, fontWeight: 600,
-              }}>
-                Generated
-              </span>
-            )}
-          </button>
-        </div>
-
-        <div style={{
-          display: activeTab === 'parameters' ? 'block' : 'none',
-          background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '8px 12px',
-          marginBottom: 12,
-        }}>
-
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Budget Allocation</span>
-            {hasGeneratedReport && (
-              <span style={{
-                fontSize: 10, background: '#d1fae5', color: '#065f46',
-                padding: '2px 10px', borderRadius: 12, fontWeight: 500,
-              }}>
-                Report Generated
-              </span>
-            )}
-            {/* Debug info: show which view is queried and row counts */}
-            <div style={{ marginLeft: 'auto', fontSize: 12, color: '#6b7280' }}>
-              <div>View: <strong>{viewName}</strong></div>
-              <div>Total rows: <strong>{allRows?.length ?? 0}</strong></div>
-              <div>Shown rows: <strong>{filteredRows?.length ?? 0}</strong></div>
-            </div>
-          </div>
-
-          {/* Parameter form */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-              <FloatLabel label="Division" bgColor={BG}>
-                <MultiSelectField
-                  label=""
-                  options={divisionOptions}
-                  value={pending.division}
-                  onChange={(v) => {
-                    setPending((prev) => ({
-                      ...prev,
-                      division: v,
-                      project_name: ['All'],
-                    }));
+    <ReportPage
+      title={reportTitle}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      hasGeneratedReport={hasGeneratedReport}
+      dataLoading={dataLoading}
+      filtersActive={filtersActive}
+      paramsContent={
+        <>
+          <div style={{ marginBottom: 20 }}>
+            <label style={paramLabelStyle}>Report View</label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {(['cost', 'project'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setViewType(v)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 7,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    border: viewType === v ? '1.5px solid #1e3a5f' : '1.5px solid #d1d5db',
+                    background: viewType === v ? '#1e3a5f' : '#fff',
+                    color: viewType === v ? '#fff' : '#374151',
+                    cursor: 'pointer',
+                    fontFamily: "'DM Sans', sans-serif",
                   }}
-                  loading={isDivisionLoading}
-                />
-              </FloatLabel>
-              <FloatLabel label="Project" bgColor={BG}>
-                <MultiSelectField
-                  label=""
-                  options={projectOptions}
-                  value={pending.project_name}
-                  onChange={(v) => setPendingField('project_name', v)}
-                />
-              </FloatLabel>
-              <FloatLabel label="Mode" bgColor={BG}>
-                <select
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value as 'cost' | 'project')}
-                  style={{ ...selectBaseStyle, padding: '8px 10px' }}
                 >
-                  <option value="cost">Cost Wise</option>
-                  <option value="project">Project Wise</option>
-                </select>
-              </FloatLabel>
+                  {v === 'cost' ? 'Cost Wise' : 'Project Wise'}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* Action bar */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10, paddingTop: 8, borderTop: '0.5px solid #e5e7eb' }}>
-            <button
-              className="action-btn-ghost"
-              onClick={handleReset}
-              disabled={isLoading}
-              style={{
-                padding: '7px 16px', border: '0.5px solid #d1d5db', background: '#fff',
-                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-                gap: 6, fontSize: 12, borderRadius: 6, color: '#374151', opacity: isLoading ? 0.6 : 1,
-              }}
-            >
-              <RotateCcw size={13} /> Reset
-            </button>
-
-            <button
-              className="action-btn-primary"
-              onClick={handleGenerateReport}
-              disabled={isLoading}
-              style={{
-                padding: '7px 16px', border: '0.5px solid #185FA5', background: isLoading ? '#94a3b8' : '#185FA5',
-                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-                gap: 6, fontSize: 12, borderRadius: 6, color: '#fff', transition: 'background 0.2s',
-              }}
-            >
-              <Printer size={13} /> {isLoading ? 'Loading data…' : 'Generate Report'}
-            </button>
-          </div>
-        </div>
-
-        {/* Report only appears after Generate Report is clicked, and only while the Report tab is active */}
-        {hasGeneratedReport && activeTab === 'report' && (
-          <GroupedReportTable<CostAllocationRow>
-            title="Budget Allocation"
-            rows={filteredRows}
-            isLoading={isLoading}
-            columns={mode === 'cost' ? COSTWISE_COLUMNS : PROJECTWISE_COLUMNS}
-            groupBy={GROUP_BY_DIVISION_PROJECT}
-            amountKey="TOTAL_APPROVED_AMT"
-            filterDefs={[]}
-            searchKeys={mode === 'cost' ? ['PROJECT_NAME', 'COST_NAME', 'COST_CODE'] : ['PROJECT_NAME', 'PROJECT_CODE']}
-            logo={companyLogo}
-            printUser={printUser}
-            onExcel={handleExcel}
-            onPDF={handlePDF}
+          <ReportParameterForm
+            rows={budgetReportFields}
+            filters={pending}
+            onChange={setPending}
+            companyCode={user?.company_code}
           />
-        )}
-      </div>
-    </div>
+        </>
+      }
+      onGenerate={handleGenerateReport}
+      onReset={handleReset}
+      generateDisabled={dataLoading}
+      search={search}
+      onSearchChange={setSearch}
+      searchPlaceholder={viewType === 'cost' ? 'Search cost code / cost name / project…' : 'Search project code / project name / division…'}
+      onPrint={handlePrint}
+      onExcel={handleExcel}
+      onPdf={handleDownloadPDF}
+      reportContent={tableContent}
+      showGrandTotal={groupedData.length > 0}
+      grandTotalValue={formatAmount(grandTotal)}
+      css={TABLE_CSS}
+    />
   );
 };
 
-export default CostwiseBudgetAllocation;
+export default BudgetAllocationReport;

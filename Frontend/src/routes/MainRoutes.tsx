@@ -645,9 +645,8 @@ const MainRoutes = {
                   path: 'Budget',
                   children: [
                     { path: 'budget_status_report', element: <BudgetStatusSummary required_values={{ divCode: '', companyCode: '' }} /> },
-                    { path: 'budget_allocation_report', element: <CostwiseBudgetAllocationPage required_values={{ divCode: '', companyCode: '' }} /> },
-                    { path: '*', element: <MaintenanceError /> }
-                  ]
+                    
+                  { path: 'budget_allocation_report', element: <CostwiseBudgetAllocationPage /> }       ]
                 },
                 {
                   path: 'po',
