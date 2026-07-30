@@ -272,10 +272,14 @@ const TABLE_CSS = `
     vertical-align: top;
     line-height: 1.55;
   }
-  .budget-table tr.data-row td.num, .budgets-table tr.data-row td.num {
+  .budget-table td.num, .budgets-table td.num {
     text-align: right;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    padding-right: 70px;
+  }
+  .budget-table thead th.num, .budgets-table thead th.num {
+    padding-right: 70px;
   }
 
   .budget-table tr.project-total td, .budgets-table tr.project-total td {
