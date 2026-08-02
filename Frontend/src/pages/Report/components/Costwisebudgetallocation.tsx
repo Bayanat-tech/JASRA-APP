@@ -241,11 +241,29 @@ const TABLE_CSS = `
   .budget-table col.c0 { width: 22%; } .budget-table col.c1 { width: 43%; } .budget-table col.c2 { width: 35%; }
   .budgets-table col.c0 { width: 35%; } .budgets-table col.c1 { width: 65%; }
 
-  .budget-table th, .budget-table td, .budgets-table th, .budgets-table td {
+  /* Cost-wise table keeps full grid borders (all four sides) */
+  .budget-table th, .budget-table td {
     border: 1px solid #9d9db3;
     padding: 7px 10px;
     vertical-align: top;
   }
+
+  /* Project-wise table: keep horizontal row lines, drop the internal vertical divider */
+  .budgets-table th, .budgets-table td {
+    border-top: 1px solid #9d9db3;
+    border-bottom: 1px solid #9d9db3;
+    border-left: none;
+    border-right: none;
+    padding: 7px 10px;
+    vertical-align: top;
+  }
+  .budgets-table th:first-child, .budgets-table td:first-child {
+    border-left: 1px solid #9d9db3;
+  }
+  .budgets-table th:last-child, .budgets-table td:last-child {
+    border-right: 1px solid #9d9db3;
+  }
+
   .budget-table thead th, .budgets-table thead th {
     background: #d9d6e8;
     color: #1f1f2e;
