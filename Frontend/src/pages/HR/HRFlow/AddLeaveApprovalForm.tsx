@@ -1485,12 +1485,12 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                     name: currentUserApprovers?.DEPT_HEAD_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'Assistant Hr' }) || 'Assistant Hr',
+                    label: intl.formatMessage({ id: 'Senior payroll' }) || 'Senior payroll',
                     key: 'HOD',
                     name: currentUserApprovers?.MANAGER_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'Senior Hr' }) || 'Senior Hr',
+                    label: intl.formatMessage({ id: 'HR Manager' }) || 'HR Manager',
                     key: 'SENIOR_HR_NAME',
                     name: currentUserApprovers?.SENIOR_HR_NAME
                   }
