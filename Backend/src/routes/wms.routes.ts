@@ -7,19 +7,14 @@ import dashboardRouter from "./../routes/wms/dashboard_wms.routes";
 import jobInboundRouter from "./wms/transaction/inbound_wms.routes";
 import stocktransferWmsRouter from "./wms/transaction/stocktransfer_wms.routes";
 import stockAdjustmentRouter from "./StockAdjustment/stockAdjustment.routes";
-//import jobOutboundRouter from "./wms/transaction/outbound_wms.routes";
-import jobOutboundRouter from "./wms/transaction/outbound_wms.routes"; // ✅ CORRECT
+import jobOutboundRouter from "./wms/transaction/outbound_wms.routes";
 import {
   getAllReports,
-  // getAllOutboundReports,
-  // getAllVendorReports,
-  // getAllEmployeeReports,
-  // getAllDynamicReports,
 } from "../controllers/wms/transaction/inbound/allReport_wms.controller";
 import { checkUserAuthorization } from "../middleware/checkUserAthorization";
 import stockReportCriteria from "./wms/reports/stockCriteria_wms.routes";
+import budgetStatusRouter from "./budgetStatus.routes"; // ⬅️ adjust path if needed
 
-// Initialize Express Router
 const router = express.Router();
 
 // Route to get all inbound reports
@@ -30,38 +25,6 @@ router.get(
   getAllReports
 );
 
-// Route to get all outbound reports
-// router.get(
-//   "/outbound-reports",
-//   passport.authenticate("jwt", { session: false }),
-//   checkUserAuthorization,
-//   getAllOutboundReports
-// );
-
-//route for vendor reports
-// router.get(
-//   "/vendor-reports",
-//   passport.authenticate("jwt", { session: false }),
-//   checkUserAuthorization,
-//   getAllVendorReports
-// );
-
-// //route for Employee reports
-// router.get(
-//   "/employee-reports",
-//   passport.authenticate("jwt", { session: false }),
-//   checkUserAuthorization,
-//   getAllEmployeeReports
-// );
-
-// //route for Dynamic reports
-// router.get(
-//   "/dynamic-reports",
-//   passport.authenticate("jwt", { session: false }),
-//   checkUserAuthorization,
-//   getAllDynamicReports
-// );
-
 // Route for outbound operations
 router.use(
   "/outbound",
@@ -69,8 +32,6 @@ router.use(
   checkUserAuthorization,
   jobOutboundRouter
 );
-
-//console.log(router.use);
 
 // Route for inbound operations
 router.use(
@@ -88,6 +49,17 @@ router.use(
   stockReportCriteria
 );
 
+// ─────────────────────────────────────────────────────────────
+// Budget Status Report  →  GET /api/wms/budget-status
+// Must be registered BEFORE the "/:master" catch-all below
+// ─────────────────────────────────────────────────────────────
+router.use(
+  "/",
+  passport.authenticate("jwt", { session: false }),
+  checkUserAuthorization,
+  budgetStatusRouter
+);
+
 // Route for general management operations
 router.use(
   "/gm",
@@ -95,6 +67,7 @@ router.use(
   checkUserAuthorization,
   gmWmsRouter
 );
+
 router.use(
   "/stocktransfer",
   passport.authenticate("jwt", { session: false }),
@@ -118,7 +91,7 @@ router.use(
   stockAdjustmentRouter
 );
 
-// Route to get WMS master data by parameter
+// Route to get WMS master data by parameter  (catch-all — keep last)
 router.get(
   "/:master",
   passport.authenticate("jwt", { session: false }),
@@ -133,5 +106,4 @@ router.post(
   deleteWmsMaster
 );
 
-// Export router for use in main application
 export default router;

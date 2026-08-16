@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RotateCcw, Printer, ChevronDown, Check, BarChart2 } from 'lucide-react';
-import WmsSerivceInstance from 'service/wms/service.wms';
+import axiosServices from 'utils/axios';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
 import GroupedReportTable, {
@@ -18,7 +18,7 @@ interface BudgetStatusSummaryProps {
   };
 }
 
-// ── Row type ──────────────────────────────────────────────────────────────────
+// ── Row types ─────────────────────────────────────────────────────────────────
 type BudgetRow = {
   BUDGET_YEAR:    string;
   MONTH_NUMBER:   string;
@@ -36,11 +36,10 @@ type BudgetRow = {
   DIV_NAME:       string;
 };
 
-// ── Division row type (from MS_HR_DIVISION) ──────────────────────────────────
-type DivisionRow = {
-  DIV_CODE: string;
-  DIV_NAME: string;
-};
+type DivisionRow = { DIV_CODE: string; DIV_NAME: string };
+type ProjectRow  = { PROJECT_CODE: string; PROJECT_NAME: string };
+type MonthRow    = { MONTH_NUMBER: string; MONTH_BUDGET: string };
+type CostRow     = { COST_CODE: string; COST_NAME: string };
 
 // ── Month helpers ──────────────────────────────────────────────────────────────
 const MONTH_MAP: Record<string, string> = {
@@ -49,7 +48,8 @@ const MONTH_MAP: Record<string, string> = {
   '9': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec',
 };
 
-const monthLabel = (row: BudgetRow) => MONTH_MAP[row.MONTH_NUMBER] ?? row.MONTH_BUDGET ?? '-';
+const monthLabel = (row: BudgetRow) =>
+  MONTH_MAP[String(row.MONTH_NUMBER)] ?? row.MONTH_BUDGET ?? '-';
 
 // ── Column definitions ────────────────────────────────────────────────────────
 const COLUMNS: ColumnDef<BudgetRow>[] = [
@@ -62,7 +62,6 @@ const COLUMNS: ColumnDef<BudgetRow>[] = [
   { key: 'BALANCE_AMT',  label: 'Balance Amount',  width: '14%', align: 'right', format: (v) => formatAmount(parseFloat(String(v)) || 0) },
 ];
 
-// ── Grouping: Project → Cost Code (cost level is optional) ───────────────────
 const GROUP_BY_WITH_COST: GroupByConfig<BudgetRow>[] = [
   { key: 'PROJECT_NAME', label: 'Project',   subKey: 'PROJECT_CODE' },
   { key: 'COST_NAME',    label: 'Cost Code', subKey: 'COST_CODE'    },
@@ -72,8 +71,7 @@ const GROUP_BY_PROJECT_ONLY: GroupByConfig<BudgetRow>[] = [
   { key: 'PROJECT_NAME', label: 'Project', subKey: 'PROJECT_CODE' },
 ];
 
-// ── Parameter form types / helpers ────────────────────────────────────────────
-
+// ── Filters / options ─────────────────────────────────────────────────────────
 interface Option {
   value: string;
   label: string;
@@ -95,42 +93,35 @@ const DEFAULT_FILTERS: Filters = {
   group_by_cost: 'Yes',
 };
 
-const uniqueOptions = (rows: BudgetRow[], key: keyof BudgetRow): Option[] =>
-  Array.from(new Set(rows.map((r) => String(r[key] ?? '')).filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b))
-    .map((v) => ({ value: v, label: v }));
+/** Convert multi-select array → 'All' or comma-separated string for the procedure */
+const joinOrAll = (vals: string[]) =>
+  !vals?.length || vals.includes('All') ? 'All' : vals.join(',');
 
-const monthOptions = (rows: BudgetRow[]): Option[] => {
-  const seen = new Map<string, string>();
-  rows.forEach((r) => {
-    if (r.MONTH_NUMBER && !seen.has(r.MONTH_NUMBER)) seen.set(r.MONTH_NUMBER, monthLabel(r));
-  });
-  return Array.from(seen.entries())
-    .sort((a, b) => Number(a[0]) - Number(b[0]))
-    .map(([value, label]) => ({ value, label }));
-};
+// ── Response normalization ────────────────────────────────────────────────────
+function normalizeRows<T>(response: any, label: string): T[] {
+  const body = response?.data ?? response;
 
-const costCodeOptions = (rows: BudgetRow[]): Option[] => {
-  const seen = new Map<string, string>();
-  rows.forEach((r) => {
-    if (r.COST_CODE && !seen.has(r.COST_CODE)) seen.set(r.COST_CODE, r.COST_NAME);
-  });
-  return Array.from(seen.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([value, name]) => ({ value, label: `${value} | ${name}` }));
-};
+  if (Array.isArray(body?.data?.tableData)) return body.data.tableData as T[];
 
-// Division options come from MS_HR_DIVISION (separate query), not from the
-// budget view rows — this gives the full division master list rather than
-// only divisions that happen to already have budget rows.
-const divisionOptionsFromMaster = (rows: DivisionRow[]): Option[] =>
-  rows
-    .filter((r) => r.DIV_CODE)
-    .sort((a, b) => a.DIV_CODE.localeCompare(b.DIV_CODE))
-    .map((r) => ({ value: r.DIV_CODE, label: `${r.DIV_CODE} | ${r.DIV_NAME}` }));
+  const candidate =
+    body?.data?.data ??
+    body?.data ??
+    body;
 
-// ── Shared field styling (matches PurchaseRequestSummary) ────────────────────
+  if (Array.isArray(candidate)) return candidate as T[];
+  if (Array.isArray(candidate?.tableData)) return candidate.tableData as T[];
 
+  console.warn(`[${label}] Expected an array but got:`, response);
+  return [];
+}
+
+// ── Shared API call helper ────────────────────────────────────────────────────
+async function callBudgetProc(params: Record<string, string | undefined>) {
+  const response = await axiosServices.get('/api/wms/budget-status', { params });
+  return response;
+}
+
+// ── Shared field styling ──────────────────────────────────────────────────────
 const fieldLabelStyle: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 500,
@@ -151,17 +142,9 @@ function FloatLabel({ label, required, children, bgColor = '#fff' }: {
   return (
     <div style={{ position: 'relative', marginTop: 6 }}>
       <span style={{
-        position: 'absolute',
-        top: -8,
-        left: 10,
-        fontSize: 11,
-        color: '#6b7280',
-        background: bgColor,
-        padding: '0 4px',
-        zIndex: 1,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        fontWeight: 500,
+        position: 'absolute', top: -8, left: 10, fontSize: 11, color: '#6b7280',
+        background: bgColor, padding: '0 4px', zIndex: 1,
+        textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500,
       }}>
         {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
       </span>
@@ -170,24 +153,13 @@ function FloatLabel({ label, required, children, bgColor = '#fff' }: {
   );
 }
 
-// ── Select (plain native <select>, styled) ───────────────────────────────────
-
 const selectBaseStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '7px 10px',
-  fontSize: 12,
-  color: '#111827',
-  border: '1px solid #d1d5db',
-  borderRadius: 6,
-  outline: 'none',
-  background: '#fff',
-  boxSizing: 'border-box',
-  fontFamily: 'inherit',
-  cursor: 'pointer',
+  width: '100%', padding: '7px 10px', fontSize: 12, color: '#111827',
+  border: '1px solid #d1d5db', borderRadius: 6, outline: 'none',
+  background: '#fff', boxSizing: 'border-box', fontFamily: 'inherit', cursor: 'pointer',
 };
 
-// ── MultiSelectField (dropdown with checkboxes, "All" support) ──────────────
-
+// ── MultiSelectField ──────────────────────────────────────────────────────────
 const MultiSelectField: React.FC<{
   label: string;
   options: Option[];
@@ -201,23 +173,16 @@ const MultiSelectField: React.FC<{
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const isAll = value.includes('All') || value.length === 0;
-
   const toggleAll = () => onChange(['All']);
-
   const toggleValue = (v: string) => {
-    if (isAll) {
-      onChange([v]);
-      return;
-    }
+    if (isAll) { onChange([v]); return; }
     if (value.includes(v)) {
       const next = value.filter((x) => x !== v);
       onChange(next.length ? next : ['All']);
@@ -240,14 +205,9 @@ const MultiSelectField: React.FC<{
         onClick={() => setOpen((o) => !o)}
         disabled={loading}
         style={{
-          ...selectBaseStyle,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          textAlign: 'left',
-          color: '#111827',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.6 : 1,
+          ...selectBaseStyle, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', textAlign: 'left', color: '#111827',
+          cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1,
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -257,41 +217,22 @@ const MultiSelectField: React.FC<{
       </button>
 
       {open && !loading && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 4,
-            background: '#fff',
-            border: '1px solid #d1d5db',
-            borderRadius: 6,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-            zIndex: 50,
-            maxHeight: 220,
-            overflowY: 'auto',
-            padding: 4,
-          }}
-        >
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+          background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 50,
+          maxHeight: 220, overflowY: 'auto', padding: 4,
+        }}>
           <div
             onClick={toggleAll}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 8px',
-              fontSize: 12,
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontWeight: 600,
-              color: '#185FA5',
-              background: isAll ? '#EEF5FD' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+              fontSize: 12, borderRadius: 4, cursor: 'pointer', fontWeight: 600,
+              color: '#185FA5', background: isAll ? '#EEF5FD' : 'transparent',
             }}
           >
             <span style={{
-              width: 14, height: 14, borderRadius: 3,
-              border: '1px solid #185FA5',
+              width: 14, height: 14, borderRadius: 3, border: '1px solid #185FA5',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: isAll ? '#185FA5' : '#fff',
             }}>
@@ -307,27 +248,17 @@ const MultiSelectField: React.FC<{
                 key={opt.value}
                 onClick={() => toggleValue(opt.value)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 8px',
-                  fontSize: 12,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  color: '#374151',
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                  fontSize: 12, borderRadius: 4, cursor: 'pointer', color: '#374151',
                   background: checked ? '#EEF5FD' : 'transparent',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}
               >
                 <span style={{
-                  width: 14, height: 14, borderRadius: 3,
-                  border: '1px solid #d1d5db',
+                  width: 14, height: 14, borderRadius: 3, border: '1px solid #d1d5db',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: checked ? '#185FA5' : '#fff',
-                  borderColor: checked ? '#185FA5' : '#d1d5db',
-                  flexShrink: 0,
+                  borderColor: checked ? '#185FA5' : '#d1d5db', flexShrink: 0,
                 }}>
                   {checked && <Check size={10} color="#fff" />}
                 </span>
@@ -345,8 +276,6 @@ const MultiSelectField: React.FC<{
   );
 };
 
-// ── Simple single-select field (Yes / No — Group by Cost) ────────────────────
-
 const SingleSelectField: React.FC<{
   label: string;
   value: string;
@@ -355,11 +284,7 @@ const SingleSelectField: React.FC<{
 }> = ({ label, value, options, onChange }) => (
   <div style={{ marginBottom: 14 }}>
     <label style={fieldLabelStyle}>{label}</label>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={selectBaseStyle}
-    >
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={selectBaseStyle}>
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
@@ -371,10 +296,12 @@ const SingleSelectField: React.FC<{
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_values }) => {
-  const { divCode, companyCode } = required_values;
+  const {companyCode } = required_values;
   const { user } = useAuth();
   const printUser = user?.username;
-  const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const printDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
 
   const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
   const [activeTab, setActiveTab] = useState<'parameters' | 'report'>('parameters');
@@ -384,98 +311,130 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setPending((prev) => ({ ...prev, [key]: val }));
 
-  // ── Division master list (MS_HR_DIVISION) ─────────────────────────────────
+  // ── 1. DIVISIONS  (P_PARAMETER = GET_DIVISIONS) ───────────────────────────
   const { data: divisionRows = [], isLoading: isDivisionLoading } = useQuery<DivisionRow[]>({
-    queryKey: ['ms_hr_division_all'],
+    queryKey: ['budget_get_divisions'],
     queryFn: async () => {
-      const sql = `
-        SELECT DIV_CODE, DIV_NAME
-        FROM MS_HR_DIVISION
-        WHERE DIV_CODE IS NOT NULL
-        ORDER BY DIV_CODE
-      `;
-      const response = await WmsSerivceInstance.executeRawSql(sql);
-      return (response as DivisionRow[]) || [];
+      const res = await callBudgetProc({
+        parameter: 'GET_DIVISIONS',
+        companyCode: companyCode || undefined,
+      });
+      return normalizeRows<DivisionRow>(res, 'GET_DIVISIONS');
     },
   });
 
-  const divisionOptions = useMemo(() => divisionOptionsFromMaster(divisionRows), [divisionRows]);
+  const divisionOptions = useMemo<Option[]>(
+    () =>
+      divisionRows
+        .filter((r) => r.DIV_CODE)
+        .sort((a, b) => a.DIV_CODE.localeCompare(b.DIV_CODE))
+        .map((r) => ({ value: r.DIV_CODE, label: `${r.DIV_CODE} | ${r.DIV_NAME}` })),
+    [divisionRows]
+  );
 
-  // ── Data fetch (budget rows) ───────────────────────────────────────────────
-  const { data: allRows = [], isLoading } = useQuery<BudgetRow[]>({
-    queryKey: ['budget_status_all', divCode, companyCode],
+  // ── 2. PROJECTS  (P_PARAMETER = GET_PROJECTS) ─────────────────────────────
+  const divParamForProjects = joinOrAll(pending.division);
+
+  const { data: projectRows = [], isLoading: isProjectLoading } = useQuery<ProjectRow[]>({
+    queryKey: ['budget_get_projects', divParamForProjects, companyCode],
     queryFn: async () => {
-      const staticConditions: string[] = [];
-      if (divCode) staticConditions.push(`D.DIV_CODE = '${divCode.replace(/'/g, "''")}'`);
-      if (companyCode) staticConditions.push(`V.COMPANY_CODE = '${companyCode.replace(/'/g, "''")}'`);
-      const whereClause = [
-        `COST_CODE IS NOT NULL`,
-        `COST_NAME IS NOT NULL`,
-        ...staticConditions,
-      ].join('\n    AND ');
-
-      const sql = `
-       SELECT
-  V.BUDGET_YEAR,
-  V.MONTH_NUMBER,
-  V.MONTH_BUDGET,
-  V.PROJECT_NAME,
-  V.PROJECT_CODE,
-  V.COST_CODE,
-  V.COST_NAME,
-  D.DIV_CODE,
-  V.DIV_NAME,
-  V.APPROVED_AMT,
-  V.PR_AMOUNT,
-  V.PO_AMOUNT,
-  (V.PO_AMOUNT + V.PR_AMOUNT)                  AS TOT_UTILISED,
-  (V.APPROVED_AMT - (V.PO_AMOUNT + V.PR_AMOUNT)) AS BALANCE_AMT
-FROM VW_BO_BASIC_BUDGET_INFO_V1 V
-LEFT JOIN MS_HR_DIVISION D
-  ON UPPER(TRIM(V.DIV_NAME)) = UPPER(TRIM(D.DIV_NAME))
-WHERE ${whereClause}
-ORDER BY
-  V.PROJECT_NAME,
-  V.COST_CODE,
-  V.BUDGET_YEAR,
-  V.MONTH_NUMBER
-      `;
-      const response = await WmsSerivceInstance.executeRawSql(sql);
-      return (response as BudgetRow[]) || [];
+      const res = await callBudgetProc({
+        parameter: 'GET_PROJECTS',
+        divCode: divParamForProjects,
+        companyCode: companyCode || undefined,
+      });
+      return normalizeRows<ProjectRow>(res, 'GET_PROJECTS');
     },
   });
 
-  // ── Parameter dropdown options, derived from loaded rows ──────────────────
-  const projectOptions = useMemo(() => {
-  const selectedDivisions = pending.division;
+  const projectOptions = useMemo<Option[]>(
+    () =>
+      projectRows
+        .filter((r) => r.PROJECT_NAME)
+        .sort((a, b) => a.PROJECT_NAME.localeCompare(b.PROJECT_NAME))
+        .map((r) => ({ value: r.PROJECT_NAME, label: r.PROJECT_NAME })),
+    [projectRows]
+  );
 
-  const rows =
-    selectedDivisions.includes("All") || selectedDivisions.length === 0
-      ? allRows
-      : allRows.filter((r) => selectedDivisions.includes(r.DIV_CODE));
+  // ── 3. MONTHS  (P_PARAMETER = GET_MONTHS) ─────────────────────────────────
+  const { data: monthRows = [], isLoading: isMonthLoading } = useQuery<MonthRow[]>({
+    queryKey: ['budget_get_months', companyCode],
+    queryFn: async () => {
+      const res = await callBudgetProc({
+        parameter: 'GET_MONTHS',
+        companyCode: companyCode || undefined,
+      });
+      return normalizeRows<MonthRow>(res, 'GET_MONTHS');
+    },
+  });
 
-  return uniqueOptions(rows, "PROJECT_NAME");
-}, [allRows, pending.division]);
+  const monthOpts = useMemo<Option[]>(
+    () =>
+      monthRows
+        .filter((r) => r.MONTH_NUMBER != null)
+        .sort((a, b) => Number(a.MONTH_NUMBER) - Number(b.MONTH_NUMBER))
+        .map((r) => ({
+          value: String(r.MONTH_NUMBER),
+          label: MONTH_MAP[String(r.MONTH_NUMBER)] ?? r.MONTH_BUDGET ?? String(r.MONTH_NUMBER),
+        })),
+    [monthRows]
+  );
 
-  const monthOpts       = useMemo(() => monthOptions(allRows),                  [allRows]);
-  const costOpts        = useMemo(() => costCodeOptions(allRows),               [allRows]);
+  // ── 4. COST CODES  (P_PARAMETER = GET_COST_CODES) ─────────────────────────
+  const projectParamForCost = joinOrAll(pending.project_name);
 
-  // ── Apply the *applied* filters to build the rows the report will show ───
-  const filteredRows = useMemo(() => {
-    return allRows.filter((r) => {
-      const inOrAll = (values: string[], rowVal: string) =>
-        values.includes('All') || values.length === 0 || values.includes(rowVal);
+  const { data: costRows = [], isLoading: isCostLoading } = useQuery<CostRow[]>({
+    queryKey: ['budget_get_cost_codes', projectParamForCost, companyCode],
+    queryFn: async () => {
+      const res = await callBudgetProc({
+        parameter: 'GET_COST_CODES',
+        projectName: projectParamForCost,
+        companyCode: companyCode || undefined,
+      });
+      return normalizeRows<CostRow>(res, 'GET_COST_CODES');
+    },
+  });
 
-      if (!inOrAll(applied.division, r.DIV_CODE)) return false;
-      if (!inOrAll(applied.project_name, r.PROJECT_NAME)) return false;
-      if (!inOrAll(applied.month, r.MONTH_NUMBER)) return false;
-      if (!inOrAll(applied.cost_code, r.COST_CODE)) return false;
+  const costOpts = useMemo<Option[]>(
+    () =>
+      costRows
+        .filter((r) => r.COST_CODE)
+        .sort((a, b) => a.COST_CODE.localeCompare(b.COST_CODE))
+        .map((r) => ({
+          value: r.COST_CODE,
+          label: `${r.COST_CODE} | ${r.COST_NAME}`,
+        })),
+    [costRows]
+  );
 
-      return true;
+  // ── 5. MAIN REPORT  (P_PARAMETER = BUDGET_STATUS_SUMMARY) ─────────────────
+  // Only runs after user clicks Generate Report
+  const { data: reportRows = [], isLoading: isReportLoading, isFetching: isReportFetching } =
+    useQuery<BudgetRow[]>({
+      queryKey: [
+        'budget_status_summary',
+        applied.division,
+        applied.project_name,
+        applied.month,
+        applied.cost_code,
+        companyCode,
+      ],
+      enabled: hasGeneratedReport,
+      queryFn: async () => {
+        const res = await callBudgetProc({
+          parameter: 'BUDGET_STATUS_SUMMARY',
+          divCode: joinOrAll(applied.division),
+          companyCode: companyCode || undefined,
+          projectName: joinOrAll(applied.project_name),
+          monthNumber: joinOrAll(applied.month),
+          costCode: joinOrAll(applied.cost_code),
+        });
+        return normalizeRows<BudgetRow>(res, 'BUDGET_STATUS_SUMMARY');
+      },
     });
-  }, [allRows, applied]);
 
-  const groupBy = applied.group_by_cost === 'Yes' ? GROUP_BY_WITH_COST : GROUP_BY_PROJECT_ONLY;
+  const groupBy =
+    applied.group_by_cost === 'Yes' ? GROUP_BY_WITH_COST : GROUP_BY_PROJECT_ONLY;
 
   const handleGenerateReport = () => {
     setApplied({ ...pending });
@@ -490,10 +449,13 @@ ORDER BY
     setActiveTab('parameters');
   };
 
+  const isLoading =
+    isDivisionLoading || isProjectLoading || isMonthLoading || isCostLoading;
+
   // ── Excel export ───────────────────────────────────────────────────────────
   const handleExcel = async (filteredRows: BudgetRow[]) => {
     const XLSX = await import('xlsx');
-    const wb   = XLSX.utils.book_new();
+    const wb = XLSX.utils.book_new();
     const withCost = applied.group_by_cost === 'Yes';
 
     type ProjMap = Record<string, {
@@ -513,13 +475,17 @@ ORDER BY
       if (!projMap[projKey])
         projMap[projKey] = { projectName: r.PROJECT_NAME, projectCode: r.PROJECT_CODE, approved: 0, utilised: 0, costs: {} };
       if (!projMap[projKey].costs[costKey])
-        projMap[projKey].costs[costKey] = { costName: withCost ? r.COST_NAME : '', costCode: withCost ? r.COST_CODE : '', rows: [], approved: 0, utilised: 0 };
+        projMap[projKey].costs[costKey] = {
+          costName: withCost ? r.COST_NAME : '',
+          costCode: withCost ? r.COST_CODE : '',
+          rows: [], approved: 0, utilised: 0,
+        };
 
       projMap[projKey].costs[costKey].rows.push(r);
       projMap[projKey].costs[costKey].approved += approved;
       projMap[projKey].costs[costKey].utilised += utilised;
-      projMap[projKey].approved                += approved;
-      projMap[projKey].utilised                += utilised;
+      projMap[projKey].approved += approved;
+      projMap[projKey].utilised += utilised;
     }
 
     const projects = Object.values(projMap).map((p: any) => ({
@@ -541,20 +507,13 @@ ORDER BY
       proj.costs.forEach((cg: any) => {
         cg.rows.forEach((row: BudgetRow) => {
           const approved = parseFloat(String(row.APPROVED_AMT)) || 0;
-          const pr       = parseFloat(String(row.PR_AMOUNT)) || 0;
-          const po       = parseFloat(String(row.PO_AMOUNT)) || 0;
-          const util     = parseFloat(String(row.TOT_UTILISED)) || 0;
-          const bal      = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
+          const pr = parseFloat(String(row.PR_AMOUNT)) || 0;
+          const po = parseFloat(String(row.PO_AMOUNT)) || 0;
+          const util = parseFloat(String(row.TOT_UTILISED)) || 0;
+          const bal = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
           summaryData.push([
-            row.BUDGET_YEAR,
-            monthLabel(row),
-            approved,
-            pr,
-            po,
-            util,
-            bal,
-            withCost ? row.COST_CODE : '',
-            proj.projectName,
+            row.BUDGET_YEAR, monthLabel(row), approved, pr, po, util, bal,
+            withCost ? row.COST_CODE : '', proj.projectName,
           ]);
         });
         if (withCost) {
@@ -569,28 +528,27 @@ ORDER BY
     const ws = XLSX.utils.aoa_to_sheet(summaryData);
     ws['!cols'] = [{ wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Budget Summary');
-
     XLSX.writeFile(wb, 'Budget_Status_Summary.xlsx');
   };
 
   // ── PDF export ─────────────────────────────────────────────────────────────
   const handlePDF = async (filteredRows: BudgetRow[]) => {
-    const { jsPDF }               = await import('jspdf');
-    const { default: autoTable }  = await import('jspdf-autotable');
+    const { jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const withCost = applied.group_by_cost === 'Yes';
 
-    const pdf   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 14;
 
-    const NAVY      = [30, 58, 95]    as [number, number, number];
-    const COST      = [232, 236, 242] as [number, number, number];
-    const CTOT      = [241, 244, 248] as [number, number, number];
-    const PTOT      = [213, 220, 232] as [number, number, number];
-    const WHITE     = [255, 255, 255] as [number, number, number];
-    const DARK      = [55,  65,  81]  as [number, number, number];
-    const NAVY_TEXT = [30,  58,  95]  as [number, number, number];
-    const BORDER    = [209, 213, 219] as [number, number, number];
+    const NAVY = [30, 58, 95] as [number, number, number];
+    const COST = [232, 236, 242] as [number, number, number];
+    const CTOT = [241, 244, 248] as [number, number, number];
+    const PTOT = [213, 220, 232] as [number, number, number];
+    const WHITE = [255, 255, 255] as [number, number, number];
+    const DARK = [55, 65, 81] as [number, number, number];
+    const NAVY_TEXT = [30, 58, 95] as [number, number, number];
+    const BORDER = [209, 213, 219] as [number, number, number];
 
     const getBase64FromUrl = (url: string): Promise<string> =>
       new Promise((resolve, reject) => {
@@ -598,7 +556,7 @@ ORDER BY
         img.crossOrigin = 'anonymous';
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          canvas.width  = img.naturalWidth;
+          canvas.width = img.naturalWidth;
           canvas.height = img.naturalHeight;
           canvas.getContext('2d')!.drawImage(img, 0, 0);
           resolve(canvas.toDataURL('image/png'));
@@ -624,22 +582,22 @@ ORDER BY
       projMap[projKey].costs[costKey].rows.push(r);
       projMap[projKey].costs[costKey].approved += approved;
       projMap[projKey].costs[costKey].utilised += utilised;
-      projMap[projKey].approved                += approved;
-      projMap[projKey].utilised                += utilised;
+      projMap[projKey].approved += approved;
+      projMap[projKey].utilised += utilised;
     }
     const projects = Object.values(projMap).map((p: any) => ({ ...p, costs: Object.values(p.costs) }));
     const grandApproved = projects.reduce((s: number, p: any) => s + p.approved, 0);
     const grandUtilised = projects.reduce((s: number, p: any) => s + p.utilised, 0);
 
-    const HEADER_H  = 36;
-    const TITLE_Y   = 27;
+    const HEADER_H = 36;
+    const TITLE_Y = 27;
     const TABLE_TOP = 39;
 
     const drawPageHeader = (data: any) => {
       const pg = data.pageNumber as number;
       if (logoBase64) pdf.addImage(logoBase64, 'PNG', margin, 5, 32, 16);
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(107, 114, 128);
-      pdf.text(`Page ${pg}`,                pageW - margin, 9,  { align: 'right' });
+      pdf.text(`Page ${pg}`, pageW - margin, 9, { align: 'right' });
       pdf.text(`Print Date : ${printDate}`, pageW - margin, 14, { align: 'right' });
       pdf.text(`Print User : ${printUser}`, pageW - margin, 19, { align: 'right' });
       pdf.setFillColor(...NAVY);
@@ -649,45 +607,50 @@ ORDER BY
     };
 
     const body: any[] = [];
-    const cellPad = { top: 3.5, bottom: 3.5, left: 5,  right: 5 };
-    const indPad1 = { top: 3,   bottom: 3,   left: 12, right: 5 };
-
+    const cellPad = { top: 3.5, bottom: 3.5, left: 5, right: 5 };
+    const indPad1 = { top: 3, bottom: 3, left: 12, right: 5 };
     const fmtBal = (n: number) => (n < 0 ? `(${formatAmount(Math.abs(n))})` : formatAmount(n));
 
     projects.forEach((proj: any) => {
-      body.push([{ content: `Project :  ${proj.projectName}`, colSpan: 7, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } }]);
+      body.push([{
+        content: `Project :  ${proj.projectName}`, colSpan: 7,
+        styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
+      }]);
       proj.costs.forEach((cg: any) => {
         if (withCost) {
-          body.push([{ content: `Cost :  ${cg.costName}`, colSpan: 7, styles: { fillColor: COST, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: indPad1 } }]);
+          body.push([{
+            content: `Cost :  ${cg.costName}`, colSpan: 7,
+            styles: { fillColor: COST, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: indPad1 },
+          }]);
         }
         cg.rows.forEach((row: BudgetRow) => {
           const approved = parseFloat(String(row.APPROVED_AMT)) || 0;
-          const pr       = parseFloat(String(row.PR_AMOUNT)) || 0;
-          const po       = parseFloat(String(row.PO_AMOUNT)) || 0;
-          const util     = parseFloat(String(row.TOT_UTILISED)) || 0;
-          const bal      = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
+          const pr = parseFloat(String(row.PR_AMOUNT)) || 0;
+          const po = parseFloat(String(row.PO_AMOUNT)) || 0;
+          const util = parseFloat(String(row.TOT_UTILISED)) || 0;
+          const bal = parseFloat(String(row.BALANCE_AMT)) || (approved - util);
           body.push([
-            { content: row.BUDGET_YEAR,           styles: { fontSize: 8, halign: 'center' } },
-            { content: monthLabel(row),           styles: { fontSize: 8, halign: 'center' } },
-            { content: formatAmount(approved),    styles: { halign: 'right', fontSize: 8 } },
-            { content: formatAmount(pr),          styles: { halign: 'right', fontSize: 8 } },
-            { content: formatAmount(po),          styles: { halign: 'right', fontSize: 8 } },
-            { content: formatAmount(util),        styles: { halign: 'right', fontSize: 8 } },
-            { content: fmtBal(bal),               styles: { halign: 'right', fontSize: 8 } },
+            { content: row.BUDGET_YEAR, styles: { fontSize: 8, halign: 'center' } },
+            { content: monthLabel(row), styles: { fontSize: 8, halign: 'center' } },
+            { content: formatAmount(approved), styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(pr), styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(po), styles: { halign: 'right', fontSize: 8 } },
+            { content: formatAmount(util), styles: { halign: 'right', fontSize: 8 } },
+            { content: fmtBal(bal), styles: { halign: 'right', fontSize: 8 } },
           ]);
         });
         if (withCost) {
           body.push([
             { content: `Cost Total :  ${cg.costName}`, colSpan: 5, styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, cellPadding: indPad1 } },
-            { content: formatAmount(cg.utilised),       styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
+            { content: formatAmount(cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
             { content: fmtBal(cg.approved - cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
           ]);
         }
       });
       body.push([
         { content: `Project Total :  ${proj.projectName}`, colSpan: 5, styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: cellPad } },
-        { content: formatAmount(proj.utilised),             styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
-        { content: fmtBal(proj.approved - proj.utilised),   styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: formatAmount(proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: fmtBal(proj.approved - proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
       ]);
     });
 
@@ -700,19 +663,22 @@ ORDER BY
     autoTable(pdf, {
       startY: TABLE_TOP,
       margin: { left: margin, right: margin, top: HEADER_H + 4 },
-      columnStyles: { 0: { cellWidth: 18 }, 1: { cellWidth: 20 }, 2: { cellWidth: 32 }, 3: { cellWidth: 28 }, 4: { cellWidth: 28 }, 5: { cellWidth: 28 }, 6: { cellWidth: 28 } },
+      columnStyles: {
+        0: { cellWidth: 18 }, 1: { cellWidth: 20 }, 2: { cellWidth: 32 },
+        3: { cellWidth: 28 }, 4: { cellWidth: 28 }, 5: { cellWidth: 28 }, 6: { cellWidth: 28 },
+      },
       head: [[
-        { content: 'Year',            styles: { halign: 'center', fontSize: 10 } },
-        { content: 'Month',           styles: { halign: 'center', fontSize: 10 } },
-        { content: 'Approved Amount', styles: { halign: 'right',  fontSize: 10 } },
-        { content: 'PR Amount',       styles: { halign: 'right',  fontSize: 10 } },
-        { content: 'PO Amount',       styles: { halign: 'right',  fontSize: 10 } },
-        { content: 'Total Utilised',  styles: { halign: 'right',  fontSize: 10 } },
-        { content: 'Balance Amount',  styles: { halign: 'right',  fontSize: 10 } },
+        { content: 'Year', styles: { halign: 'center', fontSize: 10 } },
+        { content: 'Month', styles: { halign: 'center', fontSize: 10 } },
+        { content: 'Approved Amount', styles: { halign: 'right', fontSize: 10 } },
+        { content: 'PR Amount', styles: { halign: 'right', fontSize: 10 } },
+        { content: 'PO Amount', styles: { halign: 'right', fontSize: 10 } },
+        { content: 'Total Utilised', styles: { halign: 'right', fontSize: 10 } },
+        { content: 'Balance Amount', styles: { halign: 'right', fontSize: 10 } },
       ]],
       body,
-      headStyles:    { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
-      bodyStyles:    { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'ellipsize', minCellHeight: 0 },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
+      bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'ellipsize', minCellHeight: 0 },
       alternateRowStyles: {},
       tableLineColor: BORDER,
       tableLineWidth: 0.25,
@@ -739,8 +705,7 @@ ORDER BY
 
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
-        {/* Tab bar — always visible. Report tab is only clickable once a
-            report has actually been generated; until then it stays disabled. */}
+        {/* Tab bar */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10,
@@ -776,7 +741,8 @@ ORDER BY
             <BarChart2 size={13} /> Report
             {hasGeneratedReport && (
               <span style={{
-                fontSize: 9.5, background: activeTab === 'report' ? 'rgba(255,255,255,0.25)' : '#d1fae5',
+                fontSize: 9.5,
+                background: activeTab === 'report' ? 'rgba(255,255,255,0.25)' : '#d1fae5',
                 color: activeTab === 'report' ? '#fff' : '#065f46',
                 padding: '1px 7px', borderRadius: 10, fontWeight: 600,
               }}>
@@ -786,15 +752,16 @@ ORDER BY
           </button>
         </div>
 
+        {/* Parameters panel */}
         <div style={{
           display: activeTab === 'parameters' ? 'block' : 'none',
-          background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '8px 12px',
-          marginBottom: 12,
+          background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12,
+          padding: '8px 12px', marginBottom: 12,
         }}>
-
-          {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Budget Status Report — Summary</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
+              Budget Status Report — Summary
+            </span>
             {hasGeneratedReport && (
               <span style={{
                 fontSize: 10, background: '#d1fae5', color: '#065f46',
@@ -805,7 +772,6 @@ ORDER BY
             )}
           </div>
 
-          {/* Parameter form */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Division" bgColor={BG}>
@@ -814,12 +780,13 @@ ORDER BY
                   options={divisionOptions}
                   value={pending.division}
                   onChange={(v) => {
-  setPending((prev) => ({
-    ...prev,
-    division: v,
-    project_name: ['All'],
-  }));
-}}
+                    setPending((prev) => ({
+                      ...prev,
+                      division: v,
+                      project_name: ['All'],
+                      cost_code: ['All'],
+                    }));
+                  }}
                   loading={isDivisionLoading}
                 />
               </FloatLabel>
@@ -828,7 +795,14 @@ ORDER BY
                   label=""
                   options={projectOptions}
                   value={pending.project_name}
-                  onChange={(v) => setPendingField('project_name', v)}
+                  onChange={(v) => {
+                    setPending((prev) => ({
+                      ...prev,
+                      project_name: v,
+                      cost_code: ['All'],
+                    }));
+                  }}
+                  loading={isProjectLoading}
                 />
               </FloatLabel>
             </div>
@@ -840,6 +814,7 @@ ORDER BY
                   options={monthOpts}
                   value={pending.month}
                   onChange={(v) => setPendingField('month', v)}
+                  loading={isMonthLoading}
                 />
               </FloatLabel>
               <FloatLabel label="Cost Code" bgColor={BG}>
@@ -848,6 +823,7 @@ ORDER BY
                   options={costOpts}
                   value={pending.cost_code}
                   onChange={(v) => setPendingField('cost_code', v)}
+                  loading={isCostLoading}
                 />
               </FloatLabel>
             </div>
@@ -865,16 +841,19 @@ ORDER BY
             </div>
           </div>
 
-          {/* Action bar */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10, paddingTop: 8, borderTop: '0.5px solid #e5e7eb' }}>
+          <div style={{
+            display: 'flex', justifyContent: 'flex-end', gap: 8,
+            marginTop: 10, paddingTop: 8, borderTop: '0.5px solid #e5e7eb',
+          }}>
             <button
               className="action-btn-ghost"
               onClick={handleReset}
               disabled={isLoading}
               style={{
                 padding: '7px 16px', border: '0.5px solid #d1d5db', background: '#fff',
-                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-                gap: 6, fontSize: 12, borderRadius: 6, color: '#374151', opacity: isLoading ? 0.6 : 1,
+                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex',
+                alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 6,
+                color: '#374151', opacity: isLoading ? 0.6 : 1,
               }}
             >
               <RotateCcw size={13} /> Reset
@@ -885,22 +864,24 @@ ORDER BY
               onClick={handleGenerateReport}
               disabled={isLoading}
               style={{
-                padding: '7px 16px', border: '0.5px solid #185FA5', background: isLoading ? '#94a3b8' : '#185FA5',
-                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-                gap: 6, fontSize: 12, borderRadius: 6, color: '#fff', transition: 'background 0.2s',
+                padding: '7px 16px', border: '0.5px solid #185FA5',
+                background: isLoading ? '#94a3b8' : '#185FA5',
+                cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex',
+                alignItems: 'center', gap: 6, fontSize: 12, borderRadius: 6,
+                color: '#fff', transition: 'background 0.2s',
               }}
             >
-              <Printer size={13} /> {isLoading ? 'Loading data…' : 'Generate Report'}
+              <Printer size={13} /> {isLoading ? 'Loading…' : 'Generate Report'}
             </button>
           </div>
         </div>
 
-        {/* Report only appears after Generate Report is clicked, and only while the Report tab is active */}
+        {/* Report panel */}
         {hasGeneratedReport && activeTab === 'report' && (
           <GroupedReportTable<BudgetRow>
             title="Budget Status Report — Summary"
-            rows={filteredRows}
-            isLoading={isLoading}
+            rows={reportRows}
+            isLoading={isReportLoading || isReportFetching}
             columns={COLUMNS}
             groupBy={groupBy}
             amountKey="TOT_UTILISED"
