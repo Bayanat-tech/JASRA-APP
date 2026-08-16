@@ -34,6 +34,7 @@ export interface ILeaveHistory {
   EMPLOYEE_NAME: string;
   LEAVE_TYPE: string;
   LEAVE_TYPE_DESC: string;
+  LEAVE_DESC?: string;
   LEAVE_START_DATE: string;
   LEAVE_END_DATE: string;
   HDR_LVE_SLNO: number;
@@ -93,15 +94,15 @@ const HrEmployeeRegisterMainPage: React.FC<Props> = ({ leaveTypes = [], leaveDat
   SELECT DISTINCT *
   FROM (
     SELECT *
-    FROM VW_HR_EMPLOYEE
+    FROM VW_HR_EMPLOYEE_NEW
     WHERE EMP_STATUS <> 'S'
     START WITH
       EMPLOYEE_ID = '${user?.loginid1}'
       OR SUPERVISOR_EMPID = '${user?.loginid1}'
-      OR DEPT_HEAD_EMPID = '${user?.loginid1}'
+      OR DEPT_HEAD_EMP_ID = '${user?.loginid1}'
       OR MANGR_EMPID = '${user?.loginid1}'
     CONNECT BY NOCYCLE PRIOR EMPLOYEE_ID = SUPERVISOR_EMPID
-      OR PRIOR EMPLOYEE_ID = DEPT_HEAD_EMPID
+      OR PRIOR EMPLOYEE_ID = DEPT_HEAD_EMP_ID
       OR PRIOR EMPLOYEE_ID = MANGR_EMPID
   )
 `;
@@ -342,7 +343,7 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
         if (!uniqueTypes.has(item.LEAVE_TYPE)) {
           uniqueTypes.set(item.LEAVE_TYPE, {
             id: item.LEAVE_TYPE,
-            name: item.LEAVE_TYPE_DESC || item.LEAVE_TYPE
+            name: item.LEAVE_DESC || item.LEAVE_TYPE
           });
         }
       });
@@ -491,6 +492,13 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
                   label={intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type'}
                   onChange={(e) => setLeaveType(e.target.value)}
                   disabled={!employee || initialLeaveHistoryLoading}
+                  renderValue={(selected) => {
+                    if (selected === 'ALL') {
+                      return intl.formatMessage({ id: 'AllLeaveTypes' }) || 'AllLeaveTypes';
+                    }
+                    const match = allEmployeeLeaveTypes.find((t) => t.id === selected);
+                    return match?.name || selected;
+                  }}
                 >
                   <MenuItem value="ALL">{intl.formatMessage({ id: 'AllLeaveTypes' }) || 'AllLeaveTypes'}</MenuItem>
                   {allEmployeeLeaveTypes.map((type) => (

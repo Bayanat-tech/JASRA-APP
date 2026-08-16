@@ -49,5 +49,5 @@ export type TLeaveApproval = {
   ENGRTHEAD_NAME?: string;
   HOD_NAME?: string;
   DEPT_HEAD_NAME?: string;
-
+  SENIOR_HR_NAME?: string;
 };

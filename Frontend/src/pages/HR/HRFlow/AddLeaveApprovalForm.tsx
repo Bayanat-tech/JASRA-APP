@@ -10,8 +10,8 @@ import {
   Typography,
   Box,
   Checkbox,
-  Alert,
-  Collapse,
+    Alert,
+    Collapse,
   FormControlLabel,
   Snackbar,
   Autocomplete,
@@ -129,6 +129,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     ENGRTHEAD_NAME : string;
     HOD_NAME: string;
     DEPT_HEAD_NAME: string;
+    SENIOR_HR_NAME: string;
     [key: string]: any;
   };
 
@@ -181,6 +182,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     ENGRTHEAD_NAME: '',
     HOD_NAME: '',
     DEPT_HEAD_NAME: '',
+    SENIOR_HR_NAME: '',
   });
   const [filesDialogOpen, setFilesDialogOpen] = useState(false);
 
@@ -224,14 +226,14 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   const sql_string = `
-   SELECT * FROM VW_HR_EMPLOYEE WHERE EMPLOYEE_ID = '${user?.loginid1}'
+   SELECT * FROM VW_HR_EMPLOYEE_NEW WHERE EMPLOYEE_ID = '${formData.EMPLOYEE_ID || data?.EMPLOYEE_ID || user?.loginid1}'
   `;
 
   const { data: currentUserEmployeeData } = useQuery({
     queryKey: ['currentUserEmployeeData', sql_string],
     queryFn: async () => {
       const result = await HrServiceInstance.executeRawSql(sql_string);
-      return result?.[0]; // Return only the first element
+      return result?.[0]; 
     }
   });
   const currentUserApprovers = currentUserEmployeeData?.data?.[0] ?? currentUserEmployeeData;
@@ -359,10 +361,11 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         ENGNR_EMPID : currentUserEmployeeData.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: currentUserEmployeeData.DEPT_HEAD_EMPID || '',
         MANGR_EMPID: currentUserEmployeeData.MANGR_EMPID || '',
-        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.IMMEDIATE_SUPERVISOR_NAME || '',
+        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.SUPERVISOR_NAME || '',
         ENGRTHEAD_NAME : currentUserEmployeeData.ENGRTHEAD_NAME || '',
         HOD_NAME: currentUserEmployeeData.HOD_NAME || '',
-        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: currentUserEmployeeData.SENIOR_HR_NAME || '',
       }));
       setFormReady(true);
 
@@ -372,20 +375,21 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   }, [currentUserEmployeeData]);
 
   useEffect(() => {
-    if (data) {
+    if (data && currentUserEmployeeData) {
       setFormData((prev: any) => ({
         ...prev,
         SUPERVISOR_EMPID: currentUserEmployeeData.SUPERVISOR_EMPID || '',
         ENGNR_EMPID : currentUserEmployeeData.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: currentUserEmployeeData.DEPT_HEAD_EMPID || '',
         MANGR_EMPID: currentUserEmployeeData.MANGR_EMPID || '',
-        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.IMMEDIATE_SUPERVISOR_NAME || '',
+        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.SUPERVISOR_NAME || '',
         ENGRTHEAD_NAME : currentUserEmployeeData.ENGRTHEAD_NAME || '',
         HOD_NAME: currentUserEmployeeData.HOD_NAME || '',
-        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: currentUserEmployeeData.SENIOR_HR_NAME || '',
       }));
     }
-  }, [data]);
+  }, [data , currentUserEmployeeData]);
 
   useEffect(() => {
     if (formData.EMPLOYEE_ID) {
@@ -434,7 +438,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         IMMEDIATE_SUPERVISOR_NAME: newInsertedData.IMMEDIATE_SUPERVISOR_NAME || '',
         ENGRTHEAD_NAME :newInsertedData.ENGRTHEAD_NAME || '',
         HOD_NAME: newInsertedData.HOD_NAME || '',
-        DEPT_HEAD_NAME: newInsertedData.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: newInsertedData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: newInsertedData.SENIOR_HR_NAME ||'',
       });
       setFormReady(true);
     }
@@ -478,7 +483,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         IMMEDIATE_SUPERVISOR_NAME: data.IMMEDIATE_SUPERVISOR_NAME || '',
         ENGRTHEAD_NAME : data.ENGRTHEAD_NAME || '',
         HOD_NAME: data.HOD_NAME || '',
-        DEPT_HEAD_NAME: data.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: data.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: data.SENIOR_HR_NAME || '',
       });
       setFormReady(true);
     }
@@ -1016,7 +1022,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         SUPERVISOR_EMPID: value.SUPERVISOR_EMPID || '',
         ENGNR_EMPID: value.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: value.DEPT_HEAD_EMPID || '',
-        MANGR_EMPID: value.MANGR_EMPID || ''
+        MANGR_EMPID: value.MANGR_EMPID || '',
       }));
 
       // Fetch leave types for the selected employee
@@ -1466,7 +1472,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   {
                     label: intl.formatMessage({ id: 'Immediate Supervisor' }) || 'Immediate Supervisor',
                     key: 'SUPERVISOR',
-                    name: currentUserApprovers?.SUP_NAME
+                    name: currentUserApprovers?.SUPERVISOR_NAME
                   },
                   {
                     label: intl.formatMessage({ id: 'Engineer' }) || 'Engineer',
@@ -1476,12 +1482,17 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   {
                     label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
                     key: 'DEPT_HEAD',
-                    name: currentUserApprovers?.DEPTHEAD_NAME
+                    name: currentUserApprovers?.DEPT_HEAD_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'HOD' }) || 'HOD',
+                    label: intl.formatMessage({ id: 'Senior payroll' }) || 'Senior payroll',
                     key: 'HOD',
                     name: currentUserApprovers?.MANAGER_NAME
+                  },
+                  {
+                    label: intl.formatMessage({ id: 'HR Manager' }) || 'HR Manager',
+                    key: 'SENIOR_HR_NAME',
+                    name: currentUserApprovers?.SENIOR_HR_NAME
                   }
                 ].map(({ label, key, name }) => (
                   <div key={key}>
