@@ -7,9 +7,6 @@ import jsPDF from 'jspdf';
 import React from 'react';
 import useAuth from 'hooks/useAuth';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 interface IHrEmployee {
   EMPLOYEE_ID: string;
   EMPLOYEE_CODE: string;
@@ -60,12 +57,12 @@ interface IVisaExpiryRow {
 // Logo URLs
 const headerLogoForDiv10 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fmfs1.jpg";
 const headerTopForDiv10 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fmfs2.jpg";
+const headerLogoForDiv16 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fand1.jpg";
+const headerTopForDiv16 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fand2.jpg";
+const logoForDiv13 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2FlogoForDiv13.jpg";
 
-// ---------------------------------------------------------------------------
-// Small presentational helpers
-// ---------------------------------------------------------------------------
 
-/** Label : value row with a fixed-width label, mirroring the old MUI LabelValue */
+
 const LabelValue = ({
   label,
   value,
@@ -87,9 +84,6 @@ const Spinner = () => (
   <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
 );
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 const ViewPayslipReport = () => {
   const { employeeId, month, year } = useParams<{ employeeId: string; month: string; year: string }>();
@@ -300,9 +294,17 @@ const ViewPayslipReport = () => {
     }
   }, [isPrintView, isLoading, headerData]);
 
-  // ---------------------------------------------------------------------
-  // Early return states
-  // ---------------------------------------------------------------------
+    // Division logo mapping
+    const divisionLogos: Record<string, { left?: string; right?: string; center?: string }> = {
+      '10': { left: headerTopForDiv10, right: headerLogoForDiv10 },
+      '16': { left: headerTopForDiv16, right: headerLogoForDiv16 },
+      '13': { center: logoForDiv13 }
+    };
+
+    const defaultDivision = '10';
+    const selectedDivision = header?.DIV_CODE?.toString().trim() || defaultDivision;
+    const logos = divisionLogos[selectedDivision] || divisionLogos[defaultDivision];
+
 
   if (isLoadingSupervisor) {
     return (
@@ -399,10 +401,6 @@ const ViewPayslipReport = () => {
     );
   }
 
-  // ---------------------------------------------------------------------
-  // Derived data
-  // ---------------------------------------------------------------------
-
   const earnings: IPayComponent[] = earningsData || [];
   const deductions: IPayComponent[] = deductionsData || [];
   const attendance: IAttendanceRow[] = attendanceData || [];
@@ -423,23 +421,20 @@ const exportToPDF = async () => {
     // Clone the element to avoid modifying the visible UI
     const clone = element.cloneNode(true) as HTMLElement;
 
-    // Remove action buttons if they are inside the clone (usually they are outside)
     const noPrintEls = clone.querySelectorAll('.no-print');
     noPrintEls.forEach((el) => el.remove());
 
-    // Style the clone for reliable off‑screen rendering
-    clone.style.position = 'absolute';          // absolute is more reliable than fixed
+    clone.style.position = 'absolute';          
     clone.style.left = '-9999px';
     clone.style.top = '0';
     clone.style.width = '800px';
     clone.style.backgroundColor = 'white';
     clone.style.height = 'auto';
     clone.style.overflow = 'visible';
-    clone.style.visibility = 'visible';          // make sure it's not hidden by any inherited rule
+    clone.style.visibility = 'visible';          
 
     document.body.appendChild(clone);
 
-    // Wait a moment for images and layout to settle
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     const canvas = await html2canvas(clone, {
@@ -497,10 +492,6 @@ const exportToPDF = async () => {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      {/* Print-only rules: hide EVERYTHING in the page (navbar, sidebar, menu,
-          action buttons, etc.) except the payslip itself. This works
-          regardless of where those elements live in the DOM, since the app
-          shell is outside this component's control. */}
       <style>{`
         @media print {
           @page { size: A4; margin: 0; }
@@ -567,27 +558,40 @@ const exportToPDF = async () => {
         style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}
       >
         {/* ===== HEADER WITH LOGOS ===== */}
-        <div className="flex items-center justify-between pb-1">
-          <div className="w-[180px]">
+        {logos.center ? (
+          // Single centered logo (used by division 13)
+          <div className="flex justify-center pb-1">
             <img
-              src={headerTopForDiv10}
-              alt="Company Logo Left"
-              className="h-auto w-full object-contain"
-              style={{ maxHeight: 70 }}
+              src={logos.center}
+              alt="Company Logo"
+              className="h-auto object-contain"
+              style={{ maxHeight: 80, maxWidth: '100%' }}
             />
           </div>
-          <div className="w-[120px]">
-            <img
-              src={headerLogoForDiv10}
-              alt="Company Logo Right"
-              className="h-auto w-full object-contain"
-              style={{ maxHeight: 65 }}
-            />
+        ) : (
+          // Two logos side by side (used by divisions 10 and 16)
+          <div className="flex items-center justify-between pb-1">
+            <div className="w-[180px]">
+              <img
+                src={logos.left}
+                alt="Company Logo Left"
+                className="h-auto w-full object-contain"
+                style={{ maxHeight: 70 }}
+              />
+            </div>
+            <div className="w-[120px]">
+              <img
+                src={logos.right}
+                alt="Company Logo Right"
+                className="h-auto w-full object-contain"
+                style={{ maxHeight: 65 }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Divider Line */}
-        {/* <div className="mb-2 mt-0.5 border-t-2 border-black" /> */}
+        <div className="mb-2 mt-0.5 border-t-2 border-black" />
 
         {/* ===== PAYSLIP TITLE ===== */}
         <p className="mb-4 border-b border-gray-300 pb-2 text-[0.95rem] font-bold tracking-[3px] text-black">
