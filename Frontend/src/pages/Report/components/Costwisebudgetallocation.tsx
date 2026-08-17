@@ -179,6 +179,32 @@ function getDistinctOptions(column: string, filterKey: string, viewType: ViewTyp
   };
 }
 
+// ── Project Name options — sourced directly from MS_PS_PROJECT_MASTER ────
+// NOTE: MS_PS_PROJECT_MASTER has DIV_CODE but no DIV_NAME column, so this
+// dropdown only filters by COMPANY_CODE and is NOT cascaded off the
+// Division filter (unlike Cost Code, which still cascades off the view).
+function getProjectNameOptionsFromMaster() {
+  return async (_filters: ReportFilters, companyCode?: string): Promise<string[]> => {
+    const where: string[] = [];
+
+    if (companyCode) {
+      where.push(`COMPANY_CODE = ${sqlStr(companyCode)}`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join('\n  AND ')}` : '';
+
+    const sql = `
+      SELECT DISTINCT PROJECT_NAME AS value
+      FROM MS_PS_PROJECT_MASTER
+      ${whereClause}
+      ORDER BY PROJECT_NAME
+    `;
+
+    const rows = await runRawSql<any>(sql);
+    return rows.map((r) => String(r.VALUE ?? r.value ?? '').trim()).filter(Boolean);
+  };
+}
+
 // ── Field configurations ────────────────────────────────────────────────
 const budgetReportFields: ParamFieldConfig[][] = [
   [
@@ -193,7 +219,7 @@ const budgetReportFields: ParamFieldConfig[][] = [
       type: 'multiselect',
       key: 'project_name',
       label: 'Project Name',
-      fetchOptions: getDistinctOptions('PROJECT_NAME', 'project_name', 'cost'),
+      fetchOptions: getProjectNameOptionsFromMaster(),
       placeholder: 'All Projects',
     },
   ],
