@@ -6,6 +6,9 @@
  *  - columns       : ColumnDef<T>[]          Column definitions
  *  - groupBy       : GroupByConfig<T>[]      Ordered list of grouping levels (outer → inner)
  *  - amountKey     : keyof T                 Field used for subtotals / grand total
+ *  - balanceKey?   : keyof T                 Optional second field summed alongside amountKey
+ *                                             (e.g. Balance Amount) — shown in its own column
+ *                                             on every subtotal row and the grand-total bar.
  *  - title         : string                  Report title shown in header bar
  *  - filterDefs    : FilterDef<T>[]          Filter fields for the side panel
  *  - isLoading?    : boolean
@@ -55,12 +58,13 @@ export type FilterDef<T> = {
 type SortConfig<T> = { col: keyof T | null; dir: 'asc' | 'desc' };
 
 type GroupNode<T> = {
-  key:      string;
-  label:    string;
-  children: GroupNode<T>[] | T[];
-  total:    number;
-  depth:    number;
-  isLeaf:   boolean;
+  key:           string;
+  label:         string;
+  children:      GroupNode<T>[] | T[];
+  total:         number;
+  balanceTotal:  number;
+  depth:         number;
+  isLeaf:        boolean;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,6 +92,7 @@ function buildGroups<T>(
   rows: T[],
   groupBy: GroupByConfig<T>[],
   amountKey: keyof T,
+  balanceKey: keyof T | undefined,
   depth = 0,
 ): GroupNode<T>[] {
   if (groupBy.length === 0) return [];
@@ -107,16 +112,20 @@ function buildGroups<T>(
     const total = groupRows.reduce(
       (s, r) => s + (parseFloat(String((r as any)[amountKey])) || 0), 0,
     );
+    const balanceTotal = balanceKey
+      ? groupRows.reduce((s, r) => s + (parseFloat(String((r as any)[balanceKey])) || 0), 0)
+      : 0;
     const isLeaf = rest.length === 0;
     return {
       key: label,
       label,
       total,
+      balanceTotal,
       depth,
       isLeaf,
       children: isLeaf
         ? groupRows
-        : buildGroups(groupRows, rest, amountKey, depth + 1),
+        : buildGroups(groupRows, rest, amountKey, balanceKey, depth + 1),
     } as GroupNode<T>;
   });
 }
@@ -411,15 +420,57 @@ function FilterPanel<T>({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Total-row cell renderer — places amount / balance totals in their own
+// columns, and merges everything before them into a single label cell.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderTotalCells<T>(
+  columns: ColumnDef<T>[],
+  amountKey: keyof T,
+  balanceKey: keyof T | undefined,
+  amountVal: number,
+  balanceVal: number,
+  labelContent: ReactNode,
+  labelPaddingLeft: number,
+): ReactNode {
+  const colCount = columns.length;
+  const specialIdxs = columns
+    .map((c, i) => ({ i, key: c.key }))
+    .filter(c => c.key === amountKey || (balanceKey !== undefined && c.key === balanceKey))
+    .map(c => c.i);
+
+  const firstSpecialIdx = specialIdxs.length ? Math.min(...specialIdxs) : colCount - 1;
+  const labelColSpan = firstSpecialIdx > 0 ? firstSpecialIdx : 1;
+
+  return (
+    <>
+      <td colSpan={labelColSpan} style={{ paddingLeft: labelPaddingLeft }}>
+        {labelContent}
+      </td>
+      {columns.slice(labelColSpan).map((col, offset) => {
+        if (col.key === amountKey) {
+          return <td key={String(col.key)} className="num">{formatAmount(amountVal)}</td>;
+        }
+        if (balanceKey !== undefined && col.key === balanceKey) {
+          return <td key={String(col.key)} className="num">{formatAmount(balanceVal)}</td>;
+        }
+        return <td key={String(col.key) + offset} />;
+      })}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Recursive row renderer
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GroupRows<T>({
-  nodes, columns, amountKey, groupBy, sortedRows, collapsed, toggleCollapse,
+  nodes, columns, amountKey, balanceKey, groupBy, sortedRows, collapsed, toggleCollapse,
 }: {
   nodes:          GroupNode<T>[];
   columns:        ColumnDef<T>[];
   amountKey:      keyof T;
+  balanceKey:     keyof T | undefined;
   groupBy:        GroupByConfig<T>[];
   sortedRows:     (rows: T[]) => T[];
   collapsed:      Set<string>;
@@ -432,7 +483,7 @@ function GroupRows<T>({
     const groupDef  = groupBy[node.depth];
     const depthCls  = `group-row-${node.depth}`;
     const totalCls  = `total-row-${node.depth}`;
-    const amtColIdx = columns.findIndex(c => c.key === amountKey);
+    const padLeft   = node.depth === 0 ? 14 : node.depth === 1 ? 24 : 36;
 
     return (
       <React.Fragment key={node.key}>
@@ -465,15 +516,11 @@ function GroupRows<T>({
                 ))}
                 {/* Leaf subtotal */}
                 <tr className={totalCls}>
-                  <td colSpan={amtColIdx > 0 ? amtColIdx : colCount - 1}
-                      style={{ paddingLeft: node.depth === 0 ? 14 : node.depth === 1 ? 24 : 36 }}>
-                    {groupDef.label} Total : {node.label}
-                  </td>
-                  {amtColIdx >= 0 && (
-                    <td className="num">{formatAmount(node.total)}</td>
-                  )}
-                  {amtColIdx >= 0 && amtColIdx < colCount - 1 && (
-                    <td colSpan={colCount - amtColIdx - 1} />
+                  {renderTotalCells(
+                    columns, amountKey, balanceKey,
+                    node.total, node.balanceTotal,
+                    `${groupDef.label} Total : ${node.label}`,
+                    padLeft,
                   )}
                 </tr>
               </>
@@ -482,15 +529,11 @@ function GroupRows<T>({
                 {(node.children as GroupNode<T>[]).map(child => renderNode(child))}
                 {/* Subtotal for this group */}
                 <tr className={totalCls}>
-                  <td colSpan={amtColIdx > 0 ? amtColIdx : colCount - 1}
-                      style={{ paddingLeft: node.depth === 0 ? 14 : 24 }}>
-                    {groupDef.label} Total : {node.label}
-                  </td>
-                  {amtColIdx >= 0 && (
-                    <td className="num">{formatAmount(node.total)}</td>
-                  )}
-                  {amtColIdx >= 0 && amtColIdx < colCount - 1 && (
-                    <td colSpan={colCount - amtColIdx - 1} />
+                  {renderTotalCells(
+                    columns, amountKey, balanceKey,
+                    node.total, node.balanceTotal,
+                    `${groupDef.label} Total : ${node.label}`,
+                    node.depth === 0 ? 14 : 24,
                   )}
                 </tr>
               </>
@@ -511,6 +554,8 @@ export type GroupedReportTableProps<T extends Record<string, any>> = {
   columns:     ColumnDef<T>[];
   groupBy:     GroupByConfig<T>[];
   amountKey:   keyof T;
+  /** Optional second field summed alongside amountKey (e.g. Balance Amount) */
+  balanceKey?: keyof T;
   title:       string;
   filterDefs?: FilterDef<T>[];
   isLoading?:  boolean;
@@ -528,6 +573,7 @@ function GroupedReportTable<T extends Record<string, any>>({
   columns,
   groupBy,
   amountKey,
+  balanceKey,
   title,
   filterDefs = [],
   isLoading  = false,
@@ -600,8 +646,12 @@ function GroupedReportTable<T extends Record<string, any>>({
     });
   }, [sort]);
 
-  const groups     = useMemo(() => buildGroups(filteredRows, groupBy, amountKey), [filteredRows, groupBy, amountKey]);
-  const grandTotal = groups.reduce((s, g) => s + g.total, 0);
+  const groups = useMemo(
+    () => buildGroups(filteredRows, groupBy, amountKey, balanceKey),
+    [filteredRows, groupBy, amountKey, balanceKey],
+  );
+  const grandTotal        = groups.reduce((s, g) => s + g.total, 0);
+  const grandBalanceTotal = groups.reduce((s, g) => s + g.balanceTotal, 0);
   const isFiltered = Object.values(applied).some(Boolean) || search.trim().length > 0;
 
   // ── Collect all group keys for collapse-all ──
@@ -730,6 +780,7 @@ function GroupedReportTable<T extends Record<string, any>>({
                         nodes={groups}
                         columns={columns}
                         amountKey={amountKey}
+                        balanceKey={balanceKey}
                         groupBy={groupBy}
                         sortedRows={sortedRows}
                         collapsed={collapsed}
@@ -749,10 +800,11 @@ function GroupedReportTable<T extends Record<string, any>>({
               <table>
                 <tbody>
                   <tr>
-                    <td colSpan={amtColIdx > 0 ? amtColIdx : columns.length - 1}>Grand Total :</td>
-                    <td className="num">{formatAmount(grandTotal)}</td>
-                    {amtColIdx < columns.length - 1 && (
-                      <td colSpan={columns.length - amtColIdx - 1} />
+                    {renderTotalCells(
+                      columns, amountKey, balanceKey,
+                      grandTotal, grandBalanceTotal,
+                      'Grand Total :',
+                      0,
                     )}
                   </tr>
                 </tbody>

@@ -885,6 +885,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
             columns={COLUMNS}
             groupBy={groupBy}
             amountKey="TOT_UTILISED"
+            balanceKey="BALANCE_AMT"
             filterDefs={[]}
             searchKeys={['PROJECT_NAME', 'COST_NAME']}
             logo={companyLogo}
