@@ -93,7 +93,7 @@ const HrEmployeeRegisterMainPage: React.FC<Props> = ({ leaveTypes = [], leaveDat
  const sql_string = `
   SELECT DISTINCT *
   FROM (
-    SELECT *
+    SELECT EMPLOYEE_ID , RPT_NAME
     FROM VW_HR_EMPLOYEE_NEW
     WHERE EMP_STATUS <> 'S'
     START WITH
