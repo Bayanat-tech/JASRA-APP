@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import WmsSerivceInstance from 'service/wms/service.wms';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
@@ -26,21 +26,51 @@ type DeptGroup = { deptCode: string; deptName: string; rows: LeaveRow[] };
 type DivGroup  = { divCode: string; divName: string; departments: DeptGroup[] };
 
 type Filters = {
-  div_code:   string;
-  dept_code:  string;
-  emp_search: string;
+  div_code:        string[];
+  dept_code:       string[];
+  emp_search:      string;
+  projection_date: string;
 };
 
 type FilterOptions = {
   divisions:   { code: string; name: string }[];
-  departments: { code: string; name: string }[];
+  departments: { code: string; name: string; divCode: string }[];
 };
+
+function describeFilters(applied: Filters, options: FilterOptions, search: string): string {
+  const parts: string[] = [];
+  if (applied.div_code.length) {
+    const names = applied.div_code.map(c => options.divisions.find(d => d.code === c)?.name ?? c);
+    parts.push(`Division: ${names.join(', ')}`);
+  }
+  if (applied.dept_code.length) {
+    const names = applied.dept_code.map(c => options.departments.find(d => d.code === c)?.name ?? c);
+    parts.push(`Department: ${names.join(', ')}`);
+  }
+  if (applied.emp_search)      parts.push(`Employee: ${applied.emp_search}`);
+  if (applied.projection_date) parts.push(`Projection Date: ${applied.projection_date}`);
+  if (search.trim())           parts.push(`Search: "${search.trim()}"`);
+  return parts.join(' | ');
+}
 
 type SortConfig = { col: keyof LeaveRow | null; dir: 'asc' | 'desc' };
 
 // ── Helpers ───────────────────────────────────────────────
 function formatDays(n: number) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+// Returns how many calendar months ahead dateStr is from the current month
+// (e.g. today is in August, dateStr is in October → 2). 0 (or negative) if
+// dateStr is this month or in the past.
+function monthsAheadOf(dateStr: string): number {
+  if (!dateStr) return 0;
+  const selected = new Date(dateStr);
+  if (isNaN(selected.getTime())) return 0;
+  const now = new Date();
+  const selectedYM = selected.getFullYear() * 12 + selected.getMonth();
+  const nowYM      = now.getFullYear() * 12 + now.getMonth();
+  return Math.max(0, selectedYM - nowYM);
 }
 
 // ── Grouping: Division → Department → Details ────────────
@@ -69,9 +99,124 @@ function SortArrow({ col, sort }: { col: keyof LeaveRow; sort: SortConfig }) {
   return <span style={{ marginLeft: 4 }}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
 }
 
+// ── Multi-select dropdown with typeahead (Division / Department) ──
+function MultiSelectDropdown({
+  label, options, selected, onChange, placeholder = 'All', emptyLabel,
+}: {
+  label:       string;
+  options:     { code: string; name: string }[];
+  selected:    string[];
+  onChange:    (codes: string[]) => void;
+  placeholder?: string;
+  emptyLabel?: string;
+}) {
+  const [open, setOpen]   = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click, and clear the typeahead text each time it closes.
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(o => o.name.toLowerCase().includes(q));
+  }, [options, query]);
+
+  const toggle = (code: string) => {
+    onChange(selected.includes(code) ? selected.filter(c => c !== code) : [...selected, code]);
+  };
+
+  const selectedNames = selected.map(c => options.find(o => o.code === c)?.name ?? c);
+  const summary =
+    selected.length === 0 ? placeholder :
+    selected.length <= 2  ? selectedNames.join(', ') :
+    `${selectedNames.slice(0, 2).join(', ')} +${selected.length - 2} more`;
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {label}{selected.length > 0 && ` (${selected.length})`}
+      </label>
+
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', textAlign: 'left', padding: '9px 10px', fontSize: 13,
+          color: selected.length ? '#111' : '#9ca3af', border: '1.5px solid #d1d5db',
+          borderRadius: 7, background: '#fff', cursor: 'pointer', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
+        <span style={{ fontSize: 10, color: '#9ca3af', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: '#fff', border: '1.5px solid #d1d5db', borderRadius: 7,
+          boxShadow: '0 10px 28px rgba(0,0,0,0.14)', zIndex: 300, overflow: 'hidden',
+        }}>
+          {/* Typeahead / autoselect search */}
+          <div style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+            <input
+              autoFocus
+              type="text"
+              placeholder={`Search ${label.toLowerCase()}…`}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              style={{ width: '100%', padding: '7px 8px', fontSize: 12.5, color: '#111', border: '1px solid #d1d5db', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div style={{ maxHeight: 170, overflowY: 'auto', padding: '4px 6px' }}>
+            {filtered.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#9ca3af', padding: '8px 4px' }}>{emptyLabel ?? 'No matches'}</div>
+            ) : filtered.map(o => (
+              <label key={o.code} style={{
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#374151',
+                padding: '6px 4px', cursor: 'pointer', borderRadius: 5,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(o.code)}
+                  onChange={() => toggle(o.code)}
+                  style={{ cursor: 'pointer', accentColor: '#1f2937' }}
+                />
+                {o.name}
+              </label>
+            ))}
+          </div>
+
+          {selected.length > 0 && (
+            <div style={{ borderTop: '1px solid #e5e7eb', padding: '6px 8px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => onChange([])}
+                style={{ border: 'none', background: 'none', color: '#6b7280', fontSize: 11.5, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Filter Panel ──────────────────────────────────────────
 function FilterPanel({
-  options, filters, onChange, onApply, onReset, open, onClose,
+  options, filters, onChange, onApply, onReset, open, onClose, departmentsLoading,
 }: {
   options:  FilterOptions;
   filters:  Filters;
@@ -80,6 +225,7 @@ function FilterPanel({
   onReset:  () => void;
   open:     boolean;
   onClose:  () => void;
+  departmentsLoading?: boolean;
 }) {
   if (!open) return null;
   return (
@@ -131,24 +277,36 @@ function FilterPanel({
             />
           </div>
 
-          {/* Division dropdown — displays name, filters by code */}
-          <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Division</label>
-            <select value={filters.div_code} onChange={e => onChange({ ...filters, div_code: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', cursor: 'pointer' }}>
-              <option value="">All</option>
-              {options.divisions.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-            </select>
-          </div>
+          {/* Division — searchable multi-select. Narrowing this also narrows Department below. */}
+          <MultiSelectDropdown
+            label="Division"
+            options={options.divisions}
+            selected={filters.div_code}
+            onChange={codes => onChange({ ...filters, div_code: codes })}
+          />
 
-          {/* Department dropdown — displays name, filters by code */}
+          {/* Department — searchable multi-select. Already scoped server-side
+              (MS_HR_DEPARTMENT) to whichever Division(s) are selected above. */}
+          <MultiSelectDropdown
+            label="Department"
+            options={options.departments}
+            selected={filters.dept_code}
+            onChange={codes => onChange({ ...filters, dept_code: codes })}
+            emptyLabel={departmentsLoading ? 'Loading departments…' : 'No departments for the selected division(s)'}
+          />
+
+          {/* Projection date — a future-month date bumps Annual Leave by 2.5 */}
           <div>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Department</label>
-            <select value={filters.dept_code} onChange={e => onChange({ ...filters, dept_code: e.target.value })}
-              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', cursor: 'pointer' }}>
-              <option value="">All</option>
-              {options.departments.map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
-            </select>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Projection Date</label>
+            <input
+              type="date"
+              value={filters.projection_date}
+              onChange={e => onChange({ ...filters, projection_date: e.target.value })}
+              style={{ width: '100%', padding: '9px 10px', fontSize: 13, color: '#111', border: '1.5px solid #d1d5db', borderRadius: 7, background: '#fff', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ fontSize: 10.5, color: '#9ca3af', marginTop: 5, lineHeight: 1.4 }}>
+              Picking a future-month date projects accrual — Annual Leave gets +2.5 days for every full month ahead (e.g. 2 months ahead → +5.0).
+            </div>
           </div>
 
         </div>
@@ -202,7 +360,7 @@ const LeaveBalanceReport: React.FC = () => {
   const { user } = useAuth();
   const isAuthorized = ALLOWED_LOGIN_IDS.includes(user?.loginid1 ?? '');
 
-  const EMPTY_FILTERS: Filters = { div_code: '', dept_code: '', emp_search: '' };
+  const EMPTY_FILTERS: Filters = { div_code: [], dept_code: [], emp_search: '', projection_date: '' };
   const [panelOpen, setPanelOpen] = useState(false);
   const [applied,   setApplied]   = useState<Filters>(EMPTY_FILTERS);
   const [pending,   setPending]   = useState<Filters>(EMPTY_FILTERS);
@@ -227,25 +385,60 @@ const LeaveBalanceReport: React.FC = () => {
     enabled: isAuthorized, // don't fetch report data for unauthorized users
   });
 
-  // ── Filter options (name shown, code used for filtering) ──
-  const filterOptions: FilterOptions = useMemo(() => {
+  const divisionOptions = useMemo(() => {
     const divMap: Record<string, string> = {};
-    const deptMap: Record<string, string> = {};
-    allRows.forEach(r => {
-      if (r.DIV_CODE)  divMap[r.DIV_CODE]   = r.DIV_NAME;
-      if (r.DEPT_CODE) deptMap[r.DEPT_CODE] = r.DEPT_NAME;
-    });
-    return {
-      divisions:   Object.entries(divMap).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name)),
-      departments: Object.entries(deptMap).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name)),
-    };
+    allRows.forEach(r => { if (r.DIV_CODE) divMap[r.DIV_CODE] = r.DIV_NAME; });
+    return Object.entries(divMap).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allRows]);
 
-  // ── Client-side filtering ──
+
+const pendingDivKey = useMemo(() => [...pending.div_code].sort().join(','), [pending.div_code]);
+
+  const { data: departmentOptions = [], isFetching: departmentsLoading } = useQuery<
+    { code: string; name: string; divCode: string }[]
+  >({
+    queryKey: ['ms_hr_department', pendingDivKey],
+    queryFn: async () => {
+      const codes = pending.div_code.length === 0 ? ['All'] : pending.div_code;
+      const sql =  codes.length === 0
+        ? `select dept_code, dept_name, div_code from ms_hr_department`
+        : `select dept_code, dept_name, div_code from ms_hr_department where div_code in (${codes
+            .map(c => `'${c.replace(/'/g, "''")}'`)
+            .join(',')})`;
+
+      const rows = await WmsSerivceInstance.executeRawSql(sql);
+      const merged: Record<string, { code: string; name: string; divCode: string }> = {};
+      (rows as any[]).forEach(row => {
+        merged[row.DEPT_CODE] = { code: row.DEPT_CODE, name: row.DEPT_NAME, divCode: row.DIV_CODE };
+      });
+      return Object.values(merged).sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
+
+  const filterOptions: FilterOptions = useMemo(() => ({
+    divisions:   divisionOptions,
+    departments: departmentOptions,
+  }), [divisionOptions, departmentOptions]);
+
+
+  useEffect(() => {
+    setPending(prev => {
+      if (prev.dept_code.length === 0) return prev;
+      const validCodes = new Set(departmentOptions.map(d => d.code));
+      const pruned = prev.dept_code.filter(c => validCodes.has(c));
+      return pruned.length === prev.dept_code.length ? prev : { ...prev, dept_code: pruned };
+    });
+  }, [departmentOptions]);
+
+  // ── How many months ahead the applied projection date is (0 = no projection) ──
+  const projectionMonths = useMemo(() => monthsAheadOf(applied.projection_date), [applied.projection_date]);
+  const isProjecting     = projectionMonths > 0;
+  const projectionBump   = projectionMonths * 2.5; 
+
   const filteredRows = useMemo(() => {
-    return allRows.filter(r => {
-      if (applied.div_code   && r.DIV_CODE   !== applied.div_code)   return false;
-      if (applied.dept_code  && r.DEPT_CODE  !== applied.dept_code)  return false;
+    const base = allRows.filter(r => {
+      if (applied.div_code.length  && !applied.div_code.includes(r.DIV_CODE))   return false;
+      if (applied.dept_code.length && !applied.dept_code.includes(r.DEPT_CODE)) return false;
       if (applied.emp_search) {
         const q = applied.emp_search.toLowerCase();
         if (!r.RPT_NAME?.toLowerCase().includes(q) && !r.EMPLOYEE_ID?.toLowerCase().includes(q)) return false;
@@ -261,7 +454,15 @@ const LeaveBalanceReport: React.FC = () => {
       }
       return true;
     });
-  }, [allRows, applied, search]);
+
+    if (!isProjecting) return base;
+
+    return base.map(r => {
+      const annual = (parseFloat(String(r.ANNUAL_LEAVE)) || 0) + projectionBump;
+      const total  = (parseFloat(String(r.TOTAL_LEAVES))  || 0) + projectionBump;
+      return { ...r, ANNUAL_LEAVE: annual, TOTAL_LEAVES: total };
+    });
+  }, [allRows, applied, search, isProjecting, projectionBump]);
 
   // ── Sort ──
   const sortedRows = useCallback((rows: LeaveRow[]) => {
@@ -282,7 +483,10 @@ const LeaveBalanceReport: React.FC = () => {
   }, [sort]);
 
   const divGroups  = useMemo(() => groupRows(filteredRows), [filteredRows]);
-  const isFiltered = Object.values(applied).some(Boolean) || search.trim().length > 0;
+  const isFiltered =
+    applied.div_code.length > 0 || applied.dept_code.length > 0 ||
+    Boolean(applied.emp_search) || Boolean(applied.projection_date) ||
+    search.trim().length > 0;
 
   // ── Collapse helpers ──
   const toggleDiv  = (key: string) => setCollapsedDivs(prev  => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -399,7 +603,7 @@ const LeaveBalanceReport: React.FC = () => {
       pdf.text('Leave Balance Report', pageW / 2, TITLE_Y + 5.5, { align: 'center' });
       if (pg === 1 && isFiltered) {
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(107, 114, 128);
-        const parts = Object.entries(applied).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ');
+        const parts = describeFilters(applied, filterOptions, '');
         if (parts) pdf.text(`Filter: ${parts}`, margin, TABLE_TOP - 2);
       }
     };
@@ -661,6 +865,11 @@ const LeaveBalanceReport: React.FC = () => {
                 Filtered
               </span>
             )}
+            {isProjecting && (
+              <span style={{ fontSize: 11, background: '#eef2ff', color: '#3730a3', borderRadius: 4, padding: '3px 9px', fontWeight: 600 }}>
+                Projected +{formatDays(projectionBump)} Annual ({projectionMonths} mo)
+              </span>
+            )}
             <div className="lb-search-wrap">
               <span className="lb-search-icon">🔍</span>
               <input
@@ -705,10 +914,7 @@ const LeaveBalanceReport: React.FC = () => {
                 {isFiltered && (
                   <span>
                     <b>Filter:</b>{' '}
-                    {[
-                      ...Object.entries(applied).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`),
-                      ...(search.trim() ? [`search: "${search.trim()}"`] : []),
-                    ].join(' | ')}
+                    {describeFilters(applied, filterOptions, search)}
                   </span>
                 )}
               </div>
@@ -803,6 +1009,7 @@ const LeaveBalanceReport: React.FC = () => {
         onReset={() => { setPending(EMPTY_FILTERS); setApplied(EMPTY_FILTERS); }}
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
+        departmentsLoading={departmentsLoading}
       />
     </>
   );
