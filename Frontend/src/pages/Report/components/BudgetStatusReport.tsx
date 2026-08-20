@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RotateCcw, Printer, ChevronDown, Check, BarChart2 } from 'lucide-react';
-import axiosServices from 'utils/axios';
 import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
+import commonServiceInstance from 'service/Attendance/common_service'; // <-- adjust path
 import GroupedReportTable, {
   ColumnDef,
   GroupByConfig,
@@ -79,46 +79,55 @@ interface Option {
 
 interface Filters {
   division:      string[];
-  project_name:  string[];
-  month:         string[];
+  project:       string[];
+  month:         string;
   cost_code:     string[];
   group_by_cost: 'Yes' | 'No';
 }
 
 const DEFAULT_FILTERS: Filters = {
   division:      ['All'],
-  project_name:  ['All'],
-  month:         ['All'],
+  project:       ['All'],
+  month:         'All',
   cost_code:     ['All'],
   group_by_cost: 'Yes',
 };
 
-/** Convert multi-select array → 'All' or comma-separated string for the procedure */
-const joinOrAll = (vals: string[]) =>
-  !vals?.length || vals.includes('All') ? 'All' : vals.join(',');
+/** Multi-select → quoted list for IN (...): ['01','02'] → '01','02' */
+const buildCodeParam = (vals: string[]) => {
+  if (!vals?.length || vals.includes('All')) return 'All';
+  return vals.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',');
+};
 
-// ── Response normalization ────────────────────────────────────────────────────
-function normalizeRows<T>(response: any, label: string): T[] {
-  const body = response?.data ?? response;
-
-  if (Array.isArray(body?.data?.tableData)) return body.data.tableData as T[];
-
-  const candidate =
-    body?.data?.data ??
-    body?.data ??
-    body;
-
-  if (Array.isArray(candidate)) return candidate as T[];
-  if (Array.isArray(candidate?.tableData)) return candidate.tableData as T[];
-
-  console.warn(`[${label}] Expected an array but got:`, response);
-  return [];
+// ── Shared proc call helper ───────────────────────────────────────────────────
+interface BudgetProcParams {
+  parameter: string;
+  loginid?: string;
+  code1: string;   // COMPANY_CODE from user.company_code
+  code2?: string;
+  code3?: string;
+  code4?: string;
+  number1?: number;
 }
 
-// ── Shared API call helper ────────────────────────────────────────────────────
-async function callBudgetProc(params: Record<string, string | undefined>) {
-  const response = await axiosServices.get('/api/wms/budget-status', { params });
-  return response;
+function uppercaseKeys<T>(row: Record<string, any>): T {
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(row)) out[k.toUpperCase()] = row[k];
+  return out as T;
+}
+
+async function callBudgetProc<T>(params: BudgetProcParams, label: string): Promise<T[]> {
+  console.log(`[${label}] sending:`, params);
+  const rows = await commonServiceInstance.proc_build_dynamic_sql_common(params);
+  if (!rows) {
+    console.warn(`[${label}] proc returned no data`, params);
+    return [];
+  }
+  if (!Array.isArray(rows)) {
+    console.warn(`[${label}] Expected array, got:`, rows);
+    return [];
+  }
+  return rows.map((r) => uppercaseKeys<T>(r));
 }
 
 // ── Shared field styling ──────────────────────────────────────────────────────
@@ -281,10 +290,17 @@ const SingleSelectField: React.FC<{
   value: string;
   options: Option[];
   onChange: (v: string) => void;
-}> = ({ label, value, options, onChange }) => (
+  loading?: boolean;
+}> = ({ label, value, options, onChange, loading }) => (
   <div style={{ marginBottom: 14 }}>
     <label style={fieldLabelStyle}>{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={selectBaseStyle}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={loading}
+      style={{ ...selectBaseStyle, opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}
+    >
+      <option value="All">{loading ? 'Loading…' : 'All'}</option>
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
@@ -296,12 +312,15 @@ const SingleSelectField: React.FC<{
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_values }) => {
-  const {companyCode } = required_values;
   const { user } = useAuth();
   const printUser = user?.username;
+  const loginid = user?.username ?? '';
   const printDate = new Date().toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
+
+  // Same as BudgetAllocationReport — company code from useAuth
+  const companyCode: string = user?.company_code?.trim() || 'All';
 
   const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
   const [activeTab, setActiveTab] = useState<'parameters' | 'report'>('parameters');
@@ -311,16 +330,18 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setPending((prev) => ({ ...prev, [key]: val }));
 
-  // ── 1. DIVISIONS  (P_PARAMETER = GET_DIVISIONS) ───────────────────────────
+  // ── 1. DIVISIONS ──────────────────────────────────────────────────────────
   const { data: divisionRows = [], isLoading: isDivisionLoading } = useQuery<DivisionRow[]>({
-    queryKey: ['budget_get_divisions'],
-    queryFn: async () => {
-      const res = await callBudgetProc({
-        parameter: 'GET_DIVISIONS',
-        companyCode: companyCode || undefined,
-      });
-      return normalizeRows<DivisionRow>(res, 'GET_DIVISIONS');
-    },
+    queryKey: ['budget_get_divisions', companyCode, loginid],
+    queryFn: () =>
+      callBudgetProc<DivisionRow>(
+        {
+          parameter: 'BSTATUS_GET_DIVISIONS',
+          loginid,
+          code1: companyCode,
+        },
+        'BSTATUS_GET_DIVISIONS'
+      ),
   });
 
   const divisionOptions = useMemo<Option[]>(
@@ -332,40 +353,49 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
     [divisionRows]
   );
 
-  // ── 2. PROJECTS  (P_PARAMETER = GET_PROJECTS) ─────────────────────────────
-  const divParamForProjects = joinOrAll(pending.division);
+  // ── 2. PROJECTS ───────────────────────────────────────────────────────────
+  const divParamForProjects = buildCodeParam(pending.division);
 
   const { data: projectRows = [], isLoading: isProjectLoading } = useQuery<ProjectRow[]>({
-    queryKey: ['budget_get_projects', divParamForProjects, companyCode],
-    queryFn: async () => {
-      const res = await callBudgetProc({
-        parameter: 'GET_PROJECTS',
-        divCode: divParamForProjects,
-        companyCode: companyCode || undefined,
-      });
-      return normalizeRows<ProjectRow>(res, 'GET_PROJECTS');
-    },
+    queryKey: ['budget_get_projects', divParamForProjects, companyCode, loginid],
+    queryFn: () =>
+      callBudgetProc<ProjectRow>(
+        {
+          parameter: 'BSTATUS_GET_PROJECTS',
+          loginid,
+          code1: companyCode,
+          code2: divParamForProjects,
+        },
+        'BSTATUS_GET_PROJECTS'
+      ),
   });
 
   const projectOptions = useMemo<Option[]>(
     () =>
       projectRows
-        .filter((r) => r.PROJECT_NAME)
+        .filter((r) => r.PROJECT_CODE)
         .sort((a, b) => a.PROJECT_NAME.localeCompare(b.PROJECT_NAME))
-        .map((r) => ({ value: r.PROJECT_NAME, label: r.PROJECT_NAME })),
+        .map((r) => ({ value: r.PROJECT_CODE, label: `${r.PROJECT_CODE} | ${r.PROJECT_NAME}` })),
     [projectRows]
   );
 
-  // ── 3. MONTHS  (P_PARAMETER = GET_MONTHS) ─────────────────────────────────
+  // ── 3. MONTHS ─────────────────────────────────────────────────────────────
+  const divParamForMonths = buildCodeParam(pending.division);
+  const projParamForMonths = buildCodeParam(pending.project);
+
   const { data: monthRows = [], isLoading: isMonthLoading } = useQuery<MonthRow[]>({
-    queryKey: ['budget_get_months', companyCode],
-    queryFn: async () => {
-      const res = await callBudgetProc({
-        parameter: 'GET_MONTHS',
-        companyCode: companyCode || undefined,
-      });
-      return normalizeRows<MonthRow>(res, 'GET_MONTHS');
-    },
+    queryKey: ['budget_get_months', divParamForMonths, projParamForMonths, companyCode, loginid],
+    queryFn: () =>
+      callBudgetProc<MonthRow>(
+        {
+          parameter: 'BSTATUS_GET_MONTHS',
+          loginid,
+          code1: companyCode,
+          code2: divParamForMonths,
+          code3: projParamForMonths,
+        },
+        'BSTATUS_GET_MONTHS'
+      ),
   });
 
   const monthOpts = useMemo<Option[]>(
@@ -380,19 +410,22 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
     [monthRows]
   );
 
-  // ── 4. COST CODES  (P_PARAMETER = GET_COST_CODES) ─────────────────────────
-  const projectParamForCost = joinOrAll(pending.project_name);
+  // ── 4. COST CODES ─────────────────────────────────────────────────────────
+  const projParamForCost = buildCodeParam(pending.project);
 
   const { data: costRows = [], isLoading: isCostLoading } = useQuery<CostRow[]>({
-    queryKey: ['budget_get_cost_codes', projectParamForCost, companyCode],
-    queryFn: async () => {
-      const res = await callBudgetProc({
-        parameter: 'GET_COST_CODES',
-        projectName: projectParamForCost,
-        companyCode: companyCode || undefined,
-      });
-      return normalizeRows<CostRow>(res, 'GET_COST_CODES');
-    },
+    queryKey: ['budget_get_cost_codes', divParamForMonths, projParamForCost, companyCode, loginid],
+    queryFn: () =>
+      callBudgetProc<CostRow>(
+        {
+          parameter: 'BSTATUS_GET_COST_CODES',
+          loginid,
+          code1: companyCode,
+          code2: divParamForMonths,
+          code3: projParamForCost,
+        },
+        'BSTATUS_GET_COST_CODES'
+      ),
   });
 
   const costOpts = useMemo<Option[]>(
@@ -407,30 +440,32 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
     [costRows]
   );
 
-  // ── 5. MAIN REPORT  (P_PARAMETER = BUDGET_STATUS_SUMMARY) ─────────────────
-  // Only runs after user clicks Generate Report
+  // ── 5. MAIN REPORT ────────────────────────────────────────────────────────
   const { data: reportRows = [], isLoading: isReportLoading, isFetching: isReportFetching } =
     useQuery<BudgetRow[]>({
       queryKey: [
         'budget_status_summary',
         applied.division,
-        applied.project_name,
+        applied.project,
         applied.month,
         applied.cost_code,
         companyCode,
+        loginid,
       ],
       enabled: hasGeneratedReport,
-      queryFn: async () => {
-        const res = await callBudgetProc({
-          parameter: 'BUDGET_STATUS_SUMMARY',
-          divCode: joinOrAll(applied.division),
-          companyCode: companyCode || undefined,
-          projectName: joinOrAll(applied.project_name),
-          monthNumber: joinOrAll(applied.month),
-          costCode: joinOrAll(applied.cost_code),
-        });
-        return normalizeRows<BudgetRow>(res, 'BUDGET_STATUS_SUMMARY');
-      },
+      queryFn: () =>
+        callBudgetProc<BudgetRow>(
+          {
+            parameter: 'BSTATUS_BUDGET_STATUS_SUMMARY',
+            loginid,
+            code1: companyCode,
+            code2: buildCodeParam(applied.division),
+            code3: buildCodeParam(applied.project),
+            code4: buildCodeParam(applied.cost_code),
+            number1: applied.month === 'All' ? undefined : Number(applied.month),
+          },
+          'BSTATUS_BUDGET_STATUS_SUMMARY'
+        ),
     });
 
   const groupBy =
@@ -642,22 +677,22 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
         if (withCost) {
           body.push([
             { content: `Cost Total :  ${cg.costName}`, colSpan: 5, styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, cellPadding: indPad1 } },
-            { content: formatAmount(cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
-            { content: fmtBal(cg.approved - cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', halign: 'right', fontSize: 8.5 } },
+            { content: formatAmount(cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, halign: 'right' } },
+            { content: fmtBal(cg.approved - cg.utilised), styles: { fillColor: CTOT, textColor: DARK, fontStyle: 'bold', fontSize: 8.5, halign: 'right' } },
           ]);
         }
       });
       body.push([
         { content: `Project Total :  ${proj.projectName}`, colSpan: 5, styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, cellPadding: cellPad } },
-        { content: formatAmount(proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
-        { content: fmtBal(proj.approved - proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: formatAmount(proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, halign: 'right' } },
+        { content: fmtBal(proj.approved - proj.utilised), styles: { fillColor: PTOT, textColor: NAVY_TEXT, fontStyle: 'bold', fontSize: 9, halign: 'right' } },
       ]);
     });
 
     body.push([
       { content: 'Grand Total :', colSpan: 5, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-      { content: formatAmount(grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-      { content: fmtBal(grandApproved - grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: formatAmount(grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, halign: 'right', cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+      { content: fmtBal(grandApproved - grandUtilised), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, halign: 'right', cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
     ]);
 
     autoTable(pdf, {
@@ -705,7 +740,6 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
 
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
-        {/* Tab bar */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10,
@@ -752,7 +786,6 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
           </button>
         </div>
 
-        {/* Parameters panel */}
         <div style={{
           display: activeTab === 'parameters' ? 'block' : 'none',
           background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12,
@@ -783,23 +816,25 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                     setPending((prev) => ({
                       ...prev,
                       division: v,
-                      project_name: ['All'],
+                      project: ['All'],
                       cost_code: ['All'],
+                      month: 'All',
                     }));
                   }}
                   loading={isDivisionLoading}
                 />
               </FloatLabel>
-              <FloatLabel label="Project Name" bgColor={BG}>
+              <FloatLabel label="Project" bgColor={BG}>
                 <MultiSelectField
                   label=""
                   options={projectOptions}
-                  value={pending.project_name}
+                  value={pending.project}
                   onChange={(v) => {
                     setPending((prev) => ({
                       ...prev,
-                      project_name: v,
+                      project: v,
                       cost_code: ['All'],
+                      month: 'All',
                     }));
                   }}
                   loading={isProjectLoading}
@@ -809,7 +844,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
 
             <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Month" bgColor={BG}>
-                <MultiSelectField
+                <SingleSelectField
                   label=""
                   options={monthOpts}
                   value={pending.month}
@@ -830,12 +865,14 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
 
             <div className="field-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <FloatLabel label="Grouping on Cost" bgColor={BG}>
-                <SingleSelectField
-                  label=""
+                <select
                   value={pending.group_by_cost}
-                  options={[{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }]}
-                  onChange={(v) => setPendingField('group_by_cost', v as 'Yes' | 'No')}
-                />
+                  onChange={(e) => setPendingField('group_by_cost', e.target.value as 'Yes' | 'No')}
+                  style={selectBaseStyle}
+                >
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
               </FloatLabel>
               <div />
             </div>
@@ -876,7 +913,6 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
           </div>
         </div>
 
-        {/* Report panel */}
         {hasGeneratedReport && activeTab === 'report' && (
           <GroupedReportTable<BudgetRow>
             title="Budget Status Report — Summary"
