@@ -5,10 +5,8 @@ import companyLogo from 'assets/Al_jasra_logo.jpg';
 import useAuth from 'hooks/useAuth';
 
 // ── Types ────────────────────────────────────────────────
-// Matches VW_BOHC_PAYSLIP_HDR — one row per employee paid in
-// CASH mode for the selected pay period (year + month).
 type PayslipRow = {
-  EMPLOYEE_CODE: string;
+  ALTERNATE_ID:  string;
   RPT_NAME:      string;
   DESG_CODE:     string;
   DESG_NAME:     string;
@@ -21,16 +19,15 @@ type PayslipRow = {
   NET_SALARY:    number;
 };
 
-// Report is grouped by Division only (Company / Department are not shown).
+type DivisionOption = { DIV_CODE: string; DIV_NAME: string };
+
 type DivGroup = { divCode: string; divName: string; rows: PayslipRow[] };
 
-// ── Parameters ──────────────────────────────────────────
-// Only three filters are exposed to the user: Division (multi-select), Month, Year.
-// Month/Year drive the SQL (which period to pull); Division filters client-side.
+// pay_month / pay_year are 0 while unset — this is what makes them mandatory.
 type Filters = {
   div_codes: string[]; // empty array = All divisions
-  pay_month: number;   // 1–12
-  pay_year:  number;
+  pay_month: number;   // 1–12, 0 = not selected
+  pay_year:  number;   // 0 = not selected
 };
 
 type FilterOptions = {
@@ -44,22 +41,15 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// Base year the report data starts from. Year dropdown grows every
-// calendar year: 2026 only in 2026, 2026–2027 in 2027, 2026–2028 in 2028, etc.
 const BASE_YEAR = 2026;
 
-function currentPeriod() {
-  const now = new Date();
-  return { pay_month: now.getMonth() + 1, pay_year: now.getFullYear() };
-}
+const DEFAULT_FILTERS: Filters = { div_codes: [], pay_month: 0, pay_year: 0 };
 
 // ── Helpers ───────────────────────────────────────────────
 function formatAmount(n: number) {
   return (n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-
-// ── Grouping: Division → Details (no Company / Department levels) ──
 function groupRows(rows: PayslipRow[]): DivGroup[] {
   const divMap: Record<string, DivGroup> = {};
   for (const r of rows) {
@@ -78,21 +68,18 @@ function SortArrow({ col, sort }: { col: keyof PayslipRow; sort: SortConfig }) {
 }
 
 // ── Division Dropdown ───────────────────────────────────────
-// Button + popover with a search box on top and a checkbox multi-select
-// list below it. Empty div_codes array is treated as "all selected" and
-// is rendered with every checkbox checked.
 function DivisionDropdown({
   options, selected, onChange,
 }: {
   options:  { code: string; name: string }[];
-  selected: string[]; // empty = all selected
+  selected: string[];
   onChange: (codes: string[]) => void;
 }) {
   const [open, setOpen]     = useState(false);
   const [query, setQuery]   = useState('');
   const wrapRef             = useRef<HTMLDivElement>(null);
 
-  const allSelected = selected.length === 0 || selected.length === options.length;
+  const allSelected = selected.length === options.length;
 
   const filteredOptions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -100,22 +87,18 @@ function DivisionDropdown({
     return options.filter(d => d.name.toLowerCase().includes(q));
   }, [options, query]);
 
-  const isChecked = (code: string) => (selected.length === 0 ? true : selected.includes(code));
+  const isChecked = (code: string) => selected.includes(code);
 
   const toggleOne = (code: string) => {
-    const base = selected.length === 0 ? options.map(d => d.code) : selected;
+    const base = selected;
     const set = new Set(base);
     set.has(code) ? set.delete(code) : set.add(code);
     onChange(set.size === options.length ? [] : Array.from(set));
   };
 
-  // "All" is represented internally as an empty array (no filter applied).
-  // "None" is represented as a list containing a code that can never match
-  // a real division, so every row is filtered out.
-  const selectAll = () => onChange([]);
-  const clearAll  = () => onChange(['__NONE_SELECTED__']);
+  const selectAll = () => onChange(options.map(d => d.code));
+  const clearAll = () => onChange([]);
 
-  // close on outside click
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -126,11 +109,11 @@ function DivisionDropdown({
   }, [open]);
 
   const isNoneSelected = selected.length === 1 && selected[0] === '__NONE_SELECTED__';
-  const label = selected.length === 0
+  const label = isNoneSelected
+  ? 'None selected'
+  : selected.length === options.length
     ? 'All Divisions'
-    : isNoneSelected
-      ? 'None selected'
-      : `${selected.length} of ${options.length} selected`;
+    : `${selected.length} of ${options.length} selected`;
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
@@ -153,7 +136,6 @@ function DivisionDropdown({
           background: '#fff', border: '1.5px solid #d1d5db', borderRadius: 8,
           boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 250, overflow: 'hidden',
         }}>
-          {/* Search bar */}
           <div style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
             <input
               autoFocus
@@ -167,7 +149,6 @@ function DivisionDropdown({
             />
           </div>
 
-          {/* Select all / Clear all */}
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '6px 10px', borderBottom: '1px solid #f3f4f6', background: '#fafafa',
@@ -184,7 +165,6 @@ function DivisionDropdown({
             <span style={{ fontSize: 11, color: '#9ca3af' }}>{label}</span>
           </div>
 
-          {/* Checkbox list */}
           <div style={{ maxHeight: 220, overflowY: 'auto' }}>
             {filteredOptions.length === 0 && (
               <div style={{ padding: '10px', fontSize: 12.5, color: '#9ca3af' }}>No matches.</div>
@@ -214,18 +194,20 @@ function DivisionDropdown({
 }
 
 // ── Filter Panel ──────────────────────────────────────────
-// Only Division (multi-select), Month, and Year are exposed as parameters.
-// Month and Year are mandatory fields.
+// `allowClose` gates whether the panel can be dismissed. While false (i.e.
+// no valid Month/Year has ever been applied), the X button and
+// click-outside-to-close are disabled and a mandatory-fields banner shows.
 function FilterPanel({
-  options, filters, onChange, onApply, onReset, open, onClose,
+  options, filters, onChange, onApply, onReset, open, onClose, allowClose,
 }: {
-  options:  FilterOptions;
-  filters:  Filters;
-  onChange: (f: Filters) => void;
-  onApply:  () => void;
-  onReset:  () => void;
-  open:     boolean;
-  onClose:  () => void;
+  options:    FilterOptions;
+  filters:    Filters;
+  onChange:   (f: Filters) => void;
+  onApply:    () => void;
+  onReset:    () => void;
+  open:       boolean;
+  onClose:    () => void;
+  allowClose: boolean;
 }) {
   if (!open) return null;
 
@@ -233,17 +215,20 @@ function FilterPanel({
   const yearOptions = Array.from(
     { length: Math.max(1, nowYear - BASE_YEAR + 1) },
     (_, i) => BASE_YEAR + i,
-  ); // grows: [2026] → [2026,2027] → [2026,2027,2028] ...
+  );
 
   const monthValid = !!filters.pay_month;
   const yearValid  = !!filters.pay_year;
   const canApply   = monthValid && yearValid;
 
+  const handleOverlayClick = () => { if (allowClose) onClose(); };
+
   return (
     <>
-      <div onClick={onClose} style={{
+      <div onClick={handleOverlayClick} style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)',
         zIndex: 199, backdropFilter: 'blur(1px)',
+        cursor: allowClose ? 'pointer' : 'default',
       }} />
       <div style={{
         position: 'fixed', top: 0, right: 0, height: '100vh', width: 310,
@@ -261,22 +246,34 @@ function FilterPanel({
             <span style={{ fontSize: 16, color: '#1f2937' }}>⚙</span>
             <span style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>Parameters</span>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              border: 'none', background: '#f3f4f6', cursor: 'pointer',
-              width: 30, height: 30, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, color: '#6b7280', marginRight: 8, flexShrink: 0,
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fee2e2'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLButtonElement).style.color = '#6b7280'; }}
-          >×</button>
+          {allowClose && (
+            <button
+              onClick={onClose}
+              style={{
+                border: 'none', background: '#f3f4f6', cursor: 'pointer',
+                width: 30, height: 30, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, color: '#6b7280', marginRight: 8, flexShrink: 0,
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fee2e2'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLButtonElement).style.color = '#6b7280'; }}
+            >×</button>
+          )}
         </div>
+
+        {!allowClose && (
+          <div style={{
+            margin: '14px 20px 0', padding: '10px 12px', background: '#fffbeb',
+            border: '1px solid #fde68a', borderRadius: 7, fontSize: 12, color: '#92400e',
+            lineHeight: 1.5,
+          }}>
+            Month and Year are required. Select both and click <b>Apply Filters</b> to view the report.
+          </div>
+        )}
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-          {/* Division dropdown — search bar + multiselect checkboxes, default all selected */}
+          {/* Division dropdown */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Division
@@ -308,7 +305,7 @@ function FilterPanel({
             </select>
           </div>
 
-          {/* Year dropdown — mandatory, grows each calendar year from BASE_YEAR */}
+          {/* Year dropdown — mandatory */}
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Year <span style={{ color: '#ef4444' }}>*</span>
@@ -355,7 +352,6 @@ function FilterPanel({
 }
 
 // ── Access control ────────────────────────────────────────
-// TODO: replace with the login IDs allowed to view this report.
 const ALLOWED_LOGIN_IDS = ['10103', '10521'];
 
 function AccessDenied({ loginId }: { loginId?: string }) {
@@ -389,14 +385,45 @@ function AccessDenied({ loginId }: { loginId?: string }) {
   );
 }
 
+// ── Locked report placeholder ─────────────────────────────
+function ReportLocked({ onOpenParams }: { onOpenParams: () => void }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '90px 24px', color: '#6b7280', textAlign: 'center',
+    }}>
+      <div style={{
+        width: 60, height: 60, borderRadius: '50%', background: '#f3f4f6',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, fontSize: 26,
+      }}>⚙</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 6 }}>
+        Select Month and Year to continue
+      </div>
+      <div style={{ fontSize: 13, maxWidth: 320, lineHeight: 1.6, marginBottom: 18 }}>
+        Month and Year are required before the Cash Payslip Report can be generated.
+      </div>
+      <button
+        onClick={onOpenParams}
+        style={{
+          padding: '8px 16px', border: 'none', borderRadius: 7, background: '#1f2937',
+          color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+        }}
+      >
+        ⚙ Open Parameters
+      </button>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────
 const CashPayslipReport: React.FC = () => {
   const printRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const isAuthorized = ALLOWED_LOGIN_IDS.includes(user?.loginid1 ?? '');
 
-  const DEFAULT_FILTERS: Filters = { div_codes: [], ...currentPeriod() };
-  const [panelOpen, setPanelOpen] = useState(false);
+  // Panel opens automatically and the report starts locked until Month/Year are applied.
+  const [panelOpen, setPanelOpen]           = useState(true);
+  const [reportUnlocked, setReportUnlocked] = useState(false);
   const [applied,   setApplied]   = useState<Filters>(DEFAULT_FILTERS);
   const [pending,   setPending]   = useState<Filters>(DEFAULT_FILTERS);
 
@@ -407,14 +434,16 @@ const CashPayslipReport: React.FC = () => {
 
   const printDate   = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const printUser   = user?.username;
-  const periodLabel = `${MONTH_NAMES[applied.pay_month - 1]} ${applied.pay_year}`;
+  const periodLabel = applied.pay_month && applied.pay_year
+    ? `${MONTH_NAMES[applied.pay_month - 1]} ${applied.pay_year}`
+    : 'Not selected';
 
   // ── Fetch rows for the selected period (Month + Year drive the query) ──
   const { data: allRows = [], isLoading } = useQuery<PayslipRow[]>({
     queryKey: ['bohc_payslip_hdr_cash', applied.pay_year, applied.pay_month],
     queryFn: async () => {
       const sql = `
-        SELECT EMPLOYEE_CODE, RPT_NAME, DESG_CODE, DESG_NAME, COMPANY_CODE, COMP_NAME,
+        SELECT ALTERNATE_ID, RPT_NAME, DESG_CODE, DESG_NAME, COMPANY_CODE, COMP_NAME,
                DIV_CODE, DIV_NAME, DEPT_CODE, DEPT_NAME, NET_SALARY
         FROM VW_BOHC_PAYSLIP_HDR
         WHERE PAYMENT_MODE = 'C'
@@ -425,19 +454,24 @@ const CashPayslipReport: React.FC = () => {
       const response = await WmsSerivceInstance.executeRawSql(sql);
       return (response as PayslipRow[]) || [];
     },
-    enabled: isAuthorized && !!applied.pay_month && !!applied.pay_year, // month/year are mandatory
+    enabled: isAuthorized && !!applied.pay_month && !!applied.pay_year,
   });
 
-  // ── Division options (name shown, code used for filtering) ──
-  const filterOptions: FilterOptions = useMemo(() => {
-    const divMap: Record<string, string> = {};
-    allRows.forEach(r => {
-      if (r.DIV_CODE) divMap[r.DIV_CODE] = r.DIV_NAME;
-    });
-    return {
-      divisions: Object.entries(divMap).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name)),
-    };
-  }, [allRows]);
+  // ── Division options for the filter — sourced from MS_HR_DIVISION, ──
+  // independent of whatever payslip period is currently loaded.
+  const { data: divisionRows = [] } = useQuery<DivisionOption[]>({
+    queryKey: ['ms_hr_division'],
+    queryFn: async () => {
+      const sql = `SELECT DIV_CODE, DIV_NAME FROM MS_HR_DIVISION ORDER BY DIV_NAME`;
+      const response = await WmsSerivceInstance.executeRawSql(sql);
+      return (response as DivisionOption[]) || [];
+    },
+    enabled: isAuthorized,
+  });
+
+  const filterOptions: FilterOptions = useMemo(() => ({
+    divisions: divisionRows.map(d => ({ code: d.DIV_CODE, name: d.DIV_NAME })),
+  }), [divisionRows]);
 
   // ── Client-side filtering (Division multi-select + free-text quick search) ──
   const filteredRows = useMemo(() => {
@@ -447,7 +481,7 @@ const CashPayslipReport: React.FC = () => {
         const q = search.trim().toLowerCase();
         if (
           !r.RPT_NAME?.toLowerCase().includes(q) &&
-          !r.EMPLOYEE_CODE?.toLowerCase().includes(q) &&
+          !r.ALTERNATE_ID?.toLowerCase().includes(q) &&
           !r.DIV_NAME?.toLowerCase().includes(q) &&
           !r.DESG_NAME?.toLowerCase().includes(q)
         ) return false;
@@ -491,10 +525,11 @@ const CashPayslipReport: React.FC = () => {
     setSort(prev => prev.col === col && prev.dir === 'asc' ? { col, dir: 'desc' } : { col, dir: 'asc' });
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => { if (reportUnlocked) window.print(); };
 
-  // ── Excel Export ── (no subtotal / grand total rows)
+  // ── Excel Export ──
   const handleExcel = async () => {
+    if (!reportUnlocked) return;
     const XLSX = await import('xlsx');
     const wb   = XLSX.utils.book_new();
 
@@ -510,7 +545,7 @@ const CashPayslipReport: React.FC = () => {
       sortedRows(div.rows).forEach(row => {
         summaryData.push([
           div.divName,
-          row.EMPLOYEE_CODE,
+          row.ALTERNATE_ID,
           row.RPT_NAME,
           row.DESG_NAME,
           parseFloat(String(row.NET_SALARY)) || 0,
@@ -526,8 +561,9 @@ const CashPayslipReport: React.FC = () => {
     XLSX.writeFile(wb, 'Cash_Payslip_Report.xlsx');
   };
 
-  // ── PDF Download ── (no subtotal / grand total rows)
+  // ── PDF Download ──
   const handleDownloadPDF = async () => {
+    if (!reportUnlocked) return;
     const { jsPDF }              = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
 
@@ -535,7 +571,7 @@ const CashPayslipReport: React.FC = () => {
     const pageW = pdf.internal.pageSize.getWidth();
     const margin = 14;
 
-    const NAVY   = [31, 41, 55]     as [number, number, number]; // dark gray/black
+    const NAVY   = [31, 41, 55]     as [number, number, number];
     const WHITE  = [255, 255, 255]  as [number, number, number];
     const DARK   = [55, 65, 81]     as [number, number, number];
     const BORDER = [209, 213, 219]  as [number, number, number];
@@ -559,7 +595,7 @@ const CashPayslipReport: React.FC = () => {
 
     const HEADER_H  = 36;
     const TITLE_Y   = 27;
-    const TABLE_TOP = isFiltered ? 44 : 39;
+    const TABLE_TOP = 39;
 
     const drawPageHeader = (data: any) => {
       const pg = data.pageNumber as number;
@@ -572,21 +608,12 @@ const CashPayslipReport: React.FC = () => {
       pdf.rect(margin, TITLE_Y, pageW - margin * 2, 8, 'F');
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...WHITE);
       pdf.text(`Cash Payslip Report — ${periodLabel}`, pageW / 2, TITLE_Y + 5.5, { align: 'center' });
-      if (pg === 1 && isFiltered) {
-        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(107, 114, 128);
-        const parts = [
-          applied.div_codes.length > 0 ? `Division: ${applied.div_codes.join(', ')}` : '',
-          search.trim() ? `Search: "${search.trim()}"` : '',
-        ].filter(Boolean).join(' | ');
-        if (parts) pdf.text(`Filter: ${parts}`, margin, TABLE_TOP - 2);
-      }
     };
 
     const body: any[] = [];
     const cellPad = { top: 3.5, bottom: 3.5, left: 5, right: 5 };
 
     divGroups.forEach(div => {
-      // Division header row
       body.push([{
         content: `Division :  ${div.divName}`,
         colSpan: 4,
@@ -595,7 +622,7 @@ const CashPayslipReport: React.FC = () => {
 
       sortedRows(div.rows).forEach(row => {
         body.push([
-          { content: row.EMPLOYEE_CODE, styles: { fontSize: 7 } },
+          { content: row.ALTERNATE_ID, styles: { fontSize: 7 } },
           { content: row.RPT_NAME,      styles: { fontSize: 7 } },
           { content: row.DESG_NAME,     styles: { fontSize: 7 } },
           { content: formatAmount(parseFloat(String(row.NET_SALARY)) || 0), styles: { halign: 'right', fontSize: 7, fontStyle: 'bold' } },
@@ -607,10 +634,10 @@ const CashPayslipReport: React.FC = () => {
       startY: TABLE_TOP,
       margin: { left: margin, right: margin, top: HEADER_H + 4 },
       columnStyles: {
-        0: { cellWidth: 26 },            // Employee Code
-        1: { cellWidth: 'auto' as any }, // Employee Name (fills remaining space, wraps)
-        2: { cellWidth: 44 },            // Designation
-        3: { cellWidth: 28 },            // Net Salary
+        0: { cellWidth: 26 },
+        1: { cellWidth: 'auto' as any },
+        2: { cellWidth: 44 },
+        3: { cellWidth: 28 },
       },
       head: [[
         { content: 'Employee Code', styles: { halign: 'left',  fontSize: 7 } },
@@ -640,6 +667,8 @@ const CashPayslipReport: React.FC = () => {
     return <AccessDenied loginId={user?.loginid1} />;
   }
 
+  const disabledBtn: React.CSSProperties = { opacity: 0.45, cursor: 'not-allowed', pointerEvents: 'none' };
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
@@ -655,7 +684,6 @@ const CashPayslipReport: React.FC = () => {
           overflow: hidden;
         }
 
-        /* ── Toolbar ── */
         .cp-toolbar {
           display: flex; align-items: center; justify-content: space-between;
           padding: 10px 28px; background: #fff; border-bottom: 1px solid #e5e7eb;
@@ -681,7 +709,6 @@ const CashPayslipReport: React.FC = () => {
           position: absolute; top: 5px; right: 5px;
         }
 
-        /* Search */
         .cp-search {
           padding: 7px 12px 7px 34px; border: 1.5px solid #d1d5db; border-radius: 7px;
           font-size: 13px; font-family: 'DM Sans', sans-serif; color: #111;
@@ -691,7 +718,6 @@ const CashPayslipReport: React.FC = () => {
         .cp-search-wrap { position: relative; display: flex; align-items: center; }
         .cp-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 14px; pointer-events: none; }
 
-        /* ── Body layout ── */
         .cp-body        { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
         .cp-report-area { padding: 12px 28px 20px; flex: 1; overflow-y: auto; }
         .cp-page        {
@@ -699,27 +725,17 @@ const CashPayslipReport: React.FC = () => {
           border: 1px solid #e5e7eb; overflow: hidden;
         }
 
-        /* Report header */
         .cp-report-header {
           padding: 16px 24px 14px; border-bottom: 1px solid #e5e7eb;
           display: flex; justify-content: space-between; align-items: center;
         }
         .cp-report-header-right { text-align: right; font-size: 12px; color: #6b7280; line-height: 2; padding-top: 20px; }
 
-        /* Title bar */
         .cp-title-bar {
           background: #1f2937; color: #fff; text-align: center;
           padding: 11px; font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
         }
 
-        /* Meta row */
-        .cp-meta {
-          display: flex; gap: 32px; padding: 9px 24px;
-          background: #f9fafb; border-bottom: 1px solid #e5e7eb;
-          font-size: 12px; color: #6b7280; flex-wrap: wrap; min-height: 10px;
-        }
-
-        /* ── Table ── */
         .cp-table-wrap { overflow-x: auto; }
 
         table.cp-table {
@@ -729,11 +745,10 @@ const CashPayslipReport: React.FC = () => {
           table-layout: fixed;
         }
 
-        /* Column widths */
-        .cp-table col.c0 { width: 15%; } /* Employee Code */
-        .cp-table col.c1 { width: 35%; } /* Employee Name */
-        .cp-table col.c2 { width: 30%; } /* Designation */
-        .cp-table col.c3 { width: 20%; } /* Net Salary */
+        .cp-table col.c0 { width: 15%; }
+        .cp-table col.c1 { width: 35%; }
+        .cp-table col.c2 { width: 30%; }
+        .cp-table col.c3 { width: 20%; }
 
         .cp-table thead th {
           background: #1f2937; color: #fff; font-weight: 700;
@@ -751,7 +766,6 @@ const CashPayslipReport: React.FC = () => {
         .cp-table thead th.num .th-inner { flex-direction: row-reverse; }
         .th-inner > span:first-child { flex: 1; }
 
-        /* Division group row */
         .cp-table tr.div-row td {
           background: #1f2937; color: #fff; font-weight: 700;
           font-size: 12px; padding: 5px 14px;
@@ -760,7 +774,6 @@ const CashPayslipReport: React.FC = () => {
         }
         .cp-table tr.div-row:hover td { background: #111827; }
 
-        /* Data rows */
         .cp-table tbody tr.data-row td {
           padding: 5px 10px; border-bottom: 1px solid #e5e7eb;
           color: #374151; vertical-align: middle; font-size: 11.5px;
@@ -773,11 +786,9 @@ const CashPayslipReport: React.FC = () => {
 
         .amount-strong { color: #111827; font-weight: 700; }
 
-        /* Chevron */
         .chevron { display: inline-block; margin-right: 6px; font-size: 10px; transition: transform 0.15s; }
         .chevron.open { transform: rotate(90deg); }
 
-        /* Print */
         @media print {
           @page { margin: 0; size: A4 portrait; }
           .cp-toolbar, .no-print { display: none !important; }
@@ -801,32 +812,33 @@ const CashPayslipReport: React.FC = () => {
             <span style={{ fontSize: 11, background: '#f3f4f6', color: '#6b7280', borderRadius: 4, padding: '3px 9px', fontWeight: 600, whiteSpace: 'nowrap' }}>
               {periodLabel}
             </span>
-            {isFiltered && (
+            {isFiltered && reportUnlocked && (
               <span style={{ fontSize: 11, background: '#f3f4f6', color: '#1f2937', borderRadius: 4, padding: '3px 9px', fontWeight: 600 }}>
                 Filtered
               </span>
             )}
-            <div className="cp-search-wrap">
+            <div className="cp-search-wrap" style={!reportUnlocked ? disabledBtn : undefined}>
               <span className="cp-search-icon">🔍</span>
               <input
                 className="cp-search"
                 placeholder="Search employee / division / designation…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                disabled={!reportUnlocked}
               />
             </div>
           </div>
           <div className="cp-toolbar-right">
-            <button className="cp-btn cp-btn-ghost" onClick={handleCollapseAll}>
+            <button className="cp-btn cp-btn-ghost" onClick={handleCollapseAll} disabled={!reportUnlocked} style={!reportUnlocked ? disabledBtn : undefined}>
               {allCollapsed ? '⊞ Expand All' : '⊟ Collapse All'}
             </button>
             <button className={`cp-btn cp-btn-filter ${applied.div_codes.length > 0 ? 'active' : ''}`} onClick={() => setPanelOpen(true)}>
               {applied.div_codes.length > 0 && <span className="filter-dot" />}
               ⚙ Parameters
             </button>
-            <button className="cp-btn cp-btn-ghost"   onClick={handlePrint}>🖨 Print</button>
-            <button className="cp-btn cp-btn-success" onClick={handleExcel}>📊 Excel</button>
-            <button className="cp-btn cp-btn-primary" onClick={handleDownloadPDF}>⬇ PDF</button>
+            <button className="cp-btn cp-btn-ghost"   onClick={handlePrint}        disabled={!reportUnlocked} style={!reportUnlocked ? disabledBtn : undefined}>🖨 Print</button>
+            <button className="cp-btn cp-btn-success" onClick={handleExcel}        disabled={!reportUnlocked} style={!reportUnlocked ? disabledBtn : undefined}>📊 Excel</button>
+            <button className="cp-btn cp-btn-primary" onClick={handleDownloadPDF}  disabled={!reportUnlocked} style={!reportUnlocked ? disabledBtn : undefined}>⬇ PDF</button>
           </div>
         </div>
 
@@ -835,78 +847,70 @@ const CashPayslipReport: React.FC = () => {
           <div className="cp-report-area">
             <div className="cp-page" ref={printRef}>
 
-              {/* Report header */}
-              <div className="cp-report-header">
-                <img src={companyLogo} alt="Logo" className="print-logo-only" style={{ height: 54, width: 200, objectFit: 'fill' }} />
-                <div className="cp-report-header-right">
-                  <div><b style={{ color: '#374151' }}>Print Date:</b> {printDate}</div>
-                  <div><b style={{ color: '#374151' }}>Print User:</b> {printUser}</div>
-                </div>
-              </div>
+              {!reportUnlocked ? (
+                <ReportLocked onOpenParams={() => setPanelOpen(true)} />
+              ) : (
+                <>
+                  {/* Report header */}
+                  <div className="cp-report-header">
+                    <img src={companyLogo} alt="Logo" className="print-logo-only" style={{ height: 54, width: 200, objectFit: 'fill' }} />
+                    <div className="cp-report-header-right">
+                      <div><b style={{ color: '#374151' }}>Print Date:</b> {printDate}</div>
+                      <div><b style={{ color: '#374151' }}>Print User:</b> {printUser}</div>
+                    </div>
+                  </div>
 
-              <div className="cp-title-bar">Cash Payslip Report — {periodLabel}</div>
+                  <div className="cp-title-bar">Cash Payslip Report — {periodLabel}</div>
 
-              <div className="cp-meta">
-                {(applied.div_codes.length > 0 || search.trim()) && (
-                  <span>
-                    <b>Filter:</b>{' '}
-                    {[
-                      applied.div_codes.length > 0 ? `division: ${applied.div_codes.join(', ')}` : '',
-                      search.trim() ? `search: "${search.trim()}"` : '',
-                    ].filter(Boolean).join(' | ')}
-                  </span>
-                )}
-              </div>
+                  {/* Table — no subtotal / grand total rows */}
+                  <div className="cp-table-wrap">
+                    {isLoading ? (
+                      <div className="cp-empty">Loading data…</div>
+                    ) : divGroups.length === 0 ? (
+                      <div className="cp-empty">No records found.</div>
+                    ) : (
+                      <table className="cp-table">
+                        <colgroup>
+                          <col className="c0" /><col className="c1" /><col className="c2" /><col className="c3" />
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th onClick={() => handleSort('ALTERNATE_ID')}><span className="th-inner"><span>Emp No</span><SortArrow col="ALTERNATE_ID" sort={sort} /></span></th>
+                            <th onClick={() => handleSort('RPT_NAME')}><span className="th-inner"><span>Employee Name</span><SortArrow col="RPT_NAME" sort={sort} /></span></th>
+                            <th onClick={() => handleSort('DESG_NAME')}><span className="th-inner"><span>Designation</span><SortArrow col="DESG_NAME" sort={sort} /></span></th>
+                            <th className="num" onClick={() => handleSort('NET_SALARY')}><span className="th-inner"><span>Net Salary</span><SortArrow col="NET_SALARY" sort={sort} /></span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {divGroups.map(div => {
+                            const divOpen = !collapsedDivs.has(div.divCode);
+                            const rows = sortedRows(div.rows);
+                            return (
+                              <React.Fragment key={div.divCode}>
+                                <tr className="div-row" onClick={() => toggleDiv(div.divCode)}>
+                                  <td colSpan={4}>
+                                    <span className={`chevron ${divOpen ? 'open' : ''}`}>▶</span>
+                                    Division : {div.divName}
+                                  </td>
+                                </tr>
 
-              {/* Table — no subtotal / grand total rows */}
-              <div className="cp-table-wrap">
-                {isLoading ? (
-                  <div className="cp-empty">Loading data…</div>
-                ) : divGroups.length === 0 ? (
-                  <div className="cp-empty">No records found.</div>
-                ) : (
-                  <table className="cp-table">
-                    <colgroup>
-                      <col className="c0" /><col className="c1" /><col className="c2" /><col className="c3" />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th onClick={() => handleSort('EMPLOYEE_CODE')}><span className="th-inner"><span>Emp Code</span><SortArrow col="EMPLOYEE_CODE" sort={sort} /></span></th>
-                        <th onClick={() => handleSort('RPT_NAME')}><span className="th-inner"><span>Employee Name</span><SortArrow col="RPT_NAME" sort={sort} /></span></th>
-                        <th onClick={() => handleSort('DESG_NAME')}><span className="th-inner"><span>Designation</span><SortArrow col="DESG_NAME" sort={sort} /></span></th>
-                        <th className="num" onClick={() => handleSort('NET_SALARY')}><span className="th-inner"><span>Net Salary</span><SortArrow col="NET_SALARY" sort={sort} /></span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {divGroups.map(div => {
-                        const divOpen = !collapsedDivs.has(div.divCode);
-                        const rows = sortedRows(div.rows);
-                        return (
-                          <React.Fragment key={div.divCode}>
-                            {/* Division header */}
-                            <tr className="div-row" onClick={() => toggleDiv(div.divCode)}>
-                              <td colSpan={4}>
-                                <span className={`chevron ${divOpen ? 'open' : ''}`}>▶</span>
-                                Division : {div.divName}
-                              </td>
-                            </tr>
-
-                            {/* Data rows (details level) */}
-                            {divOpen && rows.map((row, ri) => (
-                              <tr key={`${row.EMPLOYEE_CODE}-${ri}`} className="data-row">
-                                <td>{row.EMPLOYEE_CODE}</td>
-                                <td>{row.RPT_NAME}</td>
-                                <td>{row.DESG_NAME}</td>
-                                <td className="num amount-strong">{formatAmount(parseFloat(String(row.NET_SALARY)) || 0)}</td>
-                              </tr>
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                                {divOpen && rows.map((row, ri) => (
+                                  <tr key={`${row.ALTERNATE_ID}-${ri}`} className="data-row">
+                                    <td>{row.ALTERNATE_ID}</td>
+                                    <td>{row.RPT_NAME}</td>
+                                    <td>{row.DESG_NAME}</td>
+                                    <td className="num amount-strong">{formatAmount(parseFloat(String(row.NET_SALARY)) || 0)}</td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -916,10 +920,16 @@ const CashPayslipReport: React.FC = () => {
         options={filterOptions}
         filters={pending}
         onChange={setPending}
-        onApply={() => setApplied({ ...pending })}
-        onReset={() => { setPending(DEFAULT_FILTERS); setApplied(DEFAULT_FILTERS); }}
+        onApply={() => { setApplied({ ...pending }); setReportUnlocked(true); }}
+        onReset={() => {
+          setPending(DEFAULT_FILTERS);
+          setApplied(DEFAULT_FILTERS);
+          setReportUnlocked(false);
+          setPanelOpen(true);
+        }}
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
+        allowClose={reportUnlocked}
       />
     </>
   );
