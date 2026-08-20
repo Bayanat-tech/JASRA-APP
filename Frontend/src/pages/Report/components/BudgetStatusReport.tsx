@@ -314,7 +314,7 @@ const SingleSelectField: React.FC<{
 const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_values }) => {
   const { user } = useAuth();
   const printUser = user?.username;
-  const loginid = user?.username ?? '';
+  const loginid = user?.loginid ?? '';
   const printDate = new Date().toLocaleDateString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
@@ -459,9 +459,13 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
             parameter: 'BSTATUS_BUDGET_STATUS_SUMMARY',
             loginid,
             code1: companyCode,
+            // code2: '01',
             code2: buildCodeParam(applied.division),
             code3: buildCodeParam(applied.project),
+            // code3: 'P001',
+            // code4: 'C001',
             code4: buildCodeParam(applied.cost_code),
+            // number1: 1
             number1: applied.month === 'All' ? undefined : Number(applied.month),
           },
           'BSTATUS_BUDGET_STATUS_SUMMARY'
