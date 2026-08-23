@@ -1475,12 +1475,12 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                     name: currentUserApprovers?.SUPERVISOR_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'Engineer' }) || 'Engineer',
+                    label: intl.formatMessage({ id: 'Level 1' }) || 'Level 1',
                     key: 'ENGINEER',
                     name: currentUserApprovers?.ENGRTHEAD_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
+                    label: intl.formatMessage({ id: 'Level 2' }) || 'Level 2',
                     key: 'DEPT_HEAD',
                     name: currentUserApprovers?.DEPT_HEAD_NAME
                   },
