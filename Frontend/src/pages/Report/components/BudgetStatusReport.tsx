@@ -104,10 +104,10 @@ interface BudgetProcParams {
   parameter: string;
   loginid?: string;
   code1: string;   // COMPANY_CODE from user.company_code
-  code2?: string;
-  code3?: string;
-  code4?: string;
-  number1?: number;
+  code2?: string;  // DIV_CODE filter
+  code3?: string;  // PROJECT_CODE filter
+  code4?: string;  // COST_CODE filter
+  number1?: number; // MONTH_NUMBER filter
 }
 
 function uppercaseKeys<T>(row: Record<string, any>): T {
@@ -330,15 +330,25 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   const setPendingField = <K extends keyof Filters>(key: K, val: Filters[K]) =>
     setPending((prev) => ({ ...prev, [key]: val }));
 
+  // Shared param strings for the currently-pending selections
+  const divParam   = buildCodeParam(pending.division);
+  const projParam  = buildCodeParam(pending.project);
+  const costParam  = buildCodeParam(pending.cost_code);
+  const monthParam = pending.month === 'All' ? undefined : Number(pending.month);
+
   // ── 1. DIVISIONS ──────────────────────────────────────────────────────────
+  // Filtered by: company, project, cost, month (everything EXCEPT division itself)
   const { data: divisionRows = [], isLoading: isDivisionLoading } = useQuery<DivisionRow[]>({
-    queryKey: ['budget_get_divisions', companyCode, loginid],
+    queryKey: ['budget_get_divisions', companyCode, loginid, projParam, costParam, pending.month],
     queryFn: () =>
       callBudgetProc<DivisionRow>(
         {
           parameter: 'BSTATUS_GET_DIVISIONS',
           loginid,
           code1: companyCode,
+          code3: projParam,
+          code4: costParam,
+          number1: monthParam,
         },
         'BSTATUS_GET_DIVISIONS'
       ),
@@ -354,17 +364,18 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   );
 
   // ── 2. PROJECTS ───────────────────────────────────────────────────────────
-  const divParamForProjects = buildCodeParam(pending.division);
-
+  // Filtered by: company, division, cost, month (everything EXCEPT project itself)
   const { data: projectRows = [], isLoading: isProjectLoading } = useQuery<ProjectRow[]>({
-    queryKey: ['budget_get_projects', divParamForProjects, companyCode, loginid],
+    queryKey: ['budget_get_projects', companyCode, loginid, divParam, costParam, pending.month],
     queryFn: () =>
       callBudgetProc<ProjectRow>(
         {
           parameter: 'BSTATUS_GET_PROJECTS',
           loginid,
           code1: companyCode,
-          code2: divParamForProjects,
+          code2: divParam,
+          code4: costParam,
+          number1: monthParam,
         },
         'BSTATUS_GET_PROJECTS'
       ),
@@ -380,19 +391,18 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   );
 
   // ── 3. MONTHS ─────────────────────────────────────────────────────────────
-  const divParamForMonths = buildCodeParam(pending.division);
-  const projParamForMonths = buildCodeParam(pending.project);
-
+  // Filtered by: company, division, project, cost (everything EXCEPT month itself)
   const { data: monthRows = [], isLoading: isMonthLoading } = useQuery<MonthRow[]>({
-    queryKey: ['budget_get_months', divParamForMonths, projParamForMonths, companyCode, loginid],
+    queryKey: ['budget_get_months', companyCode, loginid, divParam, projParam, costParam],
     queryFn: () =>
       callBudgetProc<MonthRow>(
         {
           parameter: 'BSTATUS_GET_MONTHS',
           loginid,
           code1: companyCode,
-          code2: divParamForMonths,
-          code3: projParamForMonths,
+          code2: divParam,
+          code3: projParam,
+          code4: costParam,
         },
         'BSTATUS_GET_MONTHS'
       ),
@@ -411,18 +421,18 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
   );
 
   // ── 4. COST CODES ─────────────────────────────────────────────────────────
-  const projParamForCost = buildCodeParam(pending.project);
-
+  // Filtered by: company, division, project, month (everything EXCEPT cost code itself)
   const { data: costRows = [], isLoading: isCostLoading } = useQuery<CostRow[]>({
-    queryKey: ['budget_get_cost_codes', divParamForMonths, projParamForCost, companyCode, loginid],
+    queryKey: ['budget_get_cost_codes', companyCode, loginid, divParam, projParam, pending.month],
     queryFn: () =>
       callBudgetProc<CostRow>(
         {
           parameter: 'BSTATUS_GET_COST_CODES',
           loginid,
           code1: companyCode,
-          code2: divParamForMonths,
-          code3: projParamForCost,
+          code2: divParam,
+          code3: projParam,
+          number1: monthParam,
         },
         'BSTATUS_GET_COST_CODES'
       ),
@@ -459,13 +469,9 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
             parameter: 'BSTATUS_BUDGET_STATUS_SUMMARY',
             loginid,
             code1: companyCode,
-            // code2: '01',
             code2: buildCodeParam(applied.division),
             code3: buildCodeParam(applied.project),
-            // code3: 'P001',
-            // code4: 'C001',
             code4: buildCodeParam(applied.cost_code),
-            // number1: 1
             number1: applied.month === 'All' ? undefined : Number(applied.month),
           },
           'BSTATUS_BUDGET_STATUS_SUMMARY'
@@ -816,15 +822,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   label=""
                   options={divisionOptions}
                   value={pending.division}
-                  onChange={(v) => {
-                    setPending((prev) => ({
-                      ...prev,
-                      division: v,
-                      project: ['All'],
-                      cost_code: ['All'],
-                      month: 'All',
-                    }));
-                  }}
+                  onChange={(v) => setPendingField('division', v)}
                   loading={isDivisionLoading}
                 />
               </FloatLabel>
@@ -833,14 +831,7 @@ const BudgetStatusSummary: React.FC<BudgetStatusSummaryProps> = ({ required_valu
                   label=""
                   options={projectOptions}
                   value={pending.project}
-                  onChange={(v) => {
-                    setPending((prev) => ({
-                      ...prev,
-                      project: v,
-                      cost_code: ['All'],
-                      month: 'All',
-                    }));
-                  }}
+                  onChange={(v) => setPendingField('project', v)}
                   loading={isProjectLoading}
                 />
               </FloatLabel>

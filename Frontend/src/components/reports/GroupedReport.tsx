@@ -288,6 +288,18 @@ table.grt-table {
   border-radius: 4px; padding: 3px 9px; font-weight: 600;
 }
 
+/* Loading spinner */
+.grt-loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 20px;
+}
+.grt-spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid #e5e7eb; border-top-color: #1e3a5f;
+  animation: grt-spin 0.7s linear infinite;
+}
+@keyframes grt-spin { to { transform: rotate(360deg); } }
+
 /* Filter panel */
 .grt-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.18);
@@ -750,7 +762,9 @@ function GroupedReportTable<T extends Record<string, any>>({
               {/* Table */}
               <div className="grt-table-wrap">
                 {isLoading ? (
-                  <div className="grt-empty">Loading data…</div>
+                  <div className="grt-loading">
+                    <div className="grt-spinner" />
+                  </div>
                 ) : groups.length === 0 ? (
                   <div className="grt-empty">No records found.</div>
                 ) : (
