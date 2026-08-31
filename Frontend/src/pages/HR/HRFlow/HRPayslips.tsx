@@ -45,13 +45,13 @@ export default function HRPayslips() {
         return [];
       }
       
-      console.log('🔄 Fetching supervisor employees for user:', user.loginid1);
+      console.log('Fetching supervisor employees for user:', user.loginid1);
       
       try {
         const sql = `
             SELECT DISTINCT *
             FROM (
-                SELECT *
+                SELECT EMPLOYEE_ID , RPT_NAME
                 FROM VW_HR_EMPLOYEE
                 WHERE EMP_STATUS <> 'S'
                 START WITH 

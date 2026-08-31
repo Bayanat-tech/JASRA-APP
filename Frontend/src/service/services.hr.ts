@@ -7,6 +7,7 @@ import { formatDateOnly } from 'utils/dateFormatter';
 export interface IHrEmployee {
   EMAIL: any;
   IMMEDIATE_SUPERVISOR: any;
+  ENGNR_EMPID : any;
   DEPT_HEAD: any;
   HOD: any;
   SUPERVISOR_EMPID: any;

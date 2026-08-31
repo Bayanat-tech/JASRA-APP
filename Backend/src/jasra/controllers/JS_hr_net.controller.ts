@@ -33,7 +33,7 @@ export const JSgetLeaveEntitleHandler = async (req: Request, res: Response) => {
 //     } = req.query;
 
 //     const data = await HrService.JSLeaveDaysCount({
-//       leaveStartDate: leaveStartDate as string,
+//       leaveStartDate: leaveStartDate as string,x
 //       leaveEndDate: leaveEndDate as string,
 //       leaveType: leaveType as string,
 //     });

@@ -10,8 +10,8 @@ import {
   Typography,
   Box,
   Checkbox,
-  Alert,
-  Collapse,
+    Alert,
+    Collapse,
   FormControlLabel,
   Snackbar,
   Autocomplete,
@@ -58,11 +58,12 @@ type AddLeaveApprovalFormProps = {
   disableButtons?: boolean;
 };
 
-type ApproverIds = {
-  SUPERVISOR_EMPID: string;
-  DEPT_HEAD_EMPID: string;
-  MANGR_EMPID: string;
-};
+// type ApproverIds = {
+//   SUPERVISOR_EMPID: string;
+//   ENGNR_EMPID: string;
+//   DEPT_HEAD_EMPID: string;
+//   MANGR_EMPID: string;
+// };
 
 interface SentBackPopupState {
   title: string;
@@ -121,16 +122,18 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     is_half_day: string | boolean;
     division_head?: string;
     SUPERVISOR_EMPID: string;
+    ENGNR_EMPID: string;
     DEPT_HEAD_EMPID: string;
     MANGR_EMPID: string;
     IMMEDIATE_SUPERVISOR_NAME: string;
+    ENGRTHEAD_NAME : string;
     HOD_NAME: string;
     DEPT_HEAD_NAME: string;
+    SENIOR_HR_NAME: string;
     [key: string]: any;
   };
 
   const intl = useIntl();
-  // const [isFileUploading, setIsFileUploading] = useState<boolean>(false);
   const uuidRef = useRef<string | null>(null);
 
   const [uploadFilesPopup, setUploadFilesPopup] = useState<TUniversalDialogProps>({
@@ -160,6 +163,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     rpt_name: '',
     SUPERVISOR_EMPID: '',
     DEPT_HEAD_EMPID: '',
+    ENGNR_EMPID: '',
     MANGR_EMPID: '',
     contact_details_during_leave: '',
     CONTACT_DETAILS_DURING_LEAVE: '',
@@ -175,8 +179,10 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     AIR_ROUTE: '',
     AIR_TICKET: '',
     IMMEDIATE_SUPERVISOR_NAME: '',
+    ENGRTHEAD_NAME: '',
     HOD_NAME: '',
-    DEPT_HEAD_NAME: ''
+    DEPT_HEAD_NAME: '',
+    SENIOR_HR_NAME: '',
   });
   const [filesDialogOpen, setFilesDialogOpen] = useState(false);
 
@@ -204,17 +210,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [hasAttachments, setHasAttachments] = useState<boolean>(false);
   const leaveTypesRequiringAttachments = ['002', '014', '016', 'ACL'];
 
-  const [approverNames, setApproverNames] = useState<{
-    SUPERVISOR_EMPID: string;
-    DEPT_HEAD_EMPID: string;
-    MANGR_EMPID: string;
-  }>({
-    SUPERVISOR_EMPID: '',
-    DEPT_HEAD_EMPID: '',
-    MANGR_EMPID: ''
-  });
-
-  const [approverLoading, setApproverLoading] = useState<boolean>(false);
   const [validationLoading, setValidationLoading] = useState<boolean>(false);
   const [validationResult, setValidationResult] = useState<IValidateLeaveResponse | null>(null);
   const [showValidationAlert, setShowValidationAlert] = useState<boolean>(false);
@@ -231,16 +226,18 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   const sql_string = `
-   SELECT * FROM VW_HR_EMPLOYEE WHERE EMPLOYEE_ID = '${user?.loginid1}'
+   SELECT * FROM VW_HR_EMPLOYEE_NEW WHERE EMPLOYEE_ID = '${formData.EMPLOYEE_ID || data?.EMPLOYEE_ID || user?.loginid1}'
   `;
 
   const { data: currentUserEmployeeData } = useQuery({
     queryKey: ['currentUserEmployeeData', sql_string],
     queryFn: async () => {
       const result = await HrServiceInstance.executeRawSql(sql_string);
-      return result?.[0]; // Return only the first element
+      return result?.[0]; 
     }
   });
+  const currentUserApprovers = currentUserEmployeeData?.data?.[0] ?? currentUserEmployeeData;
+
   const viewlog_sql = `
    SELECT 
      lrfh.REQUEST_NUMBER,
@@ -283,24 +280,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   };
 
   console.log('userData', currentUserEmployeeData);
-
-  // // Query to get logged-in user's employee data only
-  // const { data: currentUserEmployeeData } = useQuery<IHrEmployee | null, Error>({
-  //   queryKey: ['current-user-employee'],
-  //   queryFn: async () => {
-  //     try {
-
-  // console.log('in currentUserEmployeeData', user?.loginid1);
-  //       const data = await HrRequestServiceInstance.getEmployees(user?.loginid1);
-  //       return data[0] || null;
-  //     } catch (err) {
-  //       console.error('Query error:', err);
-  //       throw err;
-  //     }
-  //   },
-  // });
-
-  // console.log('currentUserEmployeeData', currentUserEmployeeData);
 
   const { data: currentSupervisorEmployeeData } = useQuery<IHrEmployee[] | null, Error>({
     queryKey: ['currentSupervisorEmployeeData', user?.loginid1],
@@ -351,30 +330,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     setHasAttachments(attachedFiles && attachedFiles.length > 0);
   }, [attachedFiles]);
 
-  // // Update your change handler
-  // useEffect(() => {
-  //   if (userFlowData) {
-  //     setSentBackParams((prev: any) => ({
-  //       ...prev,
-  //       LOGIN_ID: userFlowData?.LOGIN_ID || '',
-  //       USERNAME: userFlowData?.USERNAME || '',
-  //       SENTBACK_HISTORY: prev.SENTBACK_HISTORY || ''
-  //     }));
-  //   }
-  // }, [userFlowData]);
-
-  // const handleRemarksChange = (value: string) => {
-  //   setSentBackParams((prev: any) => ({
-  //     ...prev,
-  //     SENTBACK_HISTORY: value
-  //   }));
-  // };
-  // const handleRejectRemarksChange = (value: string) => {
-  //   setRejectParams((prev: any) => ({
-  //     ...prev,
-  //     CANCEL_REMARK: value
-  //   }));
-  // };
   useEffect(() => {
     setHasAttachments(attachedFiles && attachedFiles.length > 0);
   }, [attachedFiles]);
@@ -403,28 +358,38 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         employee_code: employeeCode,
         Employee_Name: employeeName,
         SUPERVISOR_EMPID: currentUserEmployeeData.SUPERVISOR_EMPID || '',
+        ENGNR_EMPID : currentUserEmployeeData.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: currentUserEmployeeData.DEPT_HEAD_EMPID || '',
-        MANGR_EMPID: currentUserEmployeeData.MANGR_EMPID || ''
+        MANGR_EMPID: currentUserEmployeeData.MANGR_EMPID || '',
+        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.SUPERVISOR_NAME || '',
+        ENGRTHEAD_NAME : currentUserEmployeeData.ENGRTHEAD_NAME || '',
+        HOD_NAME: currentUserEmployeeData.HOD_NAME || '',
+        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: currentUserEmployeeData.SENIOR_HR_NAME || '',
       }));
       setFormReady(true);
-
-      // Fetch approver names
-      fetchApproverNames(currentUserEmployeeData);
 
       // Fetch leave types for this employee
       fetchLeaveTypes(employeeId);
     }
   }, [currentUserEmployeeData]);
+
   useEffect(() => {
-    if (data) {
-      const employeeData = {
-        SUPERVISOR_EMPID: data.IMMEDIATE_SUPERVISOR || '',
-        DEPT_HEAD_EMPID: data.DEPT_HEAD || '',
-        MANGR_EMPID: data.HOD || ''
-      };
-      fetchApproverNames(employeeData);
+    if (data && currentUserEmployeeData) {
+      setFormData((prev: any) => ({
+        ...prev,
+        SUPERVISOR_EMPID: currentUserEmployeeData.SUPERVISOR_EMPID || '',
+        ENGNR_EMPID : currentUserEmployeeData.ENGNR_EMPID || '',
+        DEPT_HEAD_EMPID: currentUserEmployeeData.DEPT_HEAD_EMPID || '',
+        MANGR_EMPID: currentUserEmployeeData.MANGR_EMPID || '',
+        IMMEDIATE_SUPERVISOR_NAME: currentUserEmployeeData.SUPERVISOR_NAME || '',
+        ENGRTHEAD_NAME : currentUserEmployeeData.ENGRTHEAD_NAME || '',
+        HOD_NAME: currentUserEmployeeData.HOD_NAME || '',
+        DEPT_HEAD_NAME: currentUserEmployeeData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: currentUserEmployeeData.SENIOR_HR_NAME || '',
+      }));
     }
-  }, [data]);
+  }, [data , currentUserEmployeeData]);
 
   useEffect(() => {
     if (formData.EMPLOYEE_ID) {
@@ -452,6 +417,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         rpt_name: newInsertedData.EMPLOYEE_CODE || '',
         EMPLOYEE_ID: newInsertedData.EMPLOYEE_ID || newInsertedData.EMPLOYEE_CODE || '',
         SUPERVISOR_EMPID: newInsertedData.IMMEDIATE_SUPERVISOR || '',
+        ENGNR_EMPID : newInsertedData.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: newInsertedData.DEPT_HEAD || '',
         MANGR_EMPID: newInsertedData.HOD || '',
         contact_details_during_leave: newInsertedData.CONTACT_DETAILS_DURING_LEAVE || '',
@@ -470,8 +436,10 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         AIR_ROUTE: newInsertedData.AIR_ROUTE || '',
         AIR_TICKET: newInsertedData.AIR_TICKET || '',
         IMMEDIATE_SUPERVISOR_NAME: newInsertedData.IMMEDIATE_SUPERVISOR_NAME || '',
+        ENGRTHEAD_NAME :newInsertedData.ENGRTHEAD_NAME || '',
         HOD_NAME: newInsertedData.HOD_NAME || '',
-        DEPT_HEAD_NAME: newInsertedData.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: newInsertedData.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: newInsertedData.SENIOR_HR_NAME ||'',
       });
       setFormReady(true);
     }
@@ -494,6 +462,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         rpt_name: data.EMPLOYEE_CODE || '',
         EMPLOYEE_ID: data.EMPLOYEE_ID || data.EMPLOYEE_CODE || '',
         SUPERVISOR_EMPID: data.IMMEDIATE_SUPERVISOR || '',
+        ENGNR_EMPID: data.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: data.DEPT_HEAD || '',
         MANGR_EMPID: data.HOD || '',
         contact_details_during_leave: data.CONTACT_DETAILS_DURING_LEAVE || '',
@@ -512,20 +481,16 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         AIR_ROUTE: data.AIR_ROUTE || '',
         AIR_TICKET: data.AIR_TICKET || '',
         IMMEDIATE_SUPERVISOR_NAME: data.IMMEDIATE_SUPERVISOR_NAME || '',
+        ENGRTHEAD_NAME : data.ENGRTHEAD_NAME || '',
         HOD_NAME: data.HOD_NAME || '',
-        DEPT_HEAD_NAME: data.DEPT_HEAD_NAME || ''
+        DEPT_HEAD_NAME: data.DEPT_HEAD_NAME || '',
+        SENIOR_HR_NAME: data.SENIOR_HR_NAME || '',
       });
       setFormReady(true);
     }
   }, [data, user?.company_code]);
 
-  // useEffect(() => {
-  //   console.log('employee_code', formData?.employee_code, user?.loginid);
-  //   console.log('formData', formData)
-  //   if (formData?.EMPLOYEE_ID === user?.loginid || formData?.employee_code === '') {
-  //     setIsSameUser(true);
-  //   }
-  // }, [ user?.loginid]);
+
 
   const isSubmitDisabled = (): boolean => {
   const requiresAttachment = leaveTypesRequiringAttachments.includes(formData.leave_type);
@@ -562,9 +527,9 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         'Travel Start Date': formData.TRAVEL_DATE,
         'Travel End Date': formData.TRAVEL_END_DATE,
         'Name of Replacement': formData.NAME_OF_REPLACEMENT,
-        'Immediate Supervisor': approverNames.SUPERVISOR_EMPID,
-        'Department Head': approverNames.DEPT_HEAD_EMPID,
-        HOD: approverNames.MANGR_EMPID,
+        'Immediate Supervisor': formData.SUPERVISOR_EMPID,
+        'Department Head': formData.DEPT_HEAD_EMPID,
+        HOD: formData.MANGR_EMPID,
         'Half Day': formData.is_half_day
       };
 
@@ -631,27 +596,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     return new Date(NaN);
   };
 
-  // const getMinSelectableDate = (): string => {
-  //   const today = new Date();
-  //   const currentDay = today.getDate();
-  //   const currentMonth = today.getMonth();
-  //   const currentYear = today.getFullYear();
-
-  //   if (currentDay < 23) {
-  //     let prevMonth = currentMonth - 1;
-  //     let year = currentYear;
-
-  //     if (prevMonth < 0) {
-  //       prevMonth = 11;
-  //       year = currentYear - 1;
-  //     }
-
-  //     return `${year}-${String(prevMonth + 1).padStart(2, '0')}-23`;
-  //   }
-
-  //   return `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-23`;
-  // };
-
   useEffect(() => {
     const fetchLeaveDays = async () => {
 
@@ -679,58 +623,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     }
     fetchLeaveDays();
   }, [formData.leave_start_date, formData.leave_end_date,formData.leave_type]);
-
-  const getEmployeeNameById = async (employeeId: string): Promise<string> => {
-    console.log('getEmployeeNameById', employeeId);
-    if (!employeeId) return '';
-
-    try {
-      const sql_string = `SELECT * FROM VW_HR_EMPLOYEE WHERE EMPLOYEE_ID = '${employeeId}'`;
-      const result = await HrServiceInstance.executeRawSql(sql_string);
-      return result?.[0]?.RPT_NAME || ''; // Adjust field name as needed
-    } catch (error) {
-      console.error(`Error fetching employee name for ID ${employeeId}:`, error);
-      return '';
-    }
-  };
-
-  const fetchApproverNames = async (employeeData: ApproverIds | null) => {
-    console.log('fetchApproverNames', employeeData);
-    if (!employeeData) {
-      setApproverNames({
-        SUPERVISOR_EMPID: '',
-        DEPT_HEAD_EMPID: '',
-        MANGR_EMPID: ''
-      });
-      return;
-    }
-
-    setApproverLoading(true);
-    try {
-      const names = await Promise.all([
-        getEmployeeNameById(employeeData.SUPERVISOR_EMPID || ''),
-        getEmployeeNameById(employeeData.DEPT_HEAD_EMPID || ''),
-        getEmployeeNameById(employeeData.MANGR_EMPID || '')
-      ]);
-
-      setApproverNames({
-        SUPERVISOR_EMPID: names[0],
-        DEPT_HEAD_EMPID: names[1],
-        MANGR_EMPID: names[2]
-      });
-
-      setFormData((prev) => ({
-        ...prev,
-        SUPERVISOR_EMPID: employeeData.SUPERVISOR_EMPID || '',
-        DEPT_HEAD_EMPID: employeeData.DEPT_HEAD_EMPID || '',
-        MANGR_EMPID: employeeData.MANGR_EMPID || ''
-      }));
-    } catch (error) {
-      console.error('Error fetching approver names:', error);
-    } finally {
-      setApproverLoading(false);
-    }
-  };
 
   const fetchLeaveTypes = async (employeeId: string) => {
     if (!employeeId) return;
@@ -902,7 +794,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       const selectedLeaveType = leaveTypes.find((lt) => lt.value === value);
       const updatedForm = {
         ...formData,
-        leave_type: value,
+        leave_type: value,  
         leave_type_desc: selectedLeaveType ? selectedLeaveType.label : ''
       };
       setFormData(updatedForm);
@@ -1094,25 +986,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const handleSentBackPopupClose = () => {
     setSentBackPopup((prev) => ({ ...prev, open: false }));
   };
-
-  // Print handler
-  // const handlePrint = () => {
-  //   if (!printPopup.action.open) {
-  //     refetchReportListData();
-  //   }
-  //   setPrintPopup((prev) => ({
-  //     ...prev,
-  //     action: { ...prev.action, open: !prev.action.open }
-  //   }));
-  // };
-
-  // const togglePreviewPopup = (report?: any) => {
-  //   setPreviewReportPopup((prev) => ({
-  //     ...prev,
-  //     action: { ...prev.action, open: !prev.action.open },
-  //     data: { selectedReport: report ?? null }
-  //   }));
-  // };
   
   const refreshAttachments = async () => {
     if (formData.request_number || newInsertedData?.REQUEST_NUMBER) {
@@ -1147,12 +1020,10 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         EMPLOYEE_ID: value.EMPLOYEE_ID?.toString() || value.EMPLOYEE_CODE || '',
         rpt_name: value.RPT_NAME || '',
         SUPERVISOR_EMPID: value.SUPERVISOR_EMPID || '',
+        ENGNR_EMPID: value.ENGNR_EMPID || '',
         DEPT_HEAD_EMPID: value.DEPT_HEAD_EMPID || '',
-        MANGR_EMPID: value.MANGR_EMPID || ''
+        MANGR_EMPID: value.MANGR_EMPID || '',
       }));
-
-      // Fetch approver names for the selected employee
-      fetchApproverNames(value);
 
       // Fetch leave types for the selected employee
       if (value.EMPLOYEE_ID || value.EMPLOYEE_CODE) {
@@ -1167,6 +1038,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         EMPLOYEE_ID: '',
         rpt_name: '',
         SUPERVISOR_EMPID: '',
+        ENGNR_EMPID: '',
         DEPT_HEAD_EMPID: '',
         MANGR_EMPID: ''
       }));
@@ -1596,82 +1468,41 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
             </h3>
 
             <div className="flex flex-col gap-2">
-              {formData.IMMEDIATE_SUPERVISOR_NAME || formData.DEPT_HEAD_NAME || formData.HOD_NAME
-                ? [
+                {[
                   {
                     label: intl.formatMessage({ id: 'Immediate Supervisor' }) || 'Immediate Supervisor',
-                    key: 'IMMEDIATE_SUPERVISOR_NAME',
-                    name: formData.IMMEDIATE_SUPERVISOR_NAME,
-                    id: formData.IMMEDIATE_SUPERVISOR_NAME
+                    key: 'SUPERVISOR',
+                    name: currentUserApprovers?.SUPERVISOR_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
-                    key: 'DEPT_HEAD_NAME',
-                    name: formData.DEPT_HEAD_NAME,
-                    id: formData.DEPT_HEAD_NAME
+                    label: intl.formatMessage({ id: 'Level 1' }) || 'Level 1',
+                    key: 'ENGINEER',
+                    name: currentUserApprovers?.ENGRTHEAD_NAME
                   },
                   {
-                    label: intl.formatMessage({ id: 'HOD' }) || 'HOD',
-                    key: 'HOD_NAME',
-                    name: formData.HOD_NAME,
-                    id: formData.HOD_NAME
+                    label: intl.formatMessage({ id: 'Level 2' }) || 'Level 2',
+                    key: 'DEPT_HEAD',
+                    name: currentUserApprovers?.DEPT_HEAD_NAME
+                  },
+                  {
+                    label: intl.formatMessage({ id: 'Senior payroll' }) || 'Senior payroll',
+                    key: 'HOD',
+                    name: currentUserApprovers?.MANAGER_NAME
+                  },
+                  {
+                    label: intl.formatMessage({ id: 'HR Manager' }) || 'HR Manager',
+                    key: 'SENIOR_HR_NAME',
+                    name: currentUserApprovers?.SENIOR_HR_NAME
                   }
-                ].map(({ label, key, name, id }) => (
+                ].map(({ label, key, name }) => (
                   <div key={key}>
                     <TextField
                       fullWidth
                       label={label}
                       size="small"
                       margin="dense"
-                      value={
-                        name ||
-                        (approverLoading
-                          ? intl.formatMessage({ id: 'Loading' }) || 'Loading...'
-                          : intl.formatMessage({ id: 'NotAssigned' }) || 'Not assigned')
-                      }
-                      InputProps={{
-                        readOnly: true
-                      }}
-                      disabled={approverLoading}
-                    />
-                  </div>
-                ))
-                : [
-                  {
-                    label: intl.formatMessage({ id: 'Immediate Supervisor' }) || 'Immediate Supervisor',
-                    key: 'SUPERVISOR_EMPID',
-                    name: approverNames.SUPERVISOR_EMPID,
-                    id: formData.SUPERVISOR_EMPID
-                  },
-                  {
-                    label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
-                    key: 'DEPT_HEAD_EMPID',
-                    name: approverNames.DEPT_HEAD_EMPID,
-                    id: formData.DEPT_HEAD_EMPID
-                  },
-                  {
-                    label: intl.formatMessage({ id: 'HOD' }) || 'HOD',
-                    key: 'MANGR_EMPID',
-                    name: approverNames.MANGR_EMPID,
-                    id: formData.MANGR_EMPID
-                  }
-                ].map(({ label, key, name, id }) => (
-                  <div key={key}>
-                    <TextField
-                      fullWidth
-                      label={label}
-                      size="small"
-                      margin="dense"
-                      value={
-                        name ||
-                        (approverLoading
-                          ? intl.formatMessage({ id: 'Loading' }) || 'Loading...'
-                          : intl.formatMessage({ id: 'NotAssigned' }) || 'Not assigned')
-                      }
-                      InputProps={{
-                        readOnly: true
-                      }}
-                      disabled={approverLoading}
+                      value={name || intl.formatMessage({ id: 'NotAssigned' }) || 'Not assigned'}
+                      InputProps={{ readOnly: true }}
                     />
                   </div>
                 ))}

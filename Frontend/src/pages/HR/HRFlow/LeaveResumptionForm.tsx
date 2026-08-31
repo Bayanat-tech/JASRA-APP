@@ -1140,7 +1140,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                       id: formData.DEPT_HEAD_NAME
                     },
                     {
-                      label: intl.formatMessage({ id: 'HOD' }) || 'HOD',
+                      label: intl.formatMessage({ id: 'Senior payroll' }) || 'Senior payroll',
                       key: 'HOD_NAME',
                       name: formData.HOD_NAME,
                       id: formData.HOD_NAME
@@ -1179,7 +1179,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                       id: formData.DEPT_HEAD_EMPID
                     },
                     {
-                      label: intl.formatMessage({ id: 'HOD' }) || 'HOD',
+                      label: intl.formatMessage({ id: 'Senior payroll' }) || 'Senior payroll',
                       key: 'MANGR_EMPID',
                       name: approverNames.MANGR_EMPID,
                       id: formData.MANGR_EMPID

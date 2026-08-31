@@ -93,8 +93,8 @@ import PurchaseOrderReport from 'components/reports/purchase_order_register/Purc
 import PurchaseRequestReport from 'components/reports/PurchaseRequestReport';
 import PurchaseRequestDetail from 'components/reports/purchase/PurchaseRequestDetail';
 // import report Budget
-import ProjectwiseCurrentStatus from 'components/reports/purchase/ProjectwiseCurrentStatus';
-import CostwiseCurrentStatus from 'components/reports/purchase/CostwiseCurrentStatus';
+
+import CostwiseBudgetAllocationPage from 'pages/Report/components/Costwisebudgetallocation';
 
 import CustomersReport from 'components/reports/purchase/masters/CustomersReport';
 import SuppliersReport from 'components/reports/purchase/masters/SuppliersReport';
@@ -146,6 +146,9 @@ import BoldPurchaseRequestSummary from 'components/reports/purchase/BoldPurchase
 import BudgetStatusReport from 'pages/Report/components/BudgetStatusReport';
 import ItemInformationReport from 'pages/Report/item_information/ItemInformationReport';
 import PurchaseRequestRegisterReport from 'components/reports/purchase_order_register/PurchaseRequestRegisterReport';
+import ProjectwiseCurrentStatus from 'components/reports/purchase/ProjectwiseCurrentStatus';
+import LeaveBalanceReport from 'pages/HR/HRFlow/LeaveBalanceReport';
+import CashPayslipReport from 'pages/HR/HRFlow/Cashpayslipreport';
 // import BTHRMainPage from 'BT_INDIA/pages/BTHRMainPages';
 // import MyTaskPage from 'pages/Purchasefolder/MyitemPage_history';
 // import VendorDashboard from 'pages/VendorSystem/dashboard/VendorDashboard'
@@ -643,10 +646,8 @@ const MainRoutes = {
                 {
                   path: 'Budget',
                   children: [
-                    { path: 'budget_status_report', element: <ProjectwiseCurrentStatus /> },
-                    { path: 'budget_allocation_report', element: <CostwiseCurrentStatus /> },
-                    { path: '*', element: <MaintenanceError /> }
-                  ]
+                  { path: 'budget_status_report', element: <ProjectwiseCurrentStatus /> },                    
+                  { path: 'budget_allocation_report', element: <CostwiseBudgetAllocationPage /> }       ]
                 },
                 {
                   path: 'po',
@@ -756,6 +757,8 @@ const MainRoutes = {
                     { path: 'employee_payslip_view/:employeeId/:month/:year', element: <ViewPayslipReport /> },
                     { path: 'leave_register', element: <HrEmployeeRegisterMainPage /> },
                     { path: 'leave_resumption', element: <HRLeaveResumptionMainPage /> },
+                    { path: 'leave_balance', element: <LeaveBalanceReport/>},
+                    { path:'payroll_cash', element: <CashPayslipReport/>},
                     { path: 'MY_ITEM', element: <MyItemPage /> },
                     { path: 'My_History', element: <PurchasehistoryPfPage /> },
                     { path: 'PO_Cancel', element: <POcancelPfPage /> },
