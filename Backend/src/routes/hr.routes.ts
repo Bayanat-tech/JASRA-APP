@@ -5,6 +5,7 @@ import { deleteHrMaster, getHrMaster } from "../../src/jasra/controllers/JS_hr.c
 import hrGmRoutes from "./HR/gmHr.routes";
 import employeeHrRoutes from "./HR/employeHr.routes";
 import { checkUserAuthorization } from "../middleware/checkUserAthorization";
+import { upsertTransferReqFlow } from "../controllers/HR/controller_transfer_requests";
 
 // Initialize the Express router
 const router = express.Router();
@@ -35,6 +36,13 @@ router.use(
   employeeHrRoutes
 );
 
+router.post(
+  "/transfer_request_flow",
+  passport.authenticate("jwt", { session: false }),
+  checkUserAuthorization,
+  upsertTransferReqFlow
+);
+
 // Define a DELETE API endpoint to delete HR master data
 router.delete(
   "/leavetype/delete",
@@ -57,6 +65,7 @@ router.get(
   checkUserAuthorization,
   getHrMaster
 );
+
 
 
 // Export the router as the default module

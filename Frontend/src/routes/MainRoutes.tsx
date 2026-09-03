@@ -149,6 +149,8 @@ import PurchaseRequestRegisterReport from 'components/reports/purchase_order_reg
 import ProjectwiseCurrentStatus from 'components/reports/purchase/ProjectwiseCurrentStatus';
 import LeaveBalanceReport from 'pages/HR/HRFlow/LeaveBalanceReport';
 import CashPayslipReport from 'pages/HR/HRFlow/Cashpayslipreport';
+// import path from 'path';
+import TransferRequestPage from 'pages/HR/Masters/transfer_request/TransferRequestPage';
 // import BTHRMainPage from 'BT_INDIA/pages/BTHRMainPages';
 // import MyTaskPage from 'pages/Purchasefolder/MyitemPage_history';
 // import VendorDashboard from 'pages/VendorSystem/dashboard/VendorDashboard'
@@ -753,6 +755,7 @@ const MainRoutes = {
                   path: 'Request',
                   children: [
                     { path: 'leave_request', element: <HRMainPage /> },
+                    { path: 'transfer_request', element: <TransferRequestPage /> },
                     { path: 'employee_payslip', element: <HRPayslips /> },
                     { path: 'employee_payslip_view/:employeeId/:month/:year', element: <ViewPayslipReport /> },
                     { path: 'leave_register', element: <HrEmployeeRegisterMainPage /> },

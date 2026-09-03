@@ -27,6 +27,7 @@ export type UserProfile = {
   active_flag: string;
   lang_pref: string;
   APPLICATION?: string;
+  user_id: string;
 };
 interface ButtonGroup {
   new: string;
