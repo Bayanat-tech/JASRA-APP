@@ -1368,7 +1368,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
             <h3 className="text-md font-medium text-white mb-2">{intl.formatMessage({ id: 'Settings' }) || 'Settings'}</h3>
 
             <div className="flex flex-col  gap-2">
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Leave Allowance' }) || 'Leave Allowance'}</InputLabel>
                 <Select
                   value={formData.LEAVE_ALLOWANCE}
@@ -1389,7 +1389,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Select>
               </FormControl>
 
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Advance Payment' }) || 'Advance Payment'}</InputLabel>
                 <Select
                   value={formData.ADV_PAYMENT}
@@ -1398,6 +1398,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                     readOnly: !readOnly || viewMode
                   }}
                   label="Advance Payment"
+                  
                 >
                   <MenuItem value="">
                     <em>{intl.formatMessage({ id: 'Select' }) || 'Select'}</em>
@@ -1410,7 +1411,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Select>
               </FormControl>
 
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Cause Type' }) || 'Cause Type'}</InputLabel>
                 <Select
                   value={formData.CAUSE_TYPE}
@@ -1430,6 +1431,78 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   ))}
                 </Select>
               </FormControl>
+
+              <FormControl fullWidth size="small" margin="dense">
+                <InputLabel>{intl.formatMessage({ id: 'Air Ticket' }) || 'Air Ticket'}</InputLabel>
+                <Select
+                  value={formData.AIR_TICKET}
+                  onChange={(e) => handleChange('AIR_TICKET', e.target.value)}
+                  label="Air Ticket"
+                  inputProps={{
+                    readOnly: !readOnly || viewMode
+                  }}
+                >
+                  <MenuItem value="">
+                    <em>{intl.formatMessage({ id: 'Select' }) || 'Select'}</em>
+                  </MenuItem>
+                  {['Yes', 'No'].map((opt) => (
+                    <MenuItem key={opt} value={opt}>
+                      {intl.formatMessage({ id: opt }) || opt}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <div className="grid grid-cols-2 gap-4 ">
+
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <DatePicker
+                    label={intl.formatMessage({ id: 'Travel Start Date' })}
+                    value={formData.TRAVEL_DATE ? dayjs(formData.TRAVEL_DATE) : null}
+                    onChange={(newValue) => handleChange('TRAVEL_DATE', newValue)}
+                    format="DD/MM/YYYY"
+                    readOnly={!readOnly || viewMode}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        margin: 'dense'
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <DatePicker
+                    label={intl.formatMessage({ id: 'Travel End Date' })}
+                    value={formData.TRAVEL_END_DATE ? dayjs(formData.TRAVEL_END_DATE) : null}
+                    onChange={(newValue) => handleChange('TRAVEL_END_DATE', newValue)}
+                    minDate={formData.TRAVEL_END_DATE ? dayjs(formData.TRAVEL_END_DATE) : undefined}
+                    format="DD/MM/YYYY"
+                    readOnly={!readOnly || viewMode}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        margin: 'dense'
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+              </div>
+
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                label={intl.formatMessage({ id: 'Air Route' }) || 'Air Route'}
+                size="small"
+                margin="dense"
+                value={formData.AIR_ROUTE}
+                onChange={(e) => handleChange('AIR_ROUTE', e.target.value)}
+                InputProps={{
+                  readOnly: !readOnly || viewMode
+                }}
+              />
 
               <TextField
                 fullWidth
@@ -1507,7 +1580,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   </div>
                 ))}
 
-              <FormControl fullWidth size="small" margin="dense">
+              {/* <FormControl fullWidth size="small" margin="dense">
                 <InputLabel>{intl.formatMessage({ id: 'Air Ticket' }) || 'Air Ticket'}</InputLabel>
                 <Select
                   value={formData.AIR_TICKET}
@@ -1529,7 +1602,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
               </FormControl>
 
               <div className="grid grid-cols-2 gap-4 ">
-                {/* <div > */}
 
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <DatePicker
@@ -1578,7 +1650,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 InputProps={{
                   readOnly: !readOnly || viewMode
                 }}
-              />
+              /> */}
 
               {data?.LAST_ACTION === 'SENTBACK' && data?.SENTBACK_HISTORY != '' && (
                 <TextField
