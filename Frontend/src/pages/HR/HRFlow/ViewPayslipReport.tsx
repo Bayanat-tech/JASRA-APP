@@ -54,12 +54,10 @@ interface IVisaExpiryRow {
   PPT_VALID_TO?: string;
 }
 
-// Logo URLs
-const headerLogoForDiv10 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fmfs1.jpg";
-const headerTopForDiv10 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fmfs2.jpg";
-const headerLogoForDiv16 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fand1.jpg";
-const headerTopForDiv16 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2Fand2.jpg";
-const logoForDiv13 = "https://objectstorage.me-dubai-1.oraclecloud.com/n/axpnrpp1t5qs/b/app-dev-bucket-test/o/JASRALOGO%2FlogoForDiv13.jpg";
+// interface ICompanyLogo {
+//   DIV_CODE: string;
+//   LOGO_URL: string;
+// }
 
 
 
@@ -146,12 +144,10 @@ const ViewPayslipReport = () => {
   console.log('currentSupervisorEmployeeData',currentSupervisorEmployeeData);
 
   const hasPermission = React.useMemo(() => {
-    // Allow if the user is viewing their own payslip
     if (user?.loginid1 === employeeId) {
       return true;
     }
 
-    // Allow if the user is a supervisor/manager and the employee is under them
     if (currentSupervisorEmployeeData && currentSupervisorEmployeeData.length > 0) {
       return currentSupervisorEmployeeData.some(emp => emp.EMPLOYEE_ID === employeeId);
     }
@@ -286,6 +282,31 @@ const ViewPayslipReport = () => {
 
   const isLoading = headerLoading || earningsLoading || deductionsLoading || attendanceLoading || visaExpiryLoading;
 
+  // Fetch logo based on division, fallback to '10'
+  const { data: logoUrl } = useQuery({
+    queryKey: ['company_logo', header?.DIV_CODE],
+    queryFn: async (): Promise<string | null> => {
+      if (!header?.DIV_CODE) return null;
+
+      // 1. Try to get the logo for the employee's division
+      let sql = `SELECT LOGO_URL FROM company_logo WHERE DIV_CODE = '${header.DIV_CODE}'`;
+      let result = await HrServiceInstance.executeRawSql(sql);
+      if (Array.isArray(result) && result.length > 0 && result[0]?.LOGO_URL) {
+        return result[0].LOGO_URL;
+      }
+
+      sql = `SELECT LOGO_URL FROM company_logo WHERE DIV_CODE = '10'`;
+      result = await HrServiceInstance.executeRawSql(sql);
+      if (Array.isArray(result) && result.length > 0 && result[0]?.LOGO_URL) {
+        return result[0].LOGO_URL;
+      }
+
+      return null; // No logo found at all
+    },
+    enabled: !!header, 
+    refetchOnWindowFocus: false,
+  });
+
   React.useEffect(() => {
     if (isPrintView && !isLoading && headerData?.[0]) {
       setTimeout(() => {
@@ -294,16 +315,7 @@ const ViewPayslipReport = () => {
     }
   }, [isPrintView, isLoading, headerData]);
 
-    // Division logo mapping
-    const divisionLogos: Record<string, { left?: string; right?: string; center?: string }> = {
-      '10': { left: headerTopForDiv10, right: headerLogoForDiv10 },
-      '16': { left: headerTopForDiv16, right: headerLogoForDiv16 },
-      '13': { center: logoForDiv13 }
-    };
-
-    const defaultDivision = '10';
-    const selectedDivision = header?.DIV_CODE?.toString().trim() || defaultDivision;
-    const logos = divisionLogos[selectedDivision] || divisionLogos[defaultDivision];
+  
 
 
   if (isLoadingSupervisor) {
@@ -546,48 +558,20 @@ const exportToPDF = async () => {
         </div>
       </div>
 
-      {/* Main Payslip Content */}
-      {/* <div
-        id="payslip-content"
-        className="mx-auto border border-black bg-white px-7 py-6"
-        style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}
-      > */}
       <div
         id="payslip-content"
         className="mx-auto bg-white px-7 py-6"
         style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}
       >
-        {/* ===== HEADER WITH LOGOS ===== */}
-        {logos.center ? (
-          // Single centered logo (used by division 13)
-          <div className="flex justify-center pb-1">
-            <img
-              src={logos.center}
-              alt="Company Logo"
-              className="h-auto object-contain"
-              style={{ maxHeight: 80, maxWidth: '100%' }}
-            />
-          </div>
+      {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt="Company Logo"
+            className="h-auto object-contain"
+            style={{ maxHeight: 80, maxWidth: '100%' }}
+          />
         ) : (
-          // Two logos side by side (used by divisions 10 and 16)
-          <div className="flex items-center justify-between pb-1">
-            <div className="w-[180px]">
-              <img
-                src={logos.left}
-                alt="Company Logo Left"
-                className="h-auto w-full object-contain"
-                style={{ maxHeight: 70 }}
-              />
-            </div>
-            <div className="w-[120px]">
-              <img
-                src={logos.right}
-                alt="Company Logo Right"
-                className="h-auto w-full object-contain"
-                style={{ maxHeight: 65 }}
-              />
-            </div>
-          </div>
+          <div style={{ height: 80 }} />
         )}
 
         {/* Divider Line */}

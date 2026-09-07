@@ -139,6 +139,15 @@ export const getHrMaster = async (
         OR IMMEDIATE_SUPERVISOR = :loginid
         OR HOD = :loginid
         OR DEPT_HEAD = :loginid
+        OR EXISTS (
+            SELECT 1
+            FROM ms_hr_employee e
+            JOIN ms_hr_department d 
+                ON d.DEPT_CODE = e.DEPT_CODE 
+                AND d.DIV_CODE = e.DIV_CODE
+            WHERE e.EMPLOYEE_ID = CREATED_BY
+              AND d.LEAVE_FINAL_APPROVER = :loginid
+        )
   )`;
 
             break;
@@ -151,6 +160,15 @@ export const getHrMaster = async (
         OR IMMEDIATE_SUPERVISOR = :loginid
         OR HOD = :loginid
         OR DEPT_HEAD = :loginid
+        OR EXISTS (
+            SELECT 1
+            FROM ms_hr_employee e
+            JOIN ms_hr_department d 
+                ON d.DEPT_CODE = e.DEPT_CODE 
+                AND d.DIV_CODE = e.DIV_CODE
+            WHERE e.EMPLOYEE_ID = CREATED_BY
+              AND d.LEAVE_FINAL_APPROVER = :loginid
+        )
   )`;
 
             break;
@@ -187,6 +205,15 @@ export const getHrMaster = async (
             OR HOD = :loginid 
             OR DEPT_HEAD = :loginid 
             OR IMMEDIATE_SUPERVISOR = :loginid
+            OR EXISTS (
+            SELECT 1
+            FROM ms_hr_employee e
+            JOIN ms_hr_department d 
+                ON d.DEPT_CODE = e.DEPT_CODE 
+                AND d.DIV_CODE = e.DIV_CODE
+            WHERE e.EMPLOYEE_ID = CREATED_BY
+              AND d.LEAVE_FINAL_APPROVER = :loginid
+        )
         )
     `;
 

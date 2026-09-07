@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { Typography, IconButton, Menu, MenuItem, Snackbar, Alert } from '@mui/material';
+import { Typography, IconButton, Menu, MenuItem, Snackbar, Alert, Chip } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { ISearch } from 'components/filters/SearchFilter';
 import useAuth from 'hooks/useAuth';
@@ -211,16 +211,33 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         minWidth: 150,
         cellStyle: { fontSize: '12px' }
       },
+      // {
+      //   headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
+      //   field: 'NEXT_ACTION_BY_NAME',
+      //   sortable: false,
+      //   filter: false,
+      //   width: 120,
+      //   minWidth: 220,
+      //   cellStyle: { fontSize: '12px' }
+      // },
       {
-        headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
-        field: 'NEXT_ACTION_BY_NAME',
-        sortable: false,
-        filter: false,
-        width: 120,
-        minWidth: 220,
-        cellStyle: { fontSize: '12px' }
-      },
-
+      headerName: intl.formatMessage({ id: 'Status' }) || 'Status',
+      field: 'FINAL_APPROVED',
+      width: 120,
+      minWidth: 120,
+      cellStyle: { fontSize: '12px' },
+      sortable: false,
+      filter: false,
+      cellRenderer: () => (
+        <Chip
+          label="Approved"
+          size="small"
+          color="success"
+          variant="filled"
+          sx={{ fontWeight: 500 }}
+        />
+      )
+    },
       {
         headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',
