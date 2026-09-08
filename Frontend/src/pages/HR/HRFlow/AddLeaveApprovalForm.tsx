@@ -1189,23 +1189,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                             }}
                           />
                         </LocalizationProvider>
-                        <LocalizationProvider dateAdapter={AdapterDayjs}>
-                          <DatePicker
-                            readOnly={viewMode}
-                            label={intl.formatMessage({ id: 'Duty Resume Date' })}
-                            value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
-                            onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
-                            format="DD/MM/YYYY"
-                            slotProps={{
-                              textField: {
-                                fullWidth: true,
-                                size: 'small',
-                                margin: 'dense',
-                                required: true
-                              }
-                            }}
-                          />
-                        </LocalizationProvider>
                       </div>
                     </>
                   </div>
@@ -1299,6 +1282,23 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   readOnly={!readOnly || viewMode}
                   slotProps={{
                     textField: {
+                      fullWidth: true,
+                      size: 'small',
+                      margin: 'dense',
+                      required: true
+                    }
+                  }}
+                />
+              </LocalizationProvider>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DatePicker
+                      readOnly={viewMode}
+                      label={intl.formatMessage({ id: 'Duty Resume Date' })}
+                      value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
+                      onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
+                      format="DD/MM/YYYY"
+                      slotProps={{
+                      textField: {
                       fullWidth: true,
                       size: 'small',
                       margin: 'dense',
