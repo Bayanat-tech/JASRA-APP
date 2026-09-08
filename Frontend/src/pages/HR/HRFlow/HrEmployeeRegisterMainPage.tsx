@@ -164,7 +164,7 @@ const leaveBalanceSql = useMemo(() => {
     NVL(NO_OF_LEAVES_AVAILABLE,0) as NO_OF_LEAVES_AVAILABLE
     FROM VW_HR_LEAVE_YEARLY_BAL_SYSDATE_NEW
     WHERE EMPLOYEE_ID = '${employee}' 
-    AND LEAVE_TYPE NOT IN ('001','008','ABS')
+    AND LEAVE_TYPE NOT IN ('008','ABS')
   `;
 }, [employee]); 
 

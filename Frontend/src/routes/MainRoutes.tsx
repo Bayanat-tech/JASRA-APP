@@ -151,6 +151,7 @@ import LeaveBalanceReport from 'pages/HR/HRFlow/LeaveBalanceReport';
 import CashPayslipReport from 'pages/HR/HRFlow/Cashpayslipreport';
 // import path from 'path';
 import TransferRequestPage from 'pages/HR/Masters/transfer_request/TransferRequestPage';
+import UnpaidLeaveReport from 'pages/HR/HRFlow/UnpaidleaveReport';
 // import BTHRMainPage from 'BT_INDIA/pages/BTHRMainPages';
 // import MyTaskPage from 'pages/Purchasefolder/MyitemPage_history';
 // import VendorDashboard from 'pages/VendorSystem/dashboard/VendorDashboard'
@@ -761,6 +762,7 @@ const MainRoutes = {
                     { path: 'leave_register', element: <HrEmployeeRegisterMainPage /> },
                     { path: 'leave_resumption', element: <HRLeaveResumptionMainPage /> },
                     { path: 'leave_balance', element: <LeaveBalanceReport/>},
+                    { path: 'unpaid_request', element: <UnpaidLeaveReport/>},
                     { path:'payroll_cash', element: <CashPayslipReport/>},
                     { path: 'MY_ITEM', element: <MyItemPage /> },
                     { path: 'My_History', element: <PurchasehistoryPfPage /> },
