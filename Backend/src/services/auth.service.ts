@@ -118,7 +118,7 @@ export class AuthService {
     const typeStr =
       typeof apiUser.TYPE === "string" ? apiUser.TYPE.toUpperCase() : "";
     const roleId =
-      typeStr === "VENDOR" ? 88888 : typeStr === "EMPLOYEE" ? 77777 : null;
+      typeStr === "VENDOR" ? 1234 : typeStr === "EMPLOYEE" ? 88888 : null;
 
     if (roleId !== null) {
       const insertQuery = `
