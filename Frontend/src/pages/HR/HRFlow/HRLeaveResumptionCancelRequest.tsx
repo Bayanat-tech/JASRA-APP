@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { Typography, IconButton, Menu, MenuItem, Snackbar, Alert } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { ISearch } from 'components/filters/SearchFilter';
+// import { ISearch } from 'components/filters/SearchFilter';
 //import UniversalDialog from 'components/popup/UniversalDialog';
 import useAuth from 'hooks/useAuth';
 import { useEffect, useMemo, useState, useCallback } from 'react';
@@ -25,10 +25,10 @@ import * as XLSX from 'xlsx';
 import { useIntl } from 'react-intl';
 import { isMobile } from 'react-device-detect';
 
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
-};
+// const filter: ISearch = {
+//   sort: { field_name: 'last_updated', desc: true },
+//   search: [[]]
+// };
 interface HRLCancelRequestProps { }
 const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
   const intl = useIntl();
@@ -38,10 +38,10 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
   const pathNameList = getPathNameList(location.pathname);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
   const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 50 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
+  // const [searchData, setSearchData] = useState<ISearch>(filter);
   const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
   const { user } = useAuth();
-  const [filterData] = useState<ISearch>(filter);
+  // const [filterData] = useState<ISearch>(filter);
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
@@ -122,12 +122,12 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
       {
         headerName: intl.formatMessage({ id: 'No.' }) || 'No.',
         field: 'REQUEST_NUMBER',
-        width: 50,
+        width: 40,
         cellStyle: {
           fontSize: '12px',
           textAlign: 'center'
         } as any,
-        minWidth: 140,
+        minWidth: 120,
         suppressMenu: true,
         sortable: false,
         filter: false
@@ -136,7 +136,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
         field: 'REQUEST_DATE',
         width: 120,
-        minWidth: 150,
+        minWidth: 110,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
@@ -161,7 +161,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         sortable: false,
         filter: false,
         width: 120,
-        minWidth: 150,
+        minWidth: 120,
         cellStyle: { fontSize: '12px' }
       },
 
@@ -173,7 +173,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
         width: 120,
-        minWidth: 150,
+        minWidth: 110,
         cellStyle: { fontSize: '12px' },
         sortable: false,
         filter: false
@@ -187,7 +187,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
         width: 120,
-        minWidth: 150,
+        minWidth: 110,
         cellStyle: { fontSize: '12px' },
         sortable: false,
         filter: false
@@ -200,7 +200,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
         width: 140,
-        minWidth: 180,
+        minWidth: 120,
         cellStyle: { fontSize: '12px' },
         sortable: false,
         filter: false
@@ -213,7 +213,7 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
         width: 140,
-        minWidth: 180,
+        minWidth: 120,
         cellStyle: { fontSize: '12px' },
         sortable: false,
         filter: false
@@ -229,16 +229,6 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         cellStyle: { fontSize: '12px' }
       },
       {
-        headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
-        field: 'NEXT_ACTION_BY_NAME',
-        sortable: false,
-        filter: false,
-        width: 120,
-        minWidth: 220,
-        cellStyle: { fontSize: '12px' }
-      },
-
-      {
         headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',
         width: 100,
@@ -252,39 +242,39 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
     ],
     []
   );
-  const onSortChanged = useCallback((params: any) => {
-    if (!params?.api) return;
-    try {
-      const sortModel = params.api.getSortModel();
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort:
-          sortModel?.length > 0
-            ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
-            : { field_name: 'updated_at', desc: true }
-      }));
-    } catch (error) {
-      // Fallback to default sort
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort: { field_name: 'updated_at', desc: true }
-      }));
-    }
-  }, []);
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
-      }
-    ]);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
+  // const onSortChanged = useCallback((params: any) => {
+  //   if (!params?.api) return;
+  //   try {
+  //     const sortModel = params.api.getSortModel();
+  //     setSearchData((prevData) => ({
+  //       ...prevData,
+  //       sort:
+  //         sortModel?.length > 0
+  //           ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
+  //           : { field_name: 'updated_at', desc: true }
+  //     }));
+  //   } catch (error) {
+  //     // Fallback to default sort
+  //     setSearchData((prevData) => ({
+  //       ...prevData,
+  //       sort: { field_name: 'updated_at', desc: true }
+  //     }));
+  //   }
+  // }, []);
+  // const onFilterChanged = useCallback((event: any) => {
+  //   const filterModel = event.api.getFilterModel();
+  //   const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
+  //     {
+  //       field_name: field,
+  //       field_value: value.filter || value.value,
+  //       operator: 'equals'
+  //     }
+  //   ]);
+  //   setSearchData((prevData) => ({
+  //     ...prevData,
+  //     search: filters.length > 0 ? filters : [[]]
+  //   }));
+  // }, []);
   const onPaginationChanged = useCallback((params: any) => {
     const currentPage = params.api.paginationGetCurrentPage();
     const pageSize = params.api.paginationGetPageSize();
@@ -296,15 +286,15 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
   const permissionCheck = !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
   const isQueryEnabled = Boolean(permissionCheck);
 
-  const {
-    data: HRLCancelRequestData,
-    refetch,
-    isError
-  } = useQuery({
-    queryKey: ['HRLCancelRequestData', searchData, paginationData],
-    queryFn: () => HrServiceInstance.getMasters('hr', 'Pg_leave_flow_cancel', paginationData, filterData, user?.loginid1),
-    enabled: isQueryEnabled
-  });
+  // const {
+  //   data: HRLCancelRequestData,
+  //   refetch,
+  //   isError
+  // } = useQuery({
+  //   queryKey: ['HRLCancelRequestData', searchData, paginationData],
+  //   queryFn: () => HrServiceInstance.getMasters('hr', 'Pg_leave_flow_cancel', paginationData, filterData, user?.loginid1),
+  //   enabled: isQueryEnabled
+  // });
 
   const { data: editData } = useQuery({
     queryKey: ['edit_leave', selectedRequestNumber],
@@ -314,6 +304,30 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         : Promise.resolve(null),
     enabled: !!selectedRequestNumber
   });
+
+     const sql_string = `
+          SELECT *
+          FROM VW_HR_LEAVE_REQUEST_FLOW
+          WHERE COMPANY_CODE = '${user?.company_code}'
+          AND ( RESUME_DATE_APPROVED = 'YES'
+            AND FINAL_APPROVED = 'YES'
+            AND LAST_ACTION = 'CANCEL'
+            AND CREATED_BY = '${user?.loginid1}')
+        OR ( RESUME_DATE_APPROVED = 'NO'
+        AND FINAL_APPROVED = 'YES' AND
+        LAST_ACTION = 'CANCEL' AND CREATED_BY = '${user?.loginid1}')
+    `;
+    
+      const {
+      data: HRLCancelRequestData,
+      refetch,
+      isError
+      } = useQuery({
+        queryKey: ['HRLCancelRequestData', paginationData, user?.loginid1, sql_string],
+        queryFn: () => HrServiceInstance.executeRawSql(sql_string),
+        refetchOnWindowFocus: false,
+        enabled: isQueryEnabled
+      });
 
   const onGridReady = (params: any) => {
     setGridApi(params.api);
@@ -384,12 +398,12 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           height="480px"
           rowHeight={25}
           headerHeight={30}
-          rowData={HRLCancelRequestData?.tableData || []}
+          rowData={HRLCancelRequestData || []}
           columnDefs={columnDefs}
           onGridReady={onGridReady}
-          onFilterChanged={onFilterChanged}
+          // onFilterChanged={onFilterChanged}
           onPaginationChanged={onPaginationChanged}
-          onSortChanged={onSortChanged}
+          // onSortChanged={onSortChanged}
           paginationPageSize={10}
           paginationPageSizeSelector={[10, 50, 100]}
           pagination

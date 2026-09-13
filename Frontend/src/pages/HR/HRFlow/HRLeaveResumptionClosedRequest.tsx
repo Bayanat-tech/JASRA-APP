@@ -227,18 +227,7 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
               cellStyle: { fontSize: '12px' }
             },
       {
-         headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
-        field: 'NEXT_ACTION_BY_NAME',
-        sortable: false,
-        filter: false,
-        width: 120,
-        minWidth: 220,
-        cellStyle: { fontSize: '12px' }
-      },
-
-     
-      {
-          headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
+        headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',
         width: 100,
         sortable: false,
@@ -312,13 +301,14 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
    const sql_string = `
     SELECT *
     FROM VW_HR_LEAVE_REQUEST_FLOW
-    WHERE COMPANY_CODE = 'BSG'
+    WHERE COMPANY_CODE = '${user?.company_code}'
     AND ( ACTUAL_RESUME_DATE IS NOT NULL
     AND RESUME_DATE_APPROVED = 'YES'
       AND FINAL_APPROVED = 'YES'
+      AND LAST_ACTION = 'SUBMITTED'
       AND CREATED_BY = '${user?.loginid1}')
   OR (ACTUAL_RESUME_DATE IS NOT NULL 
-    AND RESUME_DATE_APPROVED = 'NO'
+    AND RESUME_DATE_APPROVED = 'YES'
   AND FINAL_APPROVED = 'YES' AND
   LAST_ACTION = 'SUBMITTED' AND CREATED_BY = '${user?.loginid1}')
   `;

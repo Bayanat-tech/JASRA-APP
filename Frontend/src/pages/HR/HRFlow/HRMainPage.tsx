@@ -20,6 +20,8 @@ const HRMainPage = () => {
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [CreateMode, setCreateMode] = useState(false);
   const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
+  const RESTRICTED_LOGIN_IDS = ['J226080634', '10634'];
+  const isRestrictedFromAddingLeave = RESTRICTED_LOGIN_IDS.includes(user?.loginid1 ?? '');
 
   // Query to get logged-in user's employee data only
   const { data: currentUserEmployeeData } = useQuery<IHrEmployee | null, Error>({
@@ -107,7 +109,9 @@ const HRMainPage = () => {
 
         <Typography color="text.primary">{intl.formatMessage({ id: 'Leave Request' }) || 'Leave Request'}</Typography>
       </Breadcrumbs>{' '}
+      
       <div className="flex justify-end space-x-2 mb-4">
+        {!isRestrictedFromAddingLeave && (
         <Button
           sx={{
             fontSize: '0.895rem',
@@ -131,7 +135,9 @@ const HRMainPage = () => {
         >
           {intl.formatMessage({ id: 'Add Leave Request' }) || 'Add Leave Request'}
         </Button>
+        )}
       </div>
+
       <Tabs
         value={activeTab}
         onChange={(_, newValue) => setActiveTab(newValue)}

@@ -792,9 +792,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
           {/* <h3 className="text-md font-medium text-gray-700 mb-3">{intl.formatMessage({ id: 'Basic Information' })}</h3> */}
 
           <div className="flex flex-col  gap-4  md:flex-row">
-            {/* Employee Code and Name - Display as text */}
             <div className="flex flex-col gap-4">
-              {/* <label className="block text-md font-medium text-gray-700 mb-3">{intl.formatMessage({ id: 'EmployeeCodeAndName' })}</label> */}
               <div>
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <DatePicker
@@ -821,7 +819,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                   {intl.formatMessage({ id: 'LeaveResumptionDetails' }) || 'Leave Resumption Details'}
                 </h3>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex gap-4">
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -833,10 +831,26 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                     }
                     label={intl.formatMessage({ id: 'ResumeWork' }) || 'Resume Work'}
                   />
-                  {/* Conditional Date Fields - shown side by side when checkbox is checked */}
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DatePicker
+                          readOnly={viewMode}
+                          label={intl.formatMessage({ id: 'Actual Resume Date' })}
+                          value={formData.actual_resume_date ? dayjs(formData.actual_resume_date) : null}
+                          onChange={(newValue) => handleChange('actual_resume_date', newValue)}
+                          minDate={formData.leave_end_date ? dayjs(formData.leave_end_date) : undefined}
+                          format="DD/MM/YYYY"
+                          slotProps={{
+                            textField: {
+                              fullWidth: true,
+                              size: 'small',
+                              margin: 'dense',
+                              required: true
+                            }
+                          }}
+                        />
+                      </LocalizationProvider>
 
-                  <>
-                    {/* Actual Resume Date */}
+                  {/* <>
                     <div className="flex flex-col gap-4">
                       <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <DatePicker
@@ -856,27 +870,8 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                           }}
                         />
                       </LocalizationProvider>
-
-                      <LocalizationProvider dateAdapter={AdapterDayjs}>
-                        <DatePicker
-                          readOnly={viewMode}
-                          label={intl.formatMessage({ id: 'Duty Resume Date' })}
-                          value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
-                          onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
-                          minDate={formData.leave_end_date ? dayjs(formData.leave_end_date) : undefined}
-                          format="DD/MM/YYYY"
-                          slotProps={{
-                            textField: {
-                              fullWidth: true,
-                              size: 'small',
-                              margin: 'dense',
-                              required: true
-                            }
-                          }}
-                        />
-                      </LocalizationProvider>
                     </div>
-                  </>
+                  </> */}
                 </div>
               </div>
             </div>
@@ -979,6 +974,25 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                 />
               </LocalizationProvider>
 
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <DatePicker
+                      label={intl.formatMessage({ id: 'Duty Resume Date' })}
+                      value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
+                      onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
+                      minDate={formData.leave_end_date ? dayjs(formData.leave_end_date) : undefined}
+                      format="DD/MM/YYYY"
+                      readOnly={approveResumption || data?.FINAL_APPROVED === 'YES'}
+                      slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        margin: 'dense',
+                        required: true
+                      }
+                    }}
+                  />
+                </LocalizationProvider>
+
               <div className="grid grid-cols-2 gap-4 ">
                 <TextField
                   fullWidth
@@ -1024,7 +1038,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
             <h3 className="text-md font-medium text-white mb-2">{intl.formatMessage({ id: 'Settings' }) || 'Settings'}</h3>
 
             <div className="flex flex-col  gap-2">
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Leave Allowance' }) || 'Leave Allowance'}</InputLabel>
                 <Select
                   value={formData.LEAVE_ALLOWANCE}
@@ -1045,7 +1059,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Select>
               </FormControl>
 
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Advance Payment' }) || 'Advance Payment'}</InputLabel>
                 <Select
                   value={formData.ADV_PAYMENT}
@@ -1066,7 +1080,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Select>
               </FormControl>
 
-              <FormControl fullWidth size="small" margin="dense">
+              <FormControl fullWidth size="small" margin="dense" style={{ display: 'none' }}>
                 <InputLabel>{intl.formatMessage({ id: 'Cause Type' }) || 'Cause Type'}</InputLabel>
                 <Select
                   value={formData.CAUSE_TYPE}
@@ -1134,7 +1148,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                       id: formData.IMMEDIATE_SUPERVISOR_NAME
                     },
                     {
-                      label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
+                      label: intl.formatMessage({ id: 'Level 1' }) || 'Level 1',
                       key: 'DEPT_HEAD_NAME',
                       name: formData.DEPT_HEAD_NAME,
                       id: formData.DEPT_HEAD_NAME
@@ -1173,7 +1187,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                       id: formData.SUPERVISOR_EMPID
                     },
                     {
-                      label: intl.formatMessage({ id: 'Department Head' }) || 'Department Head',
+                      label: intl.formatMessage({ id: 'Level 1' }) || 'Level 1',
                       key: 'DEPT_HEAD_EMPID',
                       name: approverNames.DEPT_HEAD_EMPID,
                       id: formData.DEPT_HEAD_EMPID

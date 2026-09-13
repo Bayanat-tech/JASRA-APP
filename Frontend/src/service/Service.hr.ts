@@ -61,6 +61,32 @@ class HRService {
       }
     };
 
+  downloadLeaveForm = async (requestNumber: string, employeeCode: string): Promise<Blob | null> => {
+    try {
+      const response = await axiosServices.get(
+        `api/hr/gm/print-form/${requestNumber}/${employeeCode}`,
+        { responseType: 'blob' }
+      );
+      console.log('leaveform',requestNumber, employeeCode, response);
+      return response.data;
+    } catch (error: any) {
+        console.error('downloadLeaveForm error:', error);
+  console.error('status:', error?.response?.status);
+  console.error('data:', error?.response?.data);
+      dispatch(
+        openSnackbar({
+          open: true,
+          message: error?.response?.data?.message || error.message || 'Failed to download leave form',
+          variant: 'alert',
+          alert: { color: 'error' },
+          severity: 'error',
+          close: true
+        })
+      );
+      return null;
+    }
+  };
+
       executeRawSql = async (rawSql: string): Promise<any[] | null> => {
     try {
       if (!rawSql) {

@@ -306,18 +306,20 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
   console.log('HRLInProgressData', HRLInProgressData);
 
   const sql_string = `
-  SELECT *
-  FROM VW_HR_LEAVE_REQUEST_FLOW
-  WHERE COMPANY_CODE = 'BSG'
-  AND ( ACTUAL_RESUME_DATE IS NULL
-  AND RESUME_DATE_APPROVED = 'NO'
-    AND FINAL_APPROVED = 'YES'
-    AND CREATED_BY = '${user?.loginid1}')
-OR (ACTUAL_RESUME_DATE IS NOT NULL 
-  AND RESUME_DATE_APPROVED = 'NO'
-AND FINAL_APPROVED = 'YES' AND
-LAST_ACTION = 'SUBMITTED' AND CREATED_BY = '${user?.loginid1}')
-`;
+      SELECT *
+      FROM VW_HR_LEAVE_REQUEST_FLOW
+      WHERE COMPANY_CODE = 'BSG'
+      AND ( ACTUAL_RESUME_DATE IS NULL
+      AND RESUME_DATE_APPROVED = 'NO'
+        AND FINAL_APPROVED = 'YES'
+        AND CREATED_BY = '${user?.loginid1}'
+        OR  IMMEDIATE_SUPERVISOR = '${user?.loginid1}')
+    OR (ACTUAL_RESUME_DATE IS NOT NULL 
+      AND RESUME_DATE_APPROVED = 'NO'
+    AND FINAL_APPROVED = 'YES' AND
+    LAST_ACTION = 'SUBMITTED' AND CREATED_BY = '${user?.loginid1}'
+    OR  IMMEDIATE_SUPERVISOR = '${user?.loginid1}')
+  `;
 
   const {
     data: HRLInProgressDataNew,

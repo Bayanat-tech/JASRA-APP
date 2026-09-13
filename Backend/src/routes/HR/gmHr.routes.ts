@@ -63,6 +63,7 @@ import {
 import { executeRawSql } from "../../controllers/HR/rawSql_hr_controller";
 import { getRequestFlowUsers } from "../../controllers/HR/hr_leave_flow_sentback";
 import { getJSEmployeesHandler, JSgetLeaveEntitleHandler, JSvalidateLeaveHandler , leaveDaysCntHandler } from "../../jasra/controllers/JS_hr_net.controller";
+import { printLeaveForm } from "../../jasra/controllers/JS_leaveformreport.controller";
 
 // Creating an instance of the Express Router
 const router = express.Router();
@@ -134,6 +135,7 @@ router.get('/leaveDaysCount',leaveDaysCntHandler);
 
 //raw sql execution route
 router.post("/executeRawSql", executeRawSql); // Raw SQL execution route\
+router.get("/print-form/:requestNumber/:employeeCode",printLeaveForm)
 
 //HR JASRA routes
 router.get("/jsemployees", getJSEmployeesHandler);

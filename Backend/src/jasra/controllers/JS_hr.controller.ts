@@ -155,6 +155,7 @@ export const getHrMaster = async (
            whereConditions = `
   company_code = :company_code
   AND FINAL_APPROVED = 'YES'
+  AND LAST_ACTION NOT IN ('REJECTED', 'CANCEL')
   AND (
         CREATED_BY = :loginid
         OR IMMEDIATE_SUPERVISOR = :loginid

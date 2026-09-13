@@ -26,7 +26,7 @@ import hrapprovalInstance from 'service/Service.hr';
 import useAuth from 'hooks/useAuth';
 import { useDispatch } from 'store';
 import { useQuery } from '@tanstack/react-query';
-import { FaFileExport, FaSave, FaHistory } from 'react-icons/fa';
+import { FaFileExport, FaSave, FaHistory, FaPrint } from 'react-icons/fa';
 import { DialogPop } from 'components/popup/DIalogPop';
 import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
 import HrRequestServiceInstance, { IHrEmployee, IValidateLeaveResponse } from 'service/services.hr';
@@ -209,6 +209,9 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [viewLogOpen, setViewLogOpen] = useState(false);
   const [hasAttachments, setHasAttachments] = useState<boolean>(false);
   const leaveTypesRequiringAttachments = ['002', '014', '016', 'ACL'];
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
 
   const [validationLoading, setValidationLoading] = useState<boolean>(false);
   const [validationResult, setValidationResult] = useState<IValidateLeaveResponse | null>(null);
@@ -855,7 +858,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       MANGR_EMPID,
       resume_work,
       actual_resume_date,
-      DUTY_RESUME_DATE
+      DUTY_RESUME_DATE,
+      CONTACT_DETAILS_DURING_LEAVE
     } = formData;
 
     if (actionType === 'SAVEASDRAFT' || actionType === 'SUBMITTED') {
@@ -871,6 +875,10 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         errors.push(intl.formatMessage({ id: 'LeaveStartDateRequired', defaultMessage: 'Leave Start Date is required.' }));
 
       if (!leave_end_date) errors.push(intl.formatMessage({ id: 'LeaveEndDateRequired', defaultMessage: 'Leave End Date is required.' }));
+
+      if (!DUTY_RESUME_DATE) errors.push(intl.formatMessage({ id: 'DutyResumeDateRequired', defaultMessage: 'Duty Resume Date is required.' }));
+
+      if (!CONTACT_DETAILS_DURING_LEAVE) errors.push(intl.formatMessage({ id: 'ContactDetailsDuringLeaveRequired', defaultMessage: 'Contact Details During Leave are required.' }));
 
       if (!remarks) errors.push(intl.formatMessage({ id: 'RemarksRequired', defaultMessage: 'Remarks are required.' }));
       //  if (!actual_resume_date) errors.push('Actual Resume Date is required.');
@@ -993,6 +1001,18 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     }
   };
 
+  useEffect(() => {
+  dispatch(
+    showAlert({
+      severity: 'info',
+      message:
+        intl.formatMessage({ id: 'Please review the Approver Details below before submitting. If any approver looks incorrect or missing, contact your HR admin.' }) ||
+        'Review Approver Details',
+      open: true
+    })  
+  );
+  }, []);
+
   // Update the filesDialogOpen useEffect
   useEffect(() => {
     if (filesDialogOpen) {
@@ -1043,6 +1063,33 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         MANGR_EMPID: ''
       }));
     }
+  };
+
+
+  const handlePrintLeaveForm = async (formData?: { request_number: string; EMPLOYEE_ID: string }) => {
+    if (!formData?.request_number || !formData?.EMPLOYEE_ID) return;
+
+    dispatch(openBackdrop());
+    try {
+      const blob = await HrServiceInstance.downloadLeaveForm(formData.request_number, formData.EMPLOYEE_ID);
+      if (!blob) return; // error snackbar already shown by the service method
+
+      const url = window.URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } finally {
+      dispatch(closeBackdrop());
+    }
+  };
+
+  const handleClosePreview = () => {
+  if (previewUrl) {
+    window.URL.revokeObjectURL(previewUrl);
+  }
+  setPreviewUrl(null);
+  };
+
+  const handlePrintFromPreview = () => {
+    iframeRef.current?.contentWindow?.print();
   };
 
   const isRequestNumber = formData.request_number != '' || formData.request_number != null || formData.request_number != undefined;
@@ -1167,7 +1214,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                       }
                       label={intl.formatMessage({ id: 'ResumeWork' }) || 'Resume Work'}
                     />
-                    {/* Conditional Date Fields - shown side by side when checkbox is checked */}
 
                     <>
                       {/* Actual Resume Date */}
@@ -1292,11 +1338,11 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
               </LocalizationProvider>
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                     <DatePicker
-                      readOnly={viewMode}
                       label={intl.formatMessage({ id: 'Duty Resume Date' })}
                       value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
                       onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
                       format="DD/MM/YYYY"
+                      readOnly={!readOnly || viewMode}
                       slotProps={{
                       textField: {
                       fullWidth: true,
@@ -1526,6 +1572,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 label={intl.formatMessage({ id: 'Contact Details During Leave' }) || 'Contact Details During Leave'}
                 size="small"
                 margin="dense"
+                required
                 value={formData.CONTACT_DETAILS_DURING_LEAVE}
                 onChange={(e) => handleChange('CONTACT_DETAILS_DURING_LEAVE', e.target.value)}
                 InputProps={{
@@ -1794,6 +1841,18 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                 </Button>
               </Tooltip>
 
+              <Tooltip title={intl.formatMessage({ id: 'Preview Leave Form' }) || 'Preview Leave Form'}>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  color="primary"
+                  onClick={() => handlePrintLeaveForm(formData)}
+                  size="small"
+                >
+                  <FaPrint />
+                </Button>
+              </Tooltip>
+
               {(viewAttachments || formData.request_number || newInsertedData?.REQUEST_NUMBER) && (
                 <Tooltip title={intl.formatMessage({ id: 'Attach & View' }) || 'Attach & View'}>
                   <Button
@@ -1869,6 +1928,24 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
           <LogReport logData={logData} />
         </Dialog>   
       )}
+
+        <Dialog open={!!previewUrl} onClose={handleClosePreview} fullWidth maxWidth="md">
+          <div className="flex justify-between items-center bg-[#082a89] p-2">
+            <Button onClick={handleClosePreview} className="text-white">Close</Button>
+            <span className="text-white font-bold">Leave Application Form</span>
+            <Button onClick={handlePrintFromPreview} variant="contained" color="primary">
+              Print
+            </Button>
+          </div>
+          {previewUrl && (
+            <iframe
+              ref={iframeRef}
+              src={previewUrl}
+              style={{ width: '100%', height: '80vh', border: 'none' }}
+              title="Leave Application Form"
+            />
+          )}
+        </Dialog>
 
       {/* SEND BACK */}
       <DialogPop open={leaveSentBack} onClose={() => setLeaveSentBack(false)} title={'Send Back Request'} width={500}>
