@@ -23,7 +23,9 @@ module.exports = function override(config) {
     ...config.plugins,
     new webpack.ProvidePlugin({
       process: 'process/browser.js',
-      Buffer: ['buffer', 'Buffer']
+      Buffer: ['buffer', 'Buffer'],
+      $: 'jquery',
+      jQuery: 'jquery'
     })
   ];
 
