@@ -20,6 +20,7 @@ export interface PurchaseOrderData {
   SUPP_EMAIL1: string;
   MOBILE: string;
   BUYER: string;
+  COMPANY_CODE: string;
   PAYMENT_TERMS: string;
   DLVR_TERM: string;
   PROJECT_CODE: string;
@@ -52,6 +53,27 @@ export interface PurchaseOrderData {
   ALLOCATED_APPROVED_QUANTITY: string | null;
   SERVICE_RM_FLAG: string;
   ITEM_CODE: string;
+}
+
+// ── Supplementary lookups ────────────────────────────────────────────────
+// These two live outside VW_BO_PO_PRINT entirely, so they're fetched as
+// their own small queries once the main PO row is known.
+interface DeliveryInfo {
+  STORE_NAME: string;
+  CONTACT_NUMBER: string;
+  CONTACT_PERSON: string;
+}
+
+interface BuyerInfo {
+  REAL_NAME: string;
+}
+
+interface TermsInfo {
+  DLVR_TERM: string;
+  REMARKS: string;
+  PAYMENT_TERMS: string;
+  PROJECT_NAME: string;
+  PROJECT_CODE: string;
 }
 
 // ── Props: accepts required_values so it can plug into ReportDialogPage ──
@@ -151,6 +173,70 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     }, [data]);
     const poData = useMemo(() => (poItems.length > 0 ? poItems[0] : null), [poItems]);
     const signature = isSignatureRequired?.FLAG_YES_NO === 'YES';
+
+    // ── Delivery-site contact (store name, contact person, contact
+    // number) lives in MS_PS_PROJECT_MASTER, keyed by the PO's
+    // PROJECT_CODE — it has nothing to do with the supplier's own
+    // contact fields, which is what the report was mistakenly showing
+    // under "Contact Name" / "Contact No" before.
+    const sql_for_delivery_info = useMemo(() => `
+      SELECT STORE_NAME, CONTACT_NUMBER, CONTACT_PERSON
+      FROM MS_PS_PROJECT_MASTER
+      WHERE PROJECT_CODE = '${poData?.PROJECT_CODE}'
+        AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
+    `, [poData?.PROJECT_CODE, poData?.COMPANY_CODE]);
+
+    const { data: deliveryInfo } = useQuery<DeliveryInfo>({
+      queryKey: ['purchase_report_delivery_info', poData?.PROJECT_CODE, poData?.COMPANY_CODE],
+      staleTime: 1000 * 60 * 5,
+      queryFn: () =>
+        WmsSerivceInstance.executeRawSql(sql_for_delivery_info).then((res: any) => res?.[0]),
+      enabled: !!poData?.PROJECT_CODE && !!poData?.COMPANY_CODE,
+    });
+
+    // ── Buyer's display name isn't stored directly on the PO — BUYER on
+    // VW_BO_PO_PRINT is a login id, not a printable name. The real name
+    // has to be resolved through VW_BUYER_INFO (keyed by REQUEST_NUMBER)
+    // and then SEC_LOGIN.
+    const sql_for_buyer_name = useMemo(() => `
+      SELECT REAL_NAME
+      FROM SEC_LOGIN
+      WHERE LOGINID IN (
+        SELECT LAST_UPDATED
+        FROM VW_BUYER_INFO
+        WHERE REPLACE(REQUEST_NUMBER, '/', '$') = REPLACE('${poData?.REQUEST_NUMBER}', '/', '$')
+      )
+    `, [poData?.REQUEST_NUMBER]);
+
+    const { data: buyerInfo } = useQuery<BuyerInfo>({
+      queryKey: ['purchase_report_buyer_name', poData?.REQUEST_NUMBER],
+      staleTime: 1000 * 60 * 5,
+      queryFn: () =>
+        WmsSerivceInstance.executeRawSql(sql_for_buyer_name).then((res: any) => res?.[0]),
+      enabled: !!poData?.REQUEST_NUMBER,
+    });
+
+    // ── Payment term / delivery term / project / remarks come from a
+    // dedicated DISTINCT lookup against the print view itself, rather
+    // than being read off whichever item row happens to land as
+    // poItems[0]. These fields are populated per-item via a correlated
+    // subquery in the view, so they aren't guaranteed to be non-null on
+    // every single row — a DISTINCT query across the whole PO is the
+    // reliable way to get them.
+    const sql_for_terms_conditions = useMemo(() => `
+      SELECT DISTINCT DLVR_TERM, REMARKS, PAYMENT_TERMS, PROJECT_NAME, PROJECT_CODE
+      FROM VW_BO_PO_PRINT PO_REGISTER
+      WHERE Company_code = '${poData?.COMPANY_CODE}'
+        AND REPLACE(Ref_doc_no, '/', '$') = REPLACE('${refDocNo}', '/', '$')
+    `, [poData?.COMPANY_CODE, refDocNo]);
+
+    const { data: termsInfo } = useQuery<TermsInfo>({
+      queryKey: ['purchase_report_terms_info', poData?.COMPANY_CODE, refDocNo],
+      staleTime: 1000 * 60 * 5,
+      queryFn: () =>
+        WmsSerivceInstance.executeRawSql(sql_for_terms_conditions).then((res: any) => res?.[0]),
+      enabled: !!poData?.COMPANY_CODE && !!refDocNo,
+    });
 
     const status = useMemo(() => {
       if (poData?.PO_CONFIRM === 'Y' && poData?.PO_CANCEL === 'Y') return 'DRAFT';
@@ -388,13 +474,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               <Typography sx={{ fontWeight: 600 }}>DATE:</Typography>
               <Typography sx={{ fontWeight: 600 }}>{orderDate}</Typography>
               <Typography sx={{ fontWeight: 600 }}>Buyer:</Typography>
-              <Typography sx={{ fontWeight: 600 }}>{poData.BUYER || '-'}</Typography>
+              <Typography sx={{ fontWeight: 600 }}>{buyerInfo?.REAL_NAME || '-'}</Typography>
               <Typography sx={{ fontWeight: 600, mt: 0.5 }}>Delivery Address :</Typography>
-              <Typography sx={{ mt: 0.5 }}>{poData.DELIVERY_ADDRESS || '-'}</Typography>
+              <Typography sx={{ mt: 0.5 }}>{deliveryInfo?.STORE_NAME || poData.DELIVERY_ADDRESS || '-'}</Typography>
               <Typography sx={{ fontWeight: 600 }}>Contact Name :</Typography>
-              <Typography>{poData.SUPP_CONTACT1 || '-'}</Typography>
+              <Typography>{deliveryInfo?.CONTACT_PERSON || '-'}</Typography>
               <Typography sx={{ fontWeight: 600 }}>Contact No :</Typography>
-              <Typography>{poData.SUPP_TELNO1 || '-'}</Typography>
+              <Typography>{deliveryInfo?.CONTACT_NUMBER || '-'}</Typography>
               <Typography sx={{ fontWeight: 600 }}>PR. No :</Typography>
               <Typography>{poData.REQUEST_NUMBER || '-'}</Typography>
               <Typography sx={{ fontWeight: 600 }}>WO No :</Typography>
@@ -416,9 +502,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         </thead>
         <tbody>
           <tr>
-            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{poData.PAYMENT_TERMS}</td>
-            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{poData.DLVR_TERM}</td>
-            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{poData.PROJECT_CODE}: {poData.PROJECT_NAME}</td>
+            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{termsInfo?.PAYMENT_TERMS ?? poData.PAYMENT_TERMS}</td>
+            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{termsInfo?.DLVR_TERM ?? poData.DLVR_TERM}</td>
+            <td style={{ border: '1px solid #2f3fa8', padding: '4px 8px', textAlign: 'center', verticalAlign: 'top' }}>{termsInfo?.PROJECT_CODE ?? poData.PROJECT_CODE}: {termsInfo?.PROJECT_NAME ?? poData.PROJECT_NAME}</td>
           </tr>
         </tbody>
       </table>
@@ -442,6 +528,12 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       <tr className="print-row-avoid" ref={elRef}>
         <td colSpan={7} style={{ border: '1px solid #2f3fa8', padding: '4px 6px', fontWeight: 600 }}>
           Scope of Work:- Provision of Rental Services
+          {(termsInfo?.REMARKS ?? poData.REMARKS) && (
+            <>
+              <br />
+              <span style={{ fontWeight: 400 }}>{termsInfo?.REMARKS ?? poData.REMARKS}</span>
+            </>
+          )}
         </td>
       </tr>
     );
@@ -493,8 +585,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             {poData.REASON_FOR_PO_MODIFY && (
               <><br />{poData.REASON_FOR_PO_MODIFY}</>
             )}
-            {poData.REMARKS && (
-              <><br />{poData.REMARKS}</>
+            {(termsInfo?.REMARKS ?? poData.REMARKS) && (
+              <><br />{termsInfo?.REMARKS ?? poData.REMARKS}</>
             )}
           </Typography>
           <Typography sx={{ fontSize: 11.5, mt: 0.5 }}>1. Our order number is to be quoted on all relevant Invoices &amp; Delivery Notes. Your Invoice to be submitted against the actual Delivery/services to our Head Office within seven days from the date of invoice supported with relevant Delivery Note or Job Completion Report or Service Report or attendance sheet whichever is applicable with all Original copies.</Typography>
