@@ -117,19 +117,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     }
 
     // ── SQL strings ───────────────────────────────────────────────────────
-    // NOTE: every row for a given PO shares the same REF_DOC_NO, so sorting
-    // by REF_DOC_NO alone gives Oracle no tiebreaker — rows come back in
-    // whatever physical/plan order the engine feels like, not item order.
-    // Sort by the actual item sequence (numeric, since it's stored as text)
-    // so the printed table always reads 1, 2, 3... instead of some
-    // arbitrary order like 3, 2, 12, 9...
     const sql_string = useMemo(() => `
       SELECT *
       FROM VW_BO_PO_PRINT PO_REGISTER
       WHERE
         div_code = '${divCode}' AND
         REF_DOC_NO = REPLACE('${refDocNo}', '$', '/')
-      ORDER BY REF_DOC_NO, TO_NUMBER(ITEM_SEQUENCE_NO)
+      ORDER BY REF_DOC_NO
     `, [divCode, refDocNo]);
 
     const sql_for_signature = useMemo(() => `
@@ -161,16 +155,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     });
 
     // ── Derived values ────────────────────────────────────────────────────
-    // Sort by item serial number on the frontend regardless of what order
-    // the SQL view returns rows in — this is the single source of truth
-    // for row order used everywhere below (measurement pass, pagination,
-    // totals), so fixing it here fixes it everywhere.
-    const poItems = useMemo(() => {
-      const items = Array.isArray(data) ? data : [];
-      return [...items].sort(
-        (a, b) => Number(a.ITEM_SEQUENCE_NO) - Number(b.ITEM_SEQUENCE_NO)
-      );
-    }, [data]);
+    const poItems = useMemo(() => (Array.isArray(data) ? data : []), [data]);
     const poData = useMemo(() => (poItems.length > 0 ? poItems[0] : null), [poItems]);
     const signature = isSignatureRequired?.FLAG_YES_NO === 'YES';
 
@@ -271,7 +256,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     const tableHeadRef = useRef<HTMLTableSectionElement>(null);
     const scopeRowRef = useRef<HTMLTableRowElement>(null);
     const termsSignRef = useRef<HTMLDivElement>(null);
-    const totalRowRef = useRef<HTMLTableRowElement>(null);
     const footerRef = useRef<HTMLDivElement>(null);
     const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
@@ -294,8 +278,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const scopeRowH = scopeRowRef.current?.offsetHeight ?? 0;
       const footerH = footerRef.current?.offsetHeight ?? 0;
       const termsSignH = termsSignRef.current?.offsetHeight ?? 0;
-      const totalRowH = totalRowRef.current?.offsetHeight ?? 24;
-      const heightOf = (idxs: number[]) => idxs.reduce((sum, i) => sum + rowHeights[i], 0);
 
       // ── Pass 1: greedily fill pages using actual measured row heights ──
       const indexChunks: number[][] = [];
@@ -322,53 +304,21 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       });
       indexChunks.push(current);
 
-      // ── Pass 1.5: the Total row has to travel with the last chunk of
-      // items (it's a summary of the item table, not a standalone block),
-      // but Pass 1 above never budgeted room for it. If adding it would
-      // overflow the page that chunk already landed on, move just enough
-      // trailing rows off so the Total row fits alongside what remains —
-      // unlike terms/signature below, the Total genuinely belongs with the
-      // items, so it's correct to keep it attached rather than giving it
-      // a page of its own.
-      {
-        const lastIdx = indexChunks.length - 1;
-        const isOnlyPageSoFar = lastIdx === 0;
-        const reserved =
-          pageHeaderH + tableHeadH + footerH + SAFETY_BUFFER_PX +
-          (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0);
-        const usable = PAGE_HEIGHT_PX - reserved;
-        const chunk = indexChunks[lastIdx];
-
-        if (heightOf(chunk) + totalRowH > usable) {
-          const movedOut: number[] = [];
-          while (chunk.length > 0 && heightOf(chunk) + totalRowH > usable) {
-            movedOut.unshift(chunk.pop() as number);
-          }
-          indexChunks.push(movedOut);
-        }
-      }
-
       // ── Pass 2: the true LAST page also has to fit the terms text +
-      // signature block, which Pass 1 never budgeted for (it only ever
-      // packs pages against the item-table-only budget). If terms+signature
-      // don't fit on the last page as already packed, the fix is to give
-      // terms+signature a page of their own — NOT to evict rows off the
-      // last page.
+      // signature block. Pass 1 above never budgeted for that, so the
+      // packed last page can be too full once terms+signature are added.
       //
-      // Previously this popped rows off the end of the last page one (or
-      // several) at a time until the *shrunk* page fit its own terms-free
-      // budget, then dumped the popped rows onto the new final page
-      // alongside terms+signature. That's wrong: those rows already fit
-      // the normal per-page budget (that's how Pass 1 built the page in
-      // the first place), so evicting them doesn't reclaim any usable
-      // space — it just leaves the vacated space sitting empty. The visible
-      // symptom was rows appearing to "spill" onto a new page while the
-      // previous page still had a large, unexplained blank gap at the
-      // bottom.
-      //
-      // The correct fix: leave every row exactly where Pass 1 put it. Only
-      // decide whether terms+signature can be appended to the existing
-      // last page, or need a new trailing page of their own.
+      // Previously this popped rows onto a new page ONE AT A TIME and
+      // stopped the moment the new page had a single row left on it —
+      // which is exactly why you'd end up with a near-empty trailing
+      // page holding just one stray row (or none) next to the signature
+      // block. Instead: pop as many trailing rows as are actually needed
+      // so the shrunk-down old last page fits its own (terms-free)
+      // budget, then dump ALL of those popped rows together onto the new
+      // final page, so it's a real, reasonably-filled page rather than
+      // an island.
+      const heightOf = (idxs: number[]) => idxs.reduce((sum, i) => sum + rowHeights[i], 0);
+
       const lastPageIdx = indexChunks.length - 1;
       const last = indexChunks[lastPageIdx];
       const isOnlyPage = lastPageIdx === 0;
@@ -378,13 +328,19 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
       if (heightOf(last) > usableWithTerms) {
-        // Terms+signature don't fit alongside the rows already packed onto
-        // the last page — give them their own trailing page instead of
-        // bumping rows off. (Edge case: if the signature block alone is so
-        // large it wouldn't fit even with zero rows, it still just gets its
-        // own page — nothing more to do there without shrinking the
-        // signature block itself.)
-        indexChunks.push([]);
+        const movedOut: number[] = [];
+        // Pop from the end until what's left on `last` fits its own
+        // (terms-free) budget again — could be several rows, not just one.
+        while (last.length > 0 && heightOf(last) > usableWithTerms) {
+          movedOut.unshift(last.pop() as number);
+        }
+        // movedOut becomes the real final page: it carries the rows that
+        // no longer fit on the previous page, alongside terms+signature.
+        // (Edge case: if the signature block alone is so large that even
+        // zero rows fit usableWithTerms, movedOut ends up empty and the
+        // signature simply gets its own page — nothing more to be done
+        // there without shrinking the signature block itself.)
+        indexChunks.push(movedOut);
       }
 
       setChunks(indexChunks.map((idxs) => idxs.map((i) => poItems[i])));
@@ -565,8 +521,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       );
     };
 
-    const renderTotalRow = (elRef?: React.Ref<HTMLTableRowElement>) => (
-      <tr className="print-row-avoid" ref={elRef}>
+    const renderTotalRow = () => (
+      <tr className="print-row-avoid">
         <td colSpan={6} style={{ border: '1px solid #2f3fa8', padding: '3px 6px', fontWeight: 600 }}>
           Total: {spellNumber(totalAmount, poData.CURR_CODE)}
         </td>
@@ -674,14 +630,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     // fallback is never actually visible to the user.
     const pagesToRender = chunks ?? [poItems];
 
-    // The Total row belongs with the last chunk that actually has items in
-    // it — not necessarily the last page overall, since the last page may
-    // now be a dedicated terms/signature page with no items on it at all.
-    const lastItemsPageIdx = pagesToRender.reduce(
-      (acc, c, idx) => (c.length > 0 ? idx : acc),
-      0
-    );
-
     // ── Render ────────────────────────────────────────────────────────────
     return (
       <Box
@@ -741,7 +689,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               {poItems.map((item, i) =>
                 renderItemRow(item, i, (el) => { rowRefs.current[i] = el; })
               )}
-              {renderTotalRow(totalRowRef)}
             </tbody>
           </table>
           {renderTermsAndSignature(termsSignRef)}
@@ -759,51 +706,36 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               className="report-page"
               sx={{
                 '@media print': {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: '267mm',
                   breakAfter: isLastPage ? 'auto' : 'page',
                   pageBreakAfter: isLastPage ? 'auto' : 'always',
                 },
               }}
             >
-              {/* Everything except the footer lives in this flex-grow
-                  wrapper, so on print the footer is pushed down to the
-                  physical bottom of the page instead of floating right
-                  after the content with a dangling gap below it. */}
-              <Box sx={{ '@media print': { flex: '1 0 auto' } }}>
-                {renderPageHeader()}
+              {renderPageHeader()}
 
-                {isFirstPage && (
-                  <>
-                    {renderPoHeaderBlock()}
-                    {renderPaymentTable()}
-                  </>
-                )}
+              {isFirstPage && (
+                <>
+                  {renderPoHeaderBlock()}
+                  {renderPaymentTable()}
+                </>
+              )}
 
-                {/* ── ITEMS TABLE (dynamically-sized chunk, header repeats
-                    on every page that actually has items). A page whose
-                    chunk is empty — e.g. a trailing page created solely to
-                    hold terms+signature — skips this entirely rather than
-                    showing a bare header row with nothing under it. ── */}
-                {chunk.length > 0 && (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-                    {renderItemsTableHead()}
-                    <tbody>
-                      {isFirstPage && renderScopeRow()}
-                      {chunk.map((item, i) => {
-                        const index = pagesToRender
-                          .slice(0, pageIdx)
-                          .reduce((sum, c) => sum + c.length, 0) + i;
-                        return renderItemRow(item, index);
-                      })}
-                      {pageIdx === lastItemsPageIdx && renderTotalRow()}
-                    </tbody>
-                  </table>
-                )}
+              {/* ── ITEMS TABLE (dynamically-sized chunk, header repeats every page) ── */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
+                {renderItemsTableHead()}
+                <tbody>
+                  {isFirstPage && renderScopeRow()}
+                  {chunk.map((item, i) => {
+                    const index = pagesToRender
+                      .slice(0, pageIdx)
+                      .reduce((sum, c) => sum + c.length, 0) + i;
+                    return renderItemRow(item, index);
+                  })}
+                  {isLastPage && renderTotalRow()}
+                </tbody>
+              </table>
 
-                {isLastPage && renderTermsAndSignature()}
-              </Box>
+              {isLastPage && renderTermsAndSignature()}
 
               {renderPageFooter()}
             </Box>
