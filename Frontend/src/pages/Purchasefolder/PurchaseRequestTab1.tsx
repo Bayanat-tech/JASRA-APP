@@ -25,6 +25,8 @@ import UniversalPageMobile from 'components/popup/UniversalPageMobile';
 import { Result } from 'antd';
 import { closeBackdrop, openBackdrop } from 'store/reducers/backdropSlice';
 import { TDivisionmaster } from './type/division-pf-types';
+import ReportDialogPage from 'pages/Report/ReportDialogPage';
+import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 const filter: ISearch = {
   search: [[]]
@@ -71,6 +73,14 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
     data: { request_number: '', remarks: '' }
   });
   const [gridApi, setGridApi] = useState<any>(null);
+
+  // React report (PurchaseReportDesign) dialog state — only ever opened for
+  // PO records, mirroring the "React PO Report" column in MyitemPOConfirm.
+  const [handleReportOpen, setHandleReportOpen] = useState({
+    open: false,
+    poNumber: '',
+    divCode: ''
+  });
 
   // const [PurchaserequestheaderData, setPurchaserequestheaderData] = useState<any>(null);
 
@@ -206,6 +216,33 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
           }
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
+        }
+      },
+      {
+        // Separate eye icon that opens the React (PurchaseReportDesign) print
+        // preview — only for PO records, never for plain Purchase Requests.
+        // Same pattern as the "React PO Report" column on the Closed tab in
+        // MyitemPOConfirm.
+        headerName: 'React PO Report',
+        field: 'react_po_report',
+        cellStyle: { fontSize: '12px' },
+        cellRenderer: (params: any) => {
+          const isPORecord = params.data.request_number?.replace(/\//g, '$')?.includes('PO$');
+          if (!isPORecord) return null;
+
+          const actionButtons: TAvailableActionButtons[] = ['view'];
+          return (
+            <ActionButtonsGroup
+              handleActions={() =>
+                setHandleReportOpen({
+                  open: true,
+                  poNumber: params.data.request_number,
+                  divCode: params.data.div_code || ''
+                })
+              }
+              buttons={actionButtons}
+            />
+          );
         }
       }
     ],
@@ -891,6 +928,15 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
             <FormControlLabel control={<Checkbox checked={createPR} onChange={(e) => setCreatePR(e.target.checked)} />} label="Create PR" />
           </div>
         </UniversalDialog>
+      )}
+
+      {handleReportOpen.open && (
+        <ReportDialogPage
+          Report={PurchaseReportDesign}
+          required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber }}
+          title="Purchase Order"
+          onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '' })}
+        />
       )}
     </div>
   );
