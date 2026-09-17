@@ -116,6 +116,16 @@ export interface PurchaseRequestReportDesignProps {
   };
 }
 
+// ── Supplementary lookup: Scope of Work (DESCRIPTION / REMARKS) ────────────
+// Pulled as its own dedicated query against the same view, rather than
+// trusting whichever of these fields happens to be non-null on
+// prItems[0] — mirrors the sql_for_terms_conditions / sql_for_delivery_info
+// pattern used in PurchaseReportDesign.
+// interface ScopeOfWorkInfo {
+//   DESCRIPTION: string;
+//   REMARKS: string;
+// }
+
 // ── Compact checkbox used throughout the form (matches print-density) ──────
 const ChkBig = ({ label, checked }: { label: string; checked: boolean }) => (
   <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px', mr: '10px', mb: '2px' }}>
@@ -160,6 +170,29 @@ const PurchaseRequestReportDesign = forwardRef<HTMLDivElement, PurchaseRequestRe
 
     const requestDate = useMemo(() => formatDate(prData?.REQUEST_DATE), [prData?.REQUEST_DATE]);
     const needByDate  = useMemo(() => formatDate(prData?.NEED_BY_DATE),  [prData?.NEED_BY_DATE]);
+
+    // ── Scope of Work (DESCRIPTION / REMARKS) — dedicated DISTINCT lookup
+    // against VW_BO_PR_REGISTER, same view the main query already reads,
+    // keyed the same way as the main query (REQUEST_NUMBER, scoped to
+    // COMPANY_CODE). This is intentionally independent of prItems[0] since
+    // DESCRIPTION/REMARKS are populated per-item on the view and aren't
+    // guaranteed non-null on whichever row lands first.
+    // const sql_for_scope_of_work = useMemo(() => `
+    //   SELECT DISTINCT DESCRIPTION, REMARKS
+    //   FROM VW_BO_PR_REGISTER
+    //   WHERE Request_Number = '${requestNumber}'
+    //     AND Company_Code = '${companyCode}'
+    // `, [companyCode, requestNumber]);
+
+    // const { data: scopeOfWork } = useQuery<ScopeOfWorkInfo>({
+    //   queryKey: ['purchase_request_scope_of_work', companyCode, requestNumber],
+    //   staleTime: 1000 * 60 * 5,
+    //   queryFn: () =>
+    //     WmsSerivceInstance.executeRawSql(sql_for_scope_of_work).then((res: any) => res?.[0]),
+    //   enabled: !!companyCode && !!requestNumber,
+    // });
+
+    // const scopeOfWorkText = scopeOfWork?.DESCRIPTION || scopeOfWork?.REMARKS;
 
     // ── Guards ────────────────────────────────────────────────────────────
     if (!companyCode || !requestNumber) {
@@ -369,13 +402,24 @@ const PurchaseRequestReportDesign = forwardRef<HTMLDivElement, PurchaseRequestRe
                   </tbody>
                 </table>
 
-                {/* ── JUSTIFICATION / OTHER COMMENTS ── */}
+                {/* ── JUSTIFICATION / OTHER COMMENTS ──
+                    Text now comes from the dedicated scope-of-work query
+                    (DESCRIPTION, falling back to REMARKS), not prData
+                    directly — see sql_for_scope_of_work above. Falls back
+                    further to prData.JUSTIFICATION_COMMENTS, then the
+                    original static placeholder, so nothing regresses while
+                    the query resolves or if both fields come back empty. */}
                 <Box className="print-avoid" sx={{ mb: 0.5 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: 10.5, color: '#2f3fa8', mb: 0.25 }}>
                     JUSTIFICATION/OTHER COMMENTS
                   </Typography>
-                  <Box sx={{ border: bDark, minHeight: 22, p: '4px 8px' }}>
-                    <Typography sx={{ fontSize: 9.5 }}>{prData.JUSTIFICATION_COMMENTS || 'Supply of Compressor '}</Typography>
+                  <Box sx={{ border: bDark, minHeight: 22, p: '4px 8px', display:'flex', flexDirection:'column', gap:'5px' }}>
+                    <Typography sx={{ fontSize: 9.5 }}>
+                      {prData.DESCRIPTION}
+                    </Typography>
+                    {/* <Typography sx={{ fontSize: 9.5 }}>
+                     REMARKS: {prData.REMARKS}
+                    </Typography> */}
                   </Box>
                 </Box>
 
@@ -454,7 +498,7 @@ const PurchaseRequestReportDesign = forwardRef<HTMLDivElement, PurchaseRequestRe
                           <td style={{ ...tdBase, textAlign: 'center' }}>{item.COST_CODE || ''}</td>
                           <td style={{ ...tdBase }}>
                             <Typography sx={{ fontWeight: 600, fontSize: 9 }}>
-                              {item.DESCRIPTION || item.ITEM_DESP}
+                              {item.ADDL_ITEM_DESC || item.ITEM_DESP}
                             </Typography>
                             {/* {item.ADDL_ITEM_DESC && (
                               <Typography sx={{ fontSize: 8.5, color: '#444' }}>{item.ADDL_ITEM_DESC}</Typography>
