@@ -49,10 +49,10 @@ const MediaListPf = ({
   const [snackbarOpen, setSnackbarOpen] = useState(false); // State for Snackbar
   const [confirmOpen, setConfirmOpen] = useState(false); // confirmation dialog state
   const [confirmPayload, setConfirmPayload] = useState<{
-    index: number;
     sr_no?: number;
     request_number?: string;
     aws_file_locn?: string;
+    org_file_name?: string;
   } | null>(null);
   const [deleteSnackbarOpen, setDeleteSnackbarOpen] = useState(false); // deletion snackbar
   const [page, setPage] = useState(0); // Add state for current page
@@ -69,16 +69,17 @@ const MediaListPf = ({
 
   const paginatedData = mediaData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage); // Paginate data
 
-  const handleEditClick = (index: number) => {
-    setCurrentFileIndex(index);
-    setEditedFileName(mediaData[index].user_file_name || '');
+  const handleEditClick = (paginatedIndex: number) => {
+    const actualIndex = page * rowsPerPage + paginatedIndex;
+    setCurrentFileIndex(actualIndex);
+    setEditedFileName(mediaData[actualIndex]?.user_file_name || '');
     setIsUpdateEnabled(false);
     setEditDialogOpen(true);
     onEditDialogStateChange && onEditDialogStateChange(true); // Notify parent that edit dialog is open
   };
 
   const handleUpdate = async () => {
-    if (currentFileIndex !== null) {
+    if (currentFileIndex !== null && currentFileIndex < mediaData.length) {
       const fileToUpdate = mediaData[currentFileIndex];
       await FileUploadServiceInstance.editPFFile(fileToUpdate.aws_file_locn ?? '', editedFileName, fileToUpdate.request_number ?? ''); // Pass request_number
       setFilesData((prev) => prev.map((file, i) => (i === currentFileIndex ? { ...file, user_file_name: editedFileName } : file)));
@@ -98,31 +99,39 @@ const MediaListPf = ({
     setSnackbarOpen(false);
   };
 
-  // const handleExitClick = () => {
-  //   setEditDialogOpen(false); // Close the edit dialog
-  //   onEditDialogStateChange && onEditDialogStateChange(false); // Notify parent that the dialog is closed
-  //   onClose && onClose(true); // Notify parent if needed
-  // };
-
   //----------------handlers----------------
-  const handleDelete = (index: number, sr_no?: number, request_number?: string, aws_file_locn?: string) => {
+  const handleDelete = (file: TFile) => {
     // Open confirmation dialog with payload
-    setConfirmPayload({ index, sr_no, request_number, aws_file_locn });
+    setConfirmPayload({
+      sr_no: file.sr_no,
+      request_number: file.request_number,
+      aws_file_locn: file.aws_file_locn,
+      org_file_name: file.org_file_name
+    });
     setConfirmOpen(true);
   };
 
   const performDelete = async () => {
     if (!confirmPayload) return;
-    const { index, sr_no, request_number, aws_file_locn } = confirmPayload;
+    const { sr_no, request_number, aws_file_locn, org_file_name } = confirmPayload;
     try {
       if (sr_no !== undefined && sr_no !== null && !!request_number && !!aws_file_locn) {
         await FileUploadServiceInstance.deleteFilePf(request_number, sr_no, aws_file_locn);
       }
 
-      setFilesData((prevFiles) => prevFiles.filter((eachFile: TFile, eachFileIndex: number) => eachFileIndex !== index));
+      setFilesData((prevFiles) =>
+        prevFiles.filter((file) => {
+          if (file.aws_file_locn && aws_file_locn) {
+            return file.aws_file_locn !== aws_file_locn;
+          }
+          if (file.sr_no !== undefined && sr_no !== undefined) {
+            return file.sr_no !== sr_no;
+          }
+          return file.org_file_name !== org_file_name;
+        })
+      );
       setDeleteSnackbarOpen(true);
     } catch (error) {
-      // show error notification using existing Snackbar pattern or a new one
       setDeleteSnackbarOpen(true);
       console.error('Failed to delete file:', error);
     } finally {
@@ -146,7 +155,7 @@ const MediaListPf = ({
           </TableHead>
           <TableBody>
             {paginatedData.map((eachFile, index) => (
-              <TableRow sx={{ '&:last-child td, &:last-child th': { border: 0 } }} key={index}>
+              <TableRow sx={{ '&:last-child td, &:last-child th': { border: 0 } }} key={eachFile.aws_file_locn || eachFile.sr_no || index}>
                 <TableCell className="text-left" component="th" scope="row">
                   {eachFile.sr_no}
                 </TableCell>
@@ -163,12 +172,7 @@ const MediaListPf = ({
                     <EditOutlined />
                   </IconButton>
                   {deleteFlag !== false && (
-                    <IconButton
-                      disabled={isViewMode}
-                      size="medium"
-                      color="error"
-                      onClick={() => handleDelete(index, eachFile.sr_no, eachFile?.request_number ?? '', eachFile.aws_file_locn ?? '')}
-                    >
+                    <IconButton disabled={isViewMode} size="medium" color="error" onClick={() => handleDelete(eachFile)}>
                       <DeleteOutlined />
                     </IconButton>
                   )}
@@ -182,7 +186,7 @@ const MediaListPf = ({
       {/* Pagination and Exit Button Container */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '1rem' }}>
         <TablePagination
-          rowsPerPageOptions={[10, 15, 25]}
+          rowsPerPageOptions={[5, 10, 15, 25]}
           component="div"
           count={mediaData.length}
           rowsPerPage={rowsPerPage}
@@ -235,7 +239,15 @@ const MediaListPf = ({
           Are you sure you want to delete this file? This will remove the record and delete the file from the storage bucket.
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', paddingBottom: 2 }}>
-          <Button onClick={() => { setConfirmOpen(false); setConfirmPayload(null); }} color="secondary" variant="outlined" sx={{ minWidth: 100 }}>
+          <Button
+            onClick={() => {
+              setConfirmOpen(false);
+              setConfirmPayload(null);
+            }}
+            color="secondary"
+            variant="outlined"
+            sx={{ minWidth: 100 }}
+          >
             Cancel
           </Button>
           <Button onClick={performDelete} color="error" variant="contained" sx={{ minWidth: 100 }}>

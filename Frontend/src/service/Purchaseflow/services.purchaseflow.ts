@@ -12,9 +12,6 @@ import { IApiResponse } from 'types/types.services';
 import axiosServices from 'utils/axios';
 import { TFile } from 'types/types.file';
 
-
-
-
 import { TPurchaseOrder } from 'pages/Purchasefolder/type/purchaseorder_pf-types';
 import {
   TBasicBrequest,
@@ -428,54 +425,51 @@ class GMpf {
     }
   };
 
-getRequestNumber = async (request_number: string) => {
-  try {
-    console.log('Inside getRequestNumber, request_number:', request_number);
+  getRequestNumber = async (request_number: string) => {
+    try {
+      console.log('Inside getRequestNumber, request_number:', request_number);
 
-    // Replace forward slashes (/) with $$ to match backend expectation
-    request_number = request_number.replace(/\//g, '$$');
+      // Replace forward slashes (/) with $$ to match backend expectation
+      request_number = request_number.replace(/\//g, '$$');
 
-    // Make the API request
-    const response: IApiResponse<TPurchaserequestPf> = await axiosServices.get(
-      `api/pf/gm/purchaserequest/${request_number}`
-    );
+      // Make the API request
+      const response: IApiResponse<TPurchaserequestPf> = await axiosServices.get(`api/pf/gm/purchaserequest/${request_number}`);
 
-    // Log the full response for debugging
-    console.log('Response from backend:', response);
+      // Log the full response for debugging
+      console.log('Response from backend:', response);
 
-    // Check if the response is successful and contains the expected data
-    if (response.data.success === true && response.data.data) {
-      console.log('Data received:', response.data.data);
-      return response.data.data;
-    } else {
-      console.error('Error: No data or unsuccessful response from backend');
-      // Handle case where data is not returned or request was unsuccessful
+      // Check if the response is successful and contains the expected data
+      if (response.data.success === true && response.data.data) {
+        console.log('Data received:', response.data.data);
+        return response.data.data;
+      } else {
+        console.error('Error: No data or unsuccessful response from backend');
+        // Handle case where data is not returned or request was unsuccessful
+        return undefined;
+      }
+    } catch (error: any) {
+      // Handle errors properly
+      console.error('Error in getRequestNumber:', error);
+
+      // Show snackbar with error message (assuming you have redux dispatch setup)
+      const errorMessage = error.message || 'An unexpected error occurred';
+      dispatch(
+        openSnackbar({
+          open: true,
+          message: errorMessage,
+          variant: 'alert',
+          alert: {
+            color: 'error'
+          },
+          severity: 'error',
+          close: true
+        })
+      );
+
+      // Optionally, return undefined or null if an error occurs
       return undefined;
     }
-  } catch (error: any) {
-    // Handle errors properly
-    console.error('Error in getRequestNumber:', error);
-
-    // Show snackbar with error message (assuming you have redux dispatch setup)
-    const errorMessage = error.message || 'An unexpected error occurred';
-    dispatch(
-      openSnackbar({
-        open: true,
-        message: errorMessage,
-        variant: 'alert',
-        alert: {
-          color: 'error',
-        },
-        severity: 'error',
-        close: true,
-      })
-    );
-
-    // Optionally, return undefined or null if an error occurs
-    return undefined;
-  }
-};
-
+  };
 
   getddProjectMaster = async (div_code: string): Promise<TddProjectMst | null> => {
     try {
@@ -612,7 +606,7 @@ getRequestNumber = async (request_number: string) => {
       console.log('service_type', values.service_type);
       console.log('comapny_code in pr', values.company_code);
       console.log('Before term and condi', values.Termscondition);
-      console.log("ITEM VALUES", values?.items)
+      console.log('ITEM VALUES', values?.items);
       const response: IApiResponse<null> = await axiosServices.post('api/pf/gm/purchaserequest', values);
       console.log('inside updatepurchaserequest1');
       if (response.data.success) {
@@ -1524,32 +1518,27 @@ getRequestNumber = async (request_number: string) => {
     }
   };
 
-cancelFinalApproval = async (
-  company_code: string,
-  request_number: string,
-  user_id: string
-): Promise<boolean> => {
-  try {
-    console.log(request_number)
-    const response = await axiosServices.post('api/pf/gm/cancelFinalApproval', {
-      company_code,
-      request_number,
-      user_id,
-    });
+  cancelFinalApproval = async (company_code: string, request_number: string, user_id: string): Promise<boolean> => {
+    try {
+      console.log(request_number);
+      const response = await axiosServices.post('api/pf/gm/cancelFinalApproval', {
+        company_code,
+        request_number,
+        user_id
+      });
 
-    console.log('✅ API Response from cancelFinalApproval:', response.data);
+      console.log('✅ API Response from cancelFinalApproval:', response.data);
 
-    if (response.data?.success) {
-      return true;
-    } else {
-      throw new Error(response.data?.message || '❌ Failed to cancel final approval');
+      if (response.data?.success) {
+        return true;
+      } else {
+        throw new Error(response.data?.message || '❌ Failed to cancel final approval');
+      }
+    } catch (error) {
+      console.error('❌ Error calling cancelFinalApproval API:', error);
+      throw error;
     }
-  } catch (error) {
-    console.error('❌ Error calling cancelFinalApproval API:', error);
-    throw error;
-  }
-};
-
+  };
 
   fetchPOlisting = async (request_number: string): Promise<FetchPOListingData[]> => {
     try {
@@ -1792,7 +1781,7 @@ cancelFinalApproval = async (
     }
   };
 
-  saveFile = async (request_number: string, files: TFile[]) => {
+  saveFile = async (request_number: string, files: TFile[]): Promise<any> => {
     try {
       const response: IApiResponse<any> = await axiosServices.post(`api/pf/gm/saveFile`, {
         request_number,

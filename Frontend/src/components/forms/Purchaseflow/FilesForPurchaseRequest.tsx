@@ -45,18 +45,51 @@ const FilesForPurchaseRequest = ({
   const { user } = useAuth();
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const isEditingFileName = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   //---------------handlers-------------
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
+    if (!event.target.files || event.target.files.length === 0) return;
+
+    try {
+      const incoming = Array.from(event.target.files);
+
+      // Check file sizes (max 5 MB)
+      const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+      const oversized = incoming.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
+      if (oversized.length > 0) {
+        message.error(`These file(s) exceed 5 MB and were skipped: ${oversized.join(', ')}`);
+      }
+
+      const sizeValidFiles = incoming.filter((f) => f.size <= MAX_BYTES);
+      if (sizeValidFiles.length === 0) return;
+
+      // Deduplicate within the newly selected batch itself
+      const seenInBatch = new Set<string>();
+      const uniqueBatchFiles: File[] = [];
+      for (const file of sizeValidFiles) {
+        if (!seenInBatch.has(file.name)) {
+          seenInBatch.add(file.name);
+          uniqueBatchFiles.push(file);
+        }
+      }
+
+      // Check duplicates against existing files in filesData and existingFilesData
       const duplicateFiles: string[] = [];
-      const newFiles = Array.from(event.target.files).filter((eachFile) => {
+      const filesToUpload = uniqueBatchFiles.filter((eachFile) => {
         const isDuplicate =
-          filesData.some((file) => file.org_file_name === eachFile.name && file.request_number === request_number) ||
-          existingFilesData.some(
-            (file: { org_file_name: string; request_number: string }) =>
-              file.org_file_name === eachFile.name && file.request_number === request_number
-          );
+          filesData.some((file: any) => {
+            const existingName = file.org_file_name || file.orgFileName;
+            const existingReq = file.request_number || file.requestNumber;
+            return existingName === eachFile.name && (!existingReq || existingReq === request_number);
+          }) ||
+          (Array.isArray(existingFilesData) &&
+            existingFilesData.some((file: any) => {
+              const existingName = file.org_file_name || file.orgFileName;
+              const existingReq = file.request_number || file.requestNumber;
+              return existingName === eachFile.name && (!existingReq || existingReq === request_number);
+            }));
+
         if (isDuplicate) {
           duplicateFiles.push(eachFile.name);
         }
@@ -64,63 +97,92 @@ const FilesForPurchaseRequest = ({
       });
 
       if (duplicateFiles.length > 0) {
-        message.warning(`The following files already exist: ${duplicateFiles.join(', ')}`);
+        message.warning(`The following files already exist and were skipped: ${duplicateFiles.join(', ')}`);
       }
 
-      const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-      const incoming = Array.from(event.target.files);
-      const oversized = incoming.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
-      if (oversized.length > 0) {
-        window.alert(`These file(s) exceed 5 MB and were skipped:\n${oversized.join('\n')}`);
-      }
+      if (filesToUpload.length === 0) return;
 
-      const newFile = incoming.filter((f) => f.size <= MAX_BYTES);
-      if (newFile.length === 0) return;
+      setIsFileUploading(true);
 
-      if (newFiles.length > 0) {
-        setIsFileUploading(true);
-        const FilesData = await Promise.all(
-          newFiles.map(async (eachFile) => {
+      const tempModule = !!module && module.length > 0 ? module : app;
+
+      // 1. Upload files to S3 / OCI in parallel
+      const uploadResults = await Promise.all(
+        filesToUpload.map(async (eachFile) => {
+          try {
             const response = await FileUploadServiceInstance.uploadFilePf(eachFile, request_number, type || 'Purchase_Request');
-            const tempModule = !!module && module.length > 0 ? module : app;
+
             if (response && response.data) {
-              const fileData = {
+              // Extract clean extension (max 5 chars for Oracle VARCHAR2(5))
+              const extFromName = eachFile.name.split('.').pop()?.toLowerCase() || '';
+              const cleanExt = extFromName.slice(0, 5);
+
+              const fileData: TFile = {
                 created_by: user?.loginid,
                 updated_by: user?.loginid,
                 aws_file_locn: response.data,
-                extensions: eachFile.type.split('/')[1],
-                company_code: user?.company_code as string,
+                extensions: cleanExt,
+                company_code: (user?.company_code as string) || '',
                 org_file_name: eachFile.name,
-                user_file_name: eachFile.name,
+                user_file_name: eachFile.name.slice(0, 75),
                 modules: tempModule,
                 flow_level: !!level ? level : 0,
                 request_number: request_number
-              } as TFile;
-
-              const saveResponse = await GmPfServiceInstance.saveFile(request_number, [fileData]);
-
-              if (saveResponse && Array.isArray(saveResponse)) {
-                const updatedFile = saveResponse.find((updated) => updated.aws_file_locn === fileData.aws_file_locn);
-                if (updatedFile) {
-                  fileData.sr_no = updatedFile.sr_no;
-                }
-              }
-
+              };
               return fileData;
             }
             return null;
-          })
-        );
+          } catch (uploadError) {
+            console.error(`Failed to upload ${eachFile.name}:`, uploadError);
+            return null;
+          }
+        })
+      );
 
-        const validFilesData = FilesData.filter((file): file is TFile => file !== null);
-        setFilesData((prevData) => [...prevData, ...validFilesData]);
+      const validUploadedFiles = uploadResults.filter((file): file is TFile => file !== null);
 
-        setHasChanges(true);
-        setIsFileUploading(false);
+      if (validUploadedFiles.length === 0) {
+        message.error('None of the selected files could be uploaded.');
+        return;
+      }
 
-        if (handleUploadPopup) {
-          handleUploadPopup();
-        }
+      // 2. Save metadata to Oracle DB in a SINGLE batch call
+      const saveResponse = await GmPfServiceInstance.saveFile(request_number, validUploadedFiles);
+
+      // Extract successful and duplicate records from response
+      const successfulRecords =
+        saveResponse?.data?.successfulRecords || saveResponse?.successfulRecords || (Array.isArray(saveResponse) ? saveResponse : []);
+
+      const backendDuplicateRecords = saveResponse?.data?.duplicateRecords || saveResponse?.duplicateRecords || [];
+
+      if (backendDuplicateRecords.length > 0) {
+        message.warning(`Database skipped existing files: ${backendDuplicateRecords.join(', ')}`);
+      }
+
+      // Map generated SR_NO back to each file
+      const finalFilesWithSrNo: TFile[] = validUploadedFiles.map((file) => {
+        const matched = Array.isArray(successfulRecords)
+          ? successfulRecords.find(
+              (rec: any) => (rec.aws_file_locn && rec.aws_file_locn === file.aws_file_locn) || rec.org_file_name === file.org_file_name
+            )
+          : undefined;
+
+        return {
+          ...file,
+          sr_no: matched?.sr_no !== undefined ? matched.sr_no : file.sr_no
+        };
+      });
+
+      setFilesData((prevData) => [...prevData, ...finalFilesWithSrNo]);
+      setHasChanges(true);
+      message.success(`${finalFilesWithSrNo.length} file(s) attached successfully.`);
+    } catch (error) {
+      console.error('Error during multi-file upload:', error);
+      message.error('An error occurred during file upload.');
+    } finally {
+      setIsFileUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     }
   };
@@ -136,43 +198,39 @@ const FilesForPurchaseRequest = ({
 
   //--------------------------useEffects-----------------
   useEffect(() => {
-    console.log('Raw existingFilesData:', existingFilesData);
-
     if (existingFilesData) {
       let dataToProcess: any[] = [];
 
       if (existingFilesData.success !== undefined && existingFilesData.data) {
-        console.log('Processing full API response');
         dataToProcess = existingFilesData.data;
       } else if (Array.isArray(existingFilesData)) {
-        console.log('Processing array data');
         dataToProcess = existingFilesData;
       }
 
       if (dataToProcess.length > 0) {
-        const formattedFiles = dataToProcess.map((item: any) => ({
-          company_code: item.companyCode || item.company_code,
-          request_number: item.requestNumber || item.request_number,
-          sr_no: item.srNo || item.sr_no,
-          file_name: item.fileName || item.file_name,
-          org_file_name: item.orgFileName || item.org_file_name,
-          aws_file_locn: item.awsFileLocn || item.aws_file_locn,
-          flow_level: item.flowLevel || item.flow_level,
-          modules: item.modules,
-          updated_at: item.updatedAt || item.updated_at,
-          updated_by: item.updatedBy || item.updated_by,
-          created_by: item.createdBy || item.created_by,
-          created_at: item.createdAt || item.created_at,
-          extensions: item.extensions,
-          user_file_name: item.userFileName || item.user_file_name,
-          type: item.type
-        }));
+        const needsFormatting = dataToProcess.some((item: any) => item.orgFileName || item.awsFileLocn || item.requestNumber);
 
-        console.log('Formatted filesData:', formattedFiles);
-        setFilesData(formattedFiles);
-      } else {
-        console.log('No files data to process');
-        setFilesData([]);
+        if (needsFormatting) {
+          const formattedFiles = dataToProcess.map((item: any) => ({
+            company_code: item.companyCode || item.company_code,
+            request_number: item.requestNumber || item.request_number,
+            sr_no: item.srNo || item.sr_no,
+            file_name: item.fileName || item.file_name,
+            org_file_name: item.orgFileName || item.org_file_name,
+            aws_file_locn: item.awsFileLocn || item.aws_file_locn,
+            flow_level: item.flowLevel || item.flow_level,
+            modules: item.modules,
+            updated_at: item.updatedAt || item.updated_at,
+            updated_by: item.updatedBy || item.updated_by,
+            created_by: item.createdBy || item.created_by,
+            created_at: item.createdAt || item.created_at,
+            extensions: item.extensions,
+            user_file_name: item.userFileName || item.user_file_name,
+            type: item.type
+          }));
+
+          setFilesData(formattedFiles);
+        }
       }
     }
   }, [existingFilesData, setFilesData]);
@@ -204,6 +262,7 @@ const FilesForPurchaseRequest = ({
     <div className="space-y-2">
       <div className="flex justify-end">
         <input
+          ref={fileInputRef}
           style={{ display: 'none' }}
           id="upload-file"
           type="file"
