@@ -186,9 +186,8 @@ export const getHrMaster = async (
             console.log('Pg_leave_flow_InProgress','Hit router for Pg_leave_flow_InProgress');
     whereConditions = `
         company_code = :company_code
-        AND LAST_ACTION <> 'REJECTED'
+        AND LAST_ACTION IN ('SUBMITTED','SENTBACK')
         AND FINAL_APPROVED <> 'YES'
-        AND LAST_ACTION <> 'CANCEL'
         AND NEXT_ACTION_BY NOT IN (
             SELECT EMPLOYEE_ID 
             FROM VW_HR_EMPLOYEE 

@@ -19,7 +19,7 @@ import CustomAlert from 'components/@extended/CustomAlert';
 import { showAlert } from 'store/CustomAlert/alertSlice';
 import { TLeaveApproval } from 'pages/Purchasefolder/type/leave-approval-types';
 import { IoSendSharp} from 'react-icons/io5';
-import { MdCancelScheduleSend } from 'react-icons/md';
+// import { MdCancelScheduleSend } from 'react-icons/md';
 import hrapprovalInstance from 'service/Service.hr';
 import useAuth from 'hooks/useAuth';
 import { useDispatch } from 'store';
@@ -27,10 +27,12 @@ import { useQuery } from '@tanstack/react-query';
 // import WmsReportView from 'components/reports/WmsReportView';
 // import UniversalDialog from 'components/popup/UniversalDialog';
 // import WmsSerivceInstance from 'service/wms/service.wms';
-import { FaFileExport, FaSave } from 'react-icons/fa';
+import { FaFileExport,
+  //  FaSave 
+  } from 'react-icons/fa';
 import { DialogPop } from 'components/popup/DIalogPop';
 import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
-import HrRequestServiceInstance, { IHrEmployee, IValidateLeaveResponse } from 'service/services.hr';
+import HrRequestServiceInstance, { IHrEmployee, validationResult } from 'service/services.hr';
 import * as XLSX from 'xlsx';
 // import { TUniversalDialogProps } from 'types/types.UniversalDialog';
 // import { EyeOutlined } from '@ant-design/icons';
@@ -175,7 +177,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
 
   const [approverLoading, setApproverLoading] = useState<boolean>(false);
   const [validationLoading, setValidationLoading] = useState<boolean>(false);
-  const [validationResult, setValidationResult] = useState<IValidateLeaveResponse | null>(null);
+  const [validationResult, setValidationResult] = useState<validationResult | null>(null);
   const [showValidationAlert, setShowValidationAlert] = useState<boolean>(false);
 
   // Snackbar state for export notifications
@@ -546,7 +548,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
       let message = result.message || 'Leave validation passed!';
       let severity: 'success' | 'error' = 'success';
 
-      if (result.availableBalance !== undefined && result.availableBalance < requestedDays) {
+      if (result.availableBalance !== undefined && result.availableBalance !== null && result.availableBalance < requestedDays) {
         isValid = false;
         severity = 'error';
         message = `Insufficient leave balance. Available: ${result.availableBalance} days, Requested: ${requestedDays} days`;
@@ -893,16 +895,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                   onClose={() => setShowValidationAlert(false)}
                 >
                   <Typography variant="body2">{validationResult.message}</Typography>
-                  {validationResult.validationErrors && validationResult.validationErrors.length > 0 && (
-                    <Box sx={{ mt: 1 }}>
-                      {validationResult.validationErrors.map((error, index) => (
-                        <Typography key={index} variant="body2" component="div">
-                          • {error}
-                        </Typography>
-                      ))}
-                    </Box>
-                  )}
-                  {validationResult.availableBalance !== undefined && (
+                  {validationResult.availableBalance !== undefined && validationResult.availableBalance !== null && (
                     <Typography variant="body2" sx={{ mt: 1 }}>
                       {intl.formatMessage(
                         { id: 'AvailableBalance', defaultMessage: 'Available Balance: {balance} days' },
@@ -1307,15 +1300,15 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
         <div className="sticky bottom-0 p-4 bg-white  z-10 mt-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex flex-wrap gap-2">
-              <Button size="small" endIcon={<FaSave />} disabled={viewMode} onClick={() => handleSave('SAVEASDRAFT')}>
+              {/* <Button size="small" endIcon={<FaSave />} disabled={viewMode} onClick={() => handleSave('SAVEASDRAFT')}>
                 {intl.formatMessage({ id: 'Save as Draft' }) || 'Save as Draft'}
-              </Button>
+              </Button> */}
               <Button size="small" endIcon={<IoSendSharp />} disabled={viewMode} onClick={() => handleSave('SUBMITTED')}>
                 {intl.formatMessage({ id: 'Submit' }) || 'Submit'}
               </Button>
-              <Button size="small" endIcon={<MdCancelScheduleSend />} disabled={viewMode} onClick={() => handleSave('CANCELLED')}>
+              {/* <Button size="small" endIcon={<MdCancelScheduleSend />} disabled={viewMode} onClick={() => handleSave('CANCELLED')}>
                 {intl.formatMessage({ id: 'Cancel' }) || 'Cancel'}
-              </Button>
+              </Button> */}
             </div>
 
             <div className="flex gap-2">

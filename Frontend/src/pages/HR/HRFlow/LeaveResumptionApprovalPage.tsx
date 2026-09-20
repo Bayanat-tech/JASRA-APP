@@ -42,19 +42,29 @@ const LeaveResumptionApprovalPage = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
   const openMenu = Boolean(anchorEl);
 
-  const sql_string = `
+  // const sql_string = `
+  //     SELECT *
+  //     FROM VW_HR_LEAVE_REQUEST_FLOW
+  //     WHERE ( ACTUAL_RESUME_DATE IS NULL
+  //     AND NVL(RESUME_DATE_APPROVED,'NO') = 'NO'
+  //       AND FINAL_APPROVED = 'YES'
+  //       AND LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED')
+  //       AND CREATED_BY = '${user?.loginid1}')
+  //   OR (ACTUAL_RESUME_DATE IS NOT NULL 
+  //     AND NVL(RESUME_DATE_APPROVED,'NO') = 'NO'
+  //   AND FINAL_APPROVED = 'YES' AND
+  //   LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED') 
+  //   AND CREATED_BY = '${user?.loginid1}')
+  // `;
+
+    const sql_string = `
       SELECT *
       FROM VW_HR_LEAVE_REQUEST_FLOW
       WHERE ( ACTUAL_RESUME_DATE IS NULL
-      AND RESUME_DATE_APPROVED = 'NO'
+      AND NVL(RESUME_DATE_APPROVED,'NO') = 'NO'
         AND FINAL_APPROVED = 'YES'
         AND LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED')
         AND CREATED_BY = '${user?.loginid1}')
-    OR (ACTUAL_RESUME_DATE IS NOT NULL 
-      AND RESUME_DATE_APPROVED = 'NO'
-    AND FINAL_APPROVED = 'YES' AND
-    LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED') 
-    AND CREATED_BY = '${user?.loginid1}')
   `;
 
   const { data, refetch, isError } = useQuery({

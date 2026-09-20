@@ -375,20 +375,20 @@ export const HrService = {
     } = params;
 
     const query = `
-    DECLARE
-      v_result VARCHAR2(4000);
-    BEGIN
-      v_result := FN_HR_LEAVE_VALIDATION_V1(
-        :p_COMPANY_CODE,
-        :p_EMPLOYEE_ID,
-        TO_DATE(:p_LEAVE_START_DATE, 'DD-MM-YYYY'),
-        TO_DATE(:p_LEAVE_END_DATE, 'DD-MM-YYYY'),
-        :p_LEAVE_TYPE,
-        :p_LEAVE_DAYS
-      );
-      :p_RESULT := v_result;
-    END;
-  `;
+      DECLARE
+        v_result VARCHAR2(4000);
+      BEGIN
+        v_result := FN_HR_LEAVE_VALIDATION_V1(
+          :p_COMPANY_CODE,
+          :p_EMPLOYEE_ID,
+          TO_DATE(:p_LEAVE_START_DATE, 'DD-MM-YYYY'),
+          TO_DATE(:p_LEAVE_END_DATE, 'DD-MM-YYYY'),
+          :p_LEAVE_TYPE,
+          :p_LEAVE_DAYS
+        );
+        :p_RESULT := v_result;
+      END;
+    `;
 
     const bindParams = {
       p_COMPANY_CODE: companyCode,
@@ -406,18 +406,38 @@ export const HrService = {
 
     try {
       const result = await oracleDb.query(query, bindParams);
-      const rawResult: string = (result.outBinds as any).p_RESULT ?? "";
+      const rawResult: string = ((result.outBinds as any).p_RESULT ?? "").trim();
 
-      const [statusCode, balanceStr] = rawResult.split("$$$");
-      const availableBalance = parseFloat(balanceStr);
+      const statusCode = rawResult.charAt(0); // 'S' or 'E'
       const isSuccess = statusCode === "S";
+
+      let availableBalance: number | null = null;
+      let message: string;
+
+      if (isSuccess) {
+        // Success format: S$$$<balance>
+        const balanceStr = rawResult.split("$$$")[1];
+        availableBalance = parseFloat(balanceStr);
+        message = "Validation Successful";
+      } else {
+        message = rawResult.replace(/^E\s*/, "").trim();
+
+        const balanceMatch = message.match(
+          /available limit of\s+([\d.]+)\s+days/i
+        );
+        if (balanceMatch) {
+          availableBalance = parseFloat(balanceMatch[1]);
+        }
+      }
 
       return {
         success: isSuccess,
         isValid: isSuccess,
-        availableBalance: isNaN(availableBalance) ? null : availableBalance,
-        message: isSuccess ? `Validation Successful` : `Validation Failed`,
-        raw: rawResult, 
+        availableBalance: isNaN(availableBalance as number)
+          ? null
+          : availableBalance,
+        message,
+        raw: rawResult,
       };
     } catch (error: any) {
       console.error(
@@ -441,7 +461,7 @@ export const HrService = {
   //         request_number: request.requestNumber || "",
   //         current_step: request.currentStep || "",
   //         company_code: request.companyCode || "",
-  //         employee_code: request.employeeCode || "",
+  //         employee_code: request.employeeCode || "",   
   //         leave_request_date: request.leaveRequestDate
   //           ? new Date(request.leaveRequestDate)
   //           : undefined,

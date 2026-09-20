@@ -93,6 +93,14 @@ export interface IValidateLeaveResponse {
     endDate: string;
   }>;
 }
+export interface validationResult {
+  success: boolean;
+  isValid: boolean;
+  availableBalance: number | null;
+  message?: string;
+  raw?: string;
+  error?: string;
+}
 
 // Interface for error response structure
 // interface IErrorResponse {
@@ -248,7 +256,7 @@ class HrRequestService {
     }
   }
 
-  async getValidateLeave(params: IValidateLeaveParams): Promise<IValidateLeaveResponse> {
+  async getValidateLeave(params: IValidateLeaveParams): Promise<validationResult> {
     // Extract leaveDays from params before try-catch
     const { companyCode, employeeId, leaveStartDate, leaveEndDate, leaveType, leaveDays } = params;
     const requestedDays = leaveDays; // Store in local variable
@@ -305,157 +313,169 @@ class HrRequestService {
       console.log('Validate leave response for', leaveType, ':', response.data);
 
       // Parse the response based on different formats
-      return this.parseValidationResponse(response.data, leaveType, requestedDays);
-    } catch (error: unknown) {
+      return response.data as validationResult ;
+    } catch (error: any) {
       console.error('Error validating leave:', error);
-      return this.handleValidationError(error, requestedDays);
-    }
-  }
+      // If backend sent the validationResult in the error body, pass it through.
+      const body = error?.response?.data;
+      if (body && typeof body === 'object' && 'isValid' in body) {
+        return body as validationResult;
+      }
 
-  private parseValidationResponse(responseData: any, leaveType: string, requestedDays: number): IValidateLeaveResponse {
-    // Handle string format response (e.g., "S$$$24.06")
-    if (responseData?.validationResult && typeof responseData.validationResult === 'string') {
-      return this.parseStringFormatResponse(responseData.validationResult, leaveType, requestedDays);
-    }
-
-    // Handle direct string response
-    if (typeof responseData === 'string') {
-      return this.parseStringFormatResponse(responseData, leaveType, requestedDays);
-    }
-
-    // Handle structured object response
-    if (responseData && typeof responseData === 'object') {
-      return this.parseStructuredResponse(responseData, leaveType, requestedDays);
-    }
-
-    // Handle boolean response
-    if (typeof responseData === 'boolean') {
-      return {
-        success: true,
-        isValid: responseData,
-        message: responseData ? 'Leave validation passed' : 'Leave validation failed',
-        availableBalance: responseData ? requestedDays : 0,
-        validationErrors: responseData ? [] : ['Validation failed'],
-        requiredBalance: requestedDays,
-        overlappingLeaves: [],
-        validationResult: responseData
-      };
-    }
-
-    console.warn('Unexpected response format:', responseData);
-    return {
-      success: false,
-      isValid: false,
-      message: 'Unexpected response format from server',
-      availableBalance: 0,
-      validationErrors: ['Cannot parse validation response'],
-      requiredBalance: requestedDays,
-      overlappingLeaves: [],
-      validationResult: responseData
-    };
-  }
-
-  private parseStringFormatResponse(responseString: string, leaveType: string, requestedDays: number): IValidateLeaveResponse {
-    // Handle formats like: "S$$$24.06", "E$$$0", "SUCCESS", "FAILED"
-    const isValid = responseString.startsWith('S') || responseString.includes('SUCCESS');
-
-    // Extract balance from format: "S$$$24.06" or similar
-    const balanceMatch = responseString.match(/\d+\.?\d*/);
-    const availableBalance = balanceMatch ? parseFloat(balanceMatch[0]) : 0;
-
-    return {
-      success: true,
-      isValid,
-      message: isValid
-        ? `Available ${leaveType} balance: ${availableBalance} days`
-        : `Insufficient ${leaveType} balance: ${availableBalance} days`,
-      availableBalance,
-      validationErrors: isValid ? [] : ['Insufficient leave balance'],
-      requiredBalance: requestedDays,
-      overlappingLeaves: [],
-      validationResult: responseString
-    };
-  }
-
-  private parseStructuredResponse(responseObj: any, leaveType: string, requestedDays: number): IValidateLeaveResponse {
-    // Extract data from nested structure or direct properties
-    const data = responseObj.data || responseObj;
-
-    const availableBalance = data.availableBalance ?? data.balance ?? data.leaveBalance ?? data.remainingBalance ?? 0;
-
-    const isValid = data.isValid ?? responseObj.isValid ?? responseObj.success ?? availableBalance >= requestedDays;
-
-    const message =
-      data.message ??
-      responseObj.message ??
-      (isValid
-        ? `Available ${leaveType} balance: ${availableBalance} days`
-        : `Insufficient ${leaveType} balance: ${availableBalance} days`);
-
-    const validationErrors = data.validationErrors ?? responseObj.validationErrors ?? (isValid ? [] : ['Validation failed']);
-
-    const overlappingLeaves = data.overlappingLeaves ?? responseObj.overlappingLeaves ?? [];
-
-    return {
-      success: true,
-      isValid,
-      message,
-      availableBalance,
-      validationErrors: Array.isArray(validationErrors) ? validationErrors : [validationErrors],
-      requiredBalance: data.requiredBalance ?? requestedDays,
-      overlappingLeaves: Array.isArray(overlappingLeaves) ? overlappingLeaves : [],
-      validationResult: responseObj
-    };
-  }
-
-  private handleValidationError(error: unknown, requestedDays: number): IValidateLeaveResponse {
-    const axiosError = error as AxiosError;
-
-    if (axiosError.response) {
-      // Server responded with error status
-      const status = axiosError.response.status;
-      const errorData = axiosError.response.data as any;
-
-      const errorMessage = errorData?.message || errorData?.error || errorData?.details || `Server error: ${status}`;
-
+      // Otherwise return a generic failure.
       return {
         success: false,
         isValid: false,
-        message: errorMessage,
-        availableBalance: 0,
-        validationErrors: [errorMessage],
-        requiredBalance: requestedDays,
-        overlappingLeaves: [],
-        validationResult: null
+        availableBalance: null,
+        error: error?.response?.data?.error ?? error?.message ?? 'Leave validation could not be completed.',
       };
     }
-
-    if (axiosError.request) {
-      // No response received
-      return {
-        success: false,
-        isValid: false,
-        message: 'No response received from validation server',
-        availableBalance: 0,
-        validationErrors: ['Network connection error'],
-        requiredBalance: requestedDays,
-        overlappingLeaves: [],
-        validationResult: null
-      };
-    }
-
-    // Other errors
-    return {
-      success: false,
-      isValid: false,
-      message: axiosError.message || 'Failed to validate leave request',
-      availableBalance: 0,
-      validationErrors: ['Validation service unavailable'],
-      requiredBalance: requestedDays,
-      overlappingLeaves: [],
-      validationResult: null
-    };
   }
+
+  // private parseValidationResponse(responseData: any, leaveType: string, requestedDays: number): IValidateLeaveResponse {
+  //   // Handle string format response (e.g., "S$$$24.06")
+  //   if (responseData?.validationResult && typeof responseData.validationResult === 'string') {
+  //     return this.parseStringFormatResponse(responseData.validationResult, leaveType, requestedDays);
+  //   }
+
+  //   // Handle direct string response
+  //   if (typeof responseData === 'string') {
+  //     return this.parseStringFormatResponse(responseData, leaveType, requestedDays);
+  //   }
+
+  //   // Handle structured object response
+  //   if (responseData && typeof responseData === 'object') {
+  //     return this.parseStructuredResponse(responseData, leaveType, requestedDays);
+  //   }
+
+  //   // Handle boolean response
+  //   if (typeof responseData === 'boolean') {
+  //     return {
+  //       success: true,
+  //       isValid: responseData,
+  //       message: responseData ? 'Leave validation passed' : 'Leave validation failed',
+  //       availableBalance: responseData ? requestedDays : 0,
+  //       validationErrors: responseData ? [] : ['Validation failed'],
+  //       requiredBalance: requestedDays,
+  //       overlappingLeaves: [],
+  //       validationResult: responseData
+  //     };
+  //   }
+
+  //   console.warn('Unexpected response format:', responseData);
+  //   return {
+  //     success: false,
+  //     isValid: false,
+  //     message: 'Unexpected response format from server',
+  //     availableBalance: 0,
+  //     validationErrors: ['Cannot parse validation response'],
+  //     requiredBalance: requestedDays,
+  //     overlappingLeaves: [],
+  //     validationResult: responseData
+  //   };
+  // }
+
+  // private parseStringFormatResponse(responseString: string, leaveType: string, requestedDays: number): IValidateLeaveResponse {
+  //   // Handle formats like: "S$$$24.06", "E$$$0", "SUCCESS", "FAILED"
+  //   const isValid = responseString.startsWith('S') || responseString.includes('SUCCESS');
+
+  //   // Extract balance from format: "S$$$24.06" or similar
+  //   const balanceMatch = responseString.match(/\d+\.?\d*/);
+  //   const availableBalance = balanceMatch ? parseFloat(balanceMatch[0]) : 0;
+
+  //   return {
+  //     success: true,
+  //     isValid,
+  //     message: isValid
+  //       ? `Available ${leaveType} balance: ${availableBalance} days`
+  //       : `Insufficient ${leaveType} balance: ${availableBalance} days`,
+  //     availableBalance,
+  //     validationErrors: isValid ? [] : ['Insufficient leave balance'],
+  //     requiredBalance: requestedDays,
+  //     overlappingLeaves: [],
+  //     validationResult: responseString
+  //   };
+  // }
+
+  // private parseStructuredResponse(responseObj: any, leaveType: string, requestedDays: number): IValidateLeaveResponse {
+  //   // Extract data from nested structure or direct properties
+  //   const data = responseObj.data || responseObj;
+
+  //   const availableBalance = data.availableBalance ?? data.balance ?? data.leaveBalance ?? data.remainingBalance ?? 0;
+
+  //   const isValid = data.isValid ?? responseObj.isValid ?? responseObj.success ?? availableBalance >= requestedDays;
+
+  //   const message =
+  //     data.message ??
+  //     responseObj.message ??
+  //     (isValid
+  //       ? `Available ${leaveType} balance: ${availableBalance} days`
+  //       : `Insufficient ${leaveType} balance: ${availableBalance} days`);
+
+  //   const validationErrors = data.validationErrors ?? responseObj.validationErrors ?? (isValid ? [] : ['Validation failed']);
+
+  //   const overlappingLeaves = data.overlappingLeaves ?? responseObj.overlappingLeaves ?? [];
+
+  //   return {
+  //     success: true,
+  //     isValid,
+  //     message,
+  //     availableBalance,
+  //     validationErrors: Array.isArray(validationErrors) ? validationErrors : [validationErrors],
+  //     requiredBalance: data.requiredBalance ?? requestedDays,
+  //     overlappingLeaves: Array.isArray(overlappingLeaves) ? overlappingLeaves : [],
+  //     validationResult: responseObj
+  //   };
+  // }
+
+  // private handleValidationError(error: unknown, requestedDays: number): IValidateLeaveResponse {
+  //   const axiosError = error as AxiosError;
+
+  //   if (axiosError.response) {
+  //     // Server responded with error status
+  //     const status = axiosError.response.status;
+  //     const errorData = axiosError.response.data as any;
+
+  //     const errorMessage = errorData?.message || errorData?.error || errorData?.details || `Server error: ${status}`;
+
+  //     return {
+  //       success: false,
+  //       isValid: false,
+  //       message: errorMessage,
+  //       availableBalance: 0,
+  //       validationErrors: [errorMessage],
+  //       requiredBalance: requestedDays,
+  //       overlappingLeaves: [],
+  //       validationResult: null
+  //     };
+  //   }
+
+  //   if (axiosError.request) {
+  //     // No response received
+  //     return {
+  //       success: false,
+  //       isValid: false,
+  //       message: 'No response received from validation server',
+  //       availableBalance: 0,
+  //       validationErrors: ['Network connection error'],
+  //       requiredBalance: requestedDays,
+  //       overlappingLeaves: [],
+  //       validationResult: null
+  //     };
+  //   }
+
+  //   // Other errors
+  //   return {
+  //     success: false,
+  //     isValid: false,
+  //     message: axiosError.message || 'Failed to validate leave request',
+  //     availableBalance: 0,
+  //     validationErrors: ['Validation service unavailable'],
+  //     requiredBalance: requestedDays,
+  //     overlappingLeaves: [],
+  //     validationResult: null
+  //   };
+  // }
 }
 
 const HrRequestServiceInstance = new HrRequestService();

@@ -29,7 +29,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FaFileExport, FaSave, FaHistory, FaPrint } from 'react-icons/fa';
 import { DialogPop } from 'components/popup/DIalogPop';
 import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
-import HrRequestServiceInstance, { IHrEmployee, IValidateLeaveResponse } from 'service/services.hr';
+import HrRequestServiceInstance, { IHrEmployee, validationResult } from 'service/services.hr';
 import * as XLSX from 'xlsx';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import { useIntl } from 'react-intl';
@@ -208,13 +208,13 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [formReady, setFormReady] = useState(false);
   const [viewLogOpen, setViewLogOpen] = useState(false);
   const [hasAttachments, setHasAttachments] = useState<boolean>(false);
-  const leaveTypesRequiringAttachments = ['002', '014', '016', 'ACL'];
+  const leaveTypesRequiringAttachments = ['SL','CMP'];
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
 
   const [validationLoading, setValidationLoading] = useState<boolean>(false);
-  const [validationResult, setValidationResult] = useState<IValidateLeaveResponse | null>(null);
+  const [validationResult, setValidationResult] = useState<validationResult | null>(null);
   const [showValidationAlert, setShowValidationAlert] = useState<boolean>(false);
   const [sentBackParams, setSentBackParams] = useState<any>({
     LOGIN_ID: '',
@@ -329,23 +329,15 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   });
 
   // Update hasAttachments when attachedFiles changes
-  useEffect(() => {
-    setHasAttachments(attachedFiles && attachedFiles.length > 0);
-  }, [attachedFiles]);
+    useEffect(() => {
+      setHasAttachments(attachedFiles && attachedFiles.length > 0);
+    }, [ formData.request_number, attachedFiles]);
 
-  useEffect(() => {
-    setHasAttachments(attachedFiles && attachedFiles.length > 0);
-  }, [attachedFiles]);
-
-  useEffect(() => {
-    if (filesDialogOpen && formData.request_number) {
-      refetchAttachedFiles();
-    }
-  }, [filesDialogOpen, formData.request_number, refetchAttachedFiles]);
-
-  useEffect(() => {
- 
-  }, [hasAttachments]);
+    useEffect(() => {
+      if (filesDialogOpen && formData.request_number) {
+        refetchAttachedFiles();
+      }
+    }, [filesDialogOpen, formData.request_number, refetchAttachedFiles]);
  
 
   // Update form data when user data loads
@@ -669,46 +661,17 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     } finally {
       setLeaveTypesLoading(false);
       dispatch(closeBackdrop());
-    }
+    } 
   };
 
-  const validateLeave = async () => {
-    if (!formData.EMPLOYEE_ID) {
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message: intl.formatMessage({ id: 'SelectEmployeeFirst' }) || 'Please select an employee first',
-          open: true
-        })
-      );
-      return;
-    }
-
-    if (!formData.leave_type || !formData.leave_start_date || !formData.leave_end_date) {
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message:
-            intl.formatMessage({ id: 'FillAllRequiredLeaveDetails' }) ||
-            'Please fill all required leave details (Leave Type, Start Date, End Date)',
-          open: true
-        })
-      );
-      return;
-    }
-
-    const requestedDays = Number(formData.leave_days);
-    if (requestedDays <= 0) {
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message: intl.formatMessage({ id: 'LeaveDaysMustBeGreaterThanZero' }) || 'Leave days must be greater than zero',
-          open: true
-        })
-      );
-      return;
-    }
-
+  const runLeaveValidation = async (
+    requestedDays: number
+  ): Promise<{
+    isValid: boolean;
+    message: string;
+    severity: 'success' | 'error';
+    availableBalance: number | null;
+  }> => {
     setValidationLoading(true);
     setValidationResult(null);
     setShowValidationAlert(true);
@@ -723,69 +686,78 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
         leaveDays: requestedDays
       });
 
-      console.log('validate result', result);
+      const balanceNum =
+        result.availableBalance === undefined || result.availableBalance === null
+          ? null
+          : Number(result.availableBalance);
 
-      setValidationResult(result);
-
-      let isValid = result.success && result.isValid;
+      let isValid = Boolean(result.success) && Boolean(result.isValid);
       let message = result.message || 'Leave validation passed!';
-      let severity: 'success' | 'error' = 'success';
+      let severity: 'success' | 'error' = isValid ? 'success' : 'error';
 
-      if (result.availableBalance !== undefined && result.availableBalance < requestedDays) {
+      // ✅ Explicit balance guard — runs even if API forgets to flip isValid
+      if (balanceNum !== null && !Number.isNaN(balanceNum) && balanceNum < requestedDays) {
         isValid = false;
         severity = 'error';
         message = intl.formatMessage(
           {
             id: 'InsufficientLeaveBalance',
-            defaultMessage: 'Insufficient leave balance. Available: {available} days, Requested: {requested} days'
+            defaultMessage:
+              'Insufficient leave balance. Available: {available} days, Requested: {requested} days'
           },
-          {
-            available: result.availableBalance,
-            requested: requestedDays
-          }
+          { available: balanceNum, requested: requestedDays }
         );
       }
 
-      if (result.message && result.message.includes('$$$')) {
-        const parts = result.message.split('$$$');
-        if (parts.length === 2) {
-          const balance = parseFloat(parts[1]);
-          if (!isNaN(balance) && balance < requestedDays) {
-            isValid = false;
-            severity = 'error';
-            message = `Insufficient leave balance. Available: ${balance} days, Requested: ${requestedDays} days`;
-          } else if (!isNaN(balance)) {
-            result.availableBalance = balance;
-            message = `Leave validation passed! Available balance: ${balance} days`;
-          }
-        }
-      }
+      const finalResult = { ...result, isValid, message, availableBalance: balanceNum };
+      setValidationResult(finalResult as validationResult);
+      dispatch(showAlert({ severity, message, open: true }));
 
-      dispatch(
-        showAlert({
-          severity,
-          message,
-          open: true
-        })
-      );
-
-      setValidationResult({
-        ...result,
-        isValid,
-        message
-      });
+      return { isValid, message, severity, availableBalance: balanceNum };
     } catch (error) {
       console.error('Error validating leave:', error);
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message: intl.formatMessage({ id: 'FailedToValidateLeaveRequest' }) || 'Failed to validate leave request',
-          open: true
-        })
-      );
+      const message =
+        intl.formatMessage({ id: 'FailedToValidateLeaveRequest' }) ||
+        'Failed to validate leave request';
+      dispatch(showAlert({ severity: 'error', message, open: true }));
+      // fail-closed so we don't submit on unknown errors
+      return { isValid: false, message, severity: 'error', availableBalance: null };
     } finally {
       setValidationLoading(false);
     }
+  };
+
+  // "Validate" button — now just does its field checks, then delegates
+  const validateLeave = async () => {
+    if (!formData.EMPLOYEE_ID) {
+      dispatch(showAlert({
+        severity: 'error',
+        message: intl.formatMessage({ id: 'SelectEmployeeFirst' }) || 'Please select an employee first',
+        open: true
+      }));
+      return;
+    }
+
+    if (!formData.leave_type || !formData.leave_start_date || !formData.leave_end_date) {
+      dispatch(showAlert({
+        severity: 'error',
+        message: intl.formatMessage({ id: 'FillAllRequiredLeaveDetails' }) || 'Please fill all required leave details (Leave Type, Start Date, End Date)',
+        open: true
+      }));
+      return;
+    }
+
+    const requestedDays = Number(formData.leave_days);
+    if (requestedDays <= 0) {
+      dispatch(showAlert({
+        severity: 'error',
+        message: intl.formatMessage({ id: 'LeaveDaysMustBeGreaterThanZero' }) || 'Leave days must be greater than zero',
+        open: true
+      }));
+      return;
+    }
+
+    await runLeaveValidation(requestedDays);
   };
 
   const handleChange = (field: string, value: any) => {
@@ -881,8 +853,34 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       if (!CONTACT_DETAILS_DURING_LEAVE) errors.push(intl.formatMessage({ id: 'ContactDetailsDuringLeaveRequired', defaultMessage: 'Contact Details During Leave are required.' }));
 
       if (!remarks) errors.push(intl.formatMessage({ id: 'RemarksRequired', defaultMessage: 'Remarks are required.' }));
-      //  if (!actual_resume_date) errors.push('Actual Resume Date is required.');
-      // if (!DUTY_RESUME_DATE) errors.push('Duty Resume Date is required.');
+
+      if (
+        actionType === 'SUBMITTED' &&
+        leaveTypesRequiringAttachments.includes(leave_type) &&
+        !hasAttachments
+      ) {
+        errors.push(
+          intl.formatMessage({ id: 'AttachmentsRequired', defaultMessage: 'Attachment is required for this leave type.' }) ||
+            'Attachment is required for this leave type.'
+        );
+      }
+
+      const requestedDays = Number(leave_days);
+
+      if (requestedDays > 0) {
+        const { isValid, availableBalance } = await runLeaveValidation(requestedDays);
+
+        const hasInsufficientBalance =
+          availableBalance !== null &&
+          !Number.isNaN(availableBalance) &&
+          availableBalance < requestedDays;
+
+        if (actionType === 'SAVEASDRAFT' || actionType === 'SUBMITTED' && (!isValid || hasInsufficientBalance)) {
+          dispatch(closeBackdrop());
+          return; 
+        }
+      }
+
       if (errors.length) {
         dispatch(closeBackdrop());
         dispatch(
@@ -1154,7 +1152,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   options={currentSupervisorEmployeeData || []}
                   fullWidth
                   autoHighlight
-                  getOptionLabel={(option: IHrEmployee) => (option ? `${option.EMPLOYEE_CODE} - ${option.RPT_NAME}` : '')}
+                  getOptionLabel={(option: IHrEmployee) => (option ? `${option.ALTERNATE_ID} - ${option.RPT_NAME} - ${option.EMPLOYEE_CODE}` : '')}
                   isOptionEqualToValue={(option: IHrEmployee, value: IHrEmployee) =>
                     option.EMPLOYEE_CODE === value?.EMPLOYEE_CODE || option.EMPLOYEE_ID === value?.EMPLOYEE_ID
                   }
@@ -1260,18 +1258,11 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                   onClose={() => setShowValidationAlert(false)}
                 >
                   <Typography variant="body2">{validationResult.message}</Typography>
-                  {validationResult.validationErrors && validationResult.validationErrors.length > 0 && (
-                    <Box sx={{ mt: 1 }}>
-                      {validationResult.validationErrors.map((error, index) => (
-                        <Typography key={index} variant="body2" component="div">
-                          • {error}
-                        </Typography>
-                      ))}
-                    </Box>
-                  )}
-                  {validationResult.availableBalance !== undefined && (
+                  {/* <Typography variant="body2">{validationResult.raw}</Typography> */}
+                  {validationResult.availableBalance !== undefined && validationResult.availableBalance !== null && (
                     <Typography variant="body2" sx={{ mt: 1 }}>
-                      Available Leaves : {validationResult.availableBalance}
+                        available: {validationResult.availableBalance},
+                          requested: {formData.leave_days}
                     </Typography>
                   )}
                 </Alert>
