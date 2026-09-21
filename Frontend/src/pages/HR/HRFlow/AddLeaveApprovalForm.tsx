@@ -870,14 +870,16 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       if (requestedDays > 0) {
         const { isValid, availableBalance } = await runLeaveValidation(requestedDays);
 
-        const hasInsufficientBalance =
-          availableBalance !== null &&
+        const hasInsufficientBalance =availableBalance !== null &&
           !Number.isNaN(availableBalance) &&
           availableBalance < requestedDays;
 
-        if (actionType === 'SAVEASDRAFT' || actionType === 'SUBMITTED' && (!isValid || hasInsufficientBalance)) {
+        if (
+          (actionType === 'SAVEASDRAFT' || actionType === 'SUBMITTED') &&
+          (!isValid || hasInsufficientBalance)
+        ) {
           dispatch(closeBackdrop());
-          return; 
+          return;
         }
       }
 
