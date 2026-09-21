@@ -6288,11 +6288,6 @@ es-toolkit@^1.39.3:
   resolved "https://registry.yarnpkg.com/es-toolkit/-/es-toolkit-1.46.1.tgz#38ca27191a98a867fc544b81cf1477a68947fb06"
   integrity sha512-5eNtXOs3tbfxXOj04tjjseeWkRWaoCjdEI+96DgwzZoe6c9juL49pXlzAFTI72aWC9Y8p7168g6XIKjh7k6pyQ==
 
-es6-promise@^4.2.5:
-  version "4.2.8"
-  resolved "https://registry.yarnpkg.com/es6-promise/-/es6-promise-4.2.8.tgz#4eb21594c972bc40553d276e510539143db53e0a"
-  integrity sha512-HJDGx5daxeIvxdBxvG2cb9g4tEvwIk3i8+nhX0yGrYmZUzbkdg8QbDevheDB8gd0//uPj4c1EQua8Q+MViT0/w==
-
 escalade@^3.1.1, escalade@^3.2.0:
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/escalade/-/escalade-3.2.0.tgz#011a3f69856ba189dffa7dc8fcce99d2a87903e5"
@@ -7461,14 +7456,14 @@ html2canvas@^1.0.0, html2canvas@^1.0.0-rc.5, html2canvas@^1.4.1:
     css-line-break "^2.1.0"
     text-segmentation "^1.0.3"
 
-html2pdf.js@^0.10.3:
-  version "0.10.3"
-  resolved "https://registry.yarnpkg.com/html2pdf.js/-/html2pdf.js-0.10.3.tgz#6b7ca3e95afdfcaf2b560821fa59fbd06fdd9236"
-  integrity sha512-RcB1sh8rs5NT3jgbN5zvvTmkmZrsUrxpZ/RI8TMbvuReNZAdJZG5TMfA2TBP6ZXxpXlWf9NB/ciLXVb6W2LbRQ==
+html2pdf.js@^0.14.0:
+  version "0.14.0"
+  resolved "https://registry.yarnpkg.com/html2pdf.js/-/html2pdf.js-0.14.0.tgz#dd2fdf2ee3036cb4c0d7c0d4606ee2da7c677e83"
+  integrity sha512-yvNJgE/8yru2UeGflkPdjW8YEY+nDH5X7/2WG4uiuSCwYiCp8PZ8EKNiTAa6HxJ1NjC51fZSIEq6xld5CADKBQ==
   dependencies:
-    es6-promise "^4.2.5"
+    dompurify "^3.3.1"
     html2canvas "^1.0.0"
-    jspdf "^3.0.0"
+    jspdf "^4.0.0"
 
 htmlparser2@^6.1.0:
   version "6.1.0"
@@ -8851,7 +8846,7 @@ jspdf-autotable@^5.0.7:
   resolved "https://registry.yarnpkg.com/jspdf-autotable/-/jspdf-autotable-5.0.8.tgz#b010dab34caf5eff60bbcd09a36d0608dc0a84ae"
   integrity sha512-Hy05N86yBO7CXBrnSLOge7i1ZYpKH2DjQ94iybaP7vBhSInjvRBgDc99ngKzSbSO8Jc98ZCally8I6n0tj2RJQ==
 
-jspdf@*:
+jspdf@*, jspdf@^4.0.0:
   version "4.2.1"
   resolved "https://registry.yarnpkg.com/jspdf/-/jspdf-4.2.1.tgz#6ba0d263999313f91f369ee80ecf235046b2acd8"
   integrity sha512-YyAXyvnmjTbR4bHQRLzex3CuINCDlQnBqoSYyjJwTP2x9jDLuKDzy7aKUl0hgx3uhcl7xzg32agn5vlie6HIlQ==
@@ -8865,7 +8860,7 @@ jspdf@*:
     dompurify "^3.3.1"
     html2canvas "^1.0.0-rc.5"
 
-jspdf@^3.0.0, jspdf@^3.0.3:
+jspdf@^3.0.3:
   version "3.0.4"
   resolved "https://registry.yarnpkg.com/jspdf/-/jspdf-3.0.4.tgz#f9ad24751eaf3c8a758eccab6f621d723d4b32b6"
   integrity sha512-dc6oQ8y37rRcHn316s4ngz/nOjayLF/FFxBF4V9zamQKRqXxyiH1zagkCdktdWhtoQId5K20xt1lB90XzkB+hQ==

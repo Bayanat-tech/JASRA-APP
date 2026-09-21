@@ -2,7 +2,6 @@ import { DeleteOutlined, PlusOutlined, CloseCircleFilled } from '@ant-design/ico
 import { Button, TextField, Box, InputAdornment, useMediaQuery, useTheme, Modal, Checkbox, FormControlLabel } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { useQuery } from '@tanstack/react-query';
-import { ISearch } from 'components/filters/SearchFilter';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState, useCallback } from 'react';
@@ -28,8 +27,21 @@ import { TDivisionmaster } from './type/division-pf-types';
 import ReportDialogPage from 'pages/Report/ReportDialogPage';
 import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
-const filter: ISearch = {
-  search: [[]]
+// AG Grid date filter: cell values are strings (not Date objects), so normalise the cell value
+// to midnight (same parsing as the column's valueFormatter) before comparing with the filter date.
+const dateFilterParams = {
+  buttons: ['reset', 'apply'],
+  comparator: (filterLocalDateAtMidnight: Date, cellValue: any) => {
+    if (!cellValue) return -1;
+    const cellDate = dayjs(cellValue);
+    if (!cellDate.isValid()) return -1;
+
+    const cellTime = cellDate.startOf('day').valueOf();
+    const filterTime = filterLocalDateAtMidnight.getTime();
+
+    if (cellTime === filterTime) return 0;
+    return cellTime < filterTime ? -1 : 1;
+  }
 };
 
 interface PurchaseRequestTab1Props {
@@ -45,7 +57,6 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
   // const isItemPage = pathNameList[3]?.toLowerCase() === 'item';
   const app = useSelector((state: any) => state.menuSelectionSlice.app);
   const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 50 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
   // Removed unused toggleFilter state
   const { dispatch } = store;
   const [globalFilter, setGlobalFilter] = useState<string>('');
@@ -108,12 +119,6 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
     rowsPerPage: paginationData.rowsPerPage
   }), [paginationData.page, paginationData.rowsPerPage]);
 
-  const searchStable = useMemo(() =>
-    JSON.stringify(searchData.search) +
-    (searchData.sort ? `${searchData.sort.field_name}-${searchData.sort.desc}` : ''),
-    [searchData.search, searchData.sort]
-  );
-
   const { data: divisionData } = useQuery({
     queryKey: ['division', app],
     queryFn: async () => {
@@ -164,6 +169,7 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
         field: 'request_date',
         width: 150,
         filter: 'agDateColumnFilter',
+        filterParams: dateFilterParams,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
@@ -274,38 +280,6 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
     }
   };
 
-  const onSortChanged = useCallback((params: any) => {
-    const columnState = params?.columnApi?.getColumnState();
-    const sortedColumn = columnState?.find((col: any) => col.sort);
-
-    setSearchData((prevData) => ({
-      ...prevData,
-      sort: sortedColumn ? { field_name: sortedColumn.colId, desc: sortedColumn.sort === 'desc' } : { field_name: 'updated_at', desc: true }
-    }));
-  }, []);
-
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: any[] = [];
-
-    Object.entries(filterModel).forEach(([field, value]: [string, any]) => {
-      if (value.filter || value.value) {
-        filters.push([
-          {
-            field_name: field,
-            field_value: value.filter || value.value,
-            operator: 'equals'
-          }
-        ]);
-      }
-    });
-
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
-
   const onPaginationChanged = useCallback((params: any) => {
     const currentPage = params.api.paginationGetCurrentPage(); //   REMOVED + 1
     const pageSize = params.api.paginationGetPageSize();
@@ -315,7 +289,9 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
 
 
   const { data: PurchaserequestheaderData, refetch: refetchPurchaserequestheaderData } = useQuery({
-    queryKey: ['Purchaserequestheader_data', paginationStable.page, paginationStable.rowsPerPage, searchStable],
+    // Filter/sort/search are client-side (AG Grid), so the key only holds what the API call actually uses,
+    // plus the endpoint name so different tabs never share a cache entry.
+    queryKey: ['Purchaserequestheader_data', 'my_task', paginationStable.page, paginationStable.rowsPerPage],
     queryFn: async () => {
       if (!app) {
         return { tableData: [], count: 0 };
@@ -360,7 +336,7 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
   // useEffect(() => {
   //   fetchPurchaserequestheaderData();
 
-  // }, [app, paginationStable.page, paginationStable.rowsPerPage, searchStable]);
+  // }, [app, paginationStable.page, paginationStable.rowsPerPage]);
 
 
 
@@ -650,10 +626,8 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
   const handleGlobalFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setGlobalFilter(value);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: [[{ field_name: 'global', field_value: value }]] as ISearch['search']
-    }));
+    // Client-side quick filter across all columns (AG Grid v31+)
+    gridApi?.setGridOption('quickFilterText', value);
   };
 
   const theme = useTheme();
@@ -840,11 +814,9 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
         rowData={Array.isArray(PurchaserequestheaderData) ? PurchaserequestheaderData : []}
         columnDefs={columnDefs}
         getRowId={(params: any) => params.data?.request_number}
-        onSortChanged={onSortChanged}
         suppressRowTransform={true}
         animateRows={false}
         onGridReady={onGridReady}
-        onFilterChanged={onFilterChanged}
         onPaginationChanged={onPaginationChanged}
         pagination
         paginationPageSize={6000}

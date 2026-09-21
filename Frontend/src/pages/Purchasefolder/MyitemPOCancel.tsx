@@ -3,7 +3,6 @@ import { Button, TextField, Box, InputAdornment } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
-import { ISearch } from 'components/filters/SearchFilter';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import useAuth from 'hooks/useAuth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,9 +25,21 @@ import PurchaseOrderReport from 'components/reports/purchase/PurchaseOrderReport
 import ReportDialogPage from 'pages/Report/ReportDialogPage';
 import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
+// AG Grid date filter: cell values are strings (not Date objects), so normalise the cell value
+// to midnight (same parsing as the column's valueFormatter) before comparing with the filter date.
+const dateFilterParams = {
+  buttons: ['reset', 'apply'],
+  comparator: (filterLocalDateAtMidnight: Date, cellValue: any) => {
+    if (!cellValue) return -1;
+    const cellDate = dayjs(cellValue);
+    if (!cellDate.isValid()) return -1;
+
+    const cellTime = cellDate.startOf('day').valueOf();
+    const filterTime = filterLocalDateAtMidnight.getTime();
+
+    if (cellTime === filterTime) return 0;
+    return cellTime < filterTime ? -1 : 1;
+  }
 };
 
 interface MyitemPOCancelProps {
@@ -48,7 +59,6 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
   const { user } = useAuth();
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
   const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 1000 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
   const [globalFilter, setGlobalFilter] = useState<string>('');
   const [gridApi, setGridApi] = useState<any>(null);
   const [PurchaserequestheaderFormPopup, setPurchaserequestheaderFormPopup] = useState<TUniversalDialogProps>({
@@ -81,6 +91,8 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
       {
         headerName: 'Request Date',
         field: 'request_date',
+        filter: 'agDateColumnFilter',
+        filterParams: dateFilterParams,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
@@ -93,6 +105,8 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
       {
         headerName: 'Cancel Date',
         field: 'updated_at',
+        filter: 'agDateColumnFilter',
+        filterParams: dateFilterParams,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
@@ -131,14 +145,14 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
         field: 'actions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
-          const actionButtons: TAvailableActionButtons[] = ['view'];
+          const actionButtons: TAvailableActionButtons[] = [];
           return (
-              <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} /> 
+              <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />  
         );
         }
-      },
+      }, 
       {
-        headerName: 'React PO Report',
+        headerName: 'Report',
         field: 'actions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
@@ -159,31 +173,6 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
     params.api.sizeColumnsToFit();
   };
 
-  const onSortChanged = useCallback((params: any) => {
-    const sortState = params.api.getColumnState();
-    const sortedColumn = sortState.find((column: any) => column.sort);
-    setSearchData((prevData) => ({
-      ...prevData,
-      sort: sortedColumn ? { field_name: sortedColumn.colId, desc: sortedColumn.sort === 'desc' } : { field_name: 'updated_at', desc: true }
-    }));
-  }, []);
-
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
-      }
-    ]);
-
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
-
   const onPaginationChanged = useCallback((params: any) => {
     const currentPage = params.api.paginationGetCurrentPage();
     const pageSize = params.api.paginationGetPageSize();
@@ -191,7 +180,9 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
   }, []);
 
   const { data: PurchaserequestheaderData, refetch: refetchPurchaserequestheaderData } = useQuery({
-    queryKey: ['Purchaserequestheader_data', searchData, paginationData],
+    // Filter/sort/search are client-side (AG Grid), so the key only holds what the API call actually uses,
+    // plus the endpoint name so different tabs never share a cache entry.
+    queryKey: ['Purchaserequestheader_data', 'po_cancel', paginationData],
     queryFn: () => PfSerivceInstance.getMasters(app, 'po_cancel', { page: paginationData.page, rowsPerPage: paginationData.rowsPerPage })
   });
 
@@ -268,10 +259,8 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
   const handleGlobalFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setGlobalFilter(value);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: [[{ field_name: 'global', field_value: value }]] as ISearch['search']
-    }));
+    // Client-side quick filter across all columns (AG Grid v31+)
+    gridApi?.setGridOption('quickFilterText', value);
   };
 
   const handleCancelPopupClose = () => {
@@ -346,11 +335,9 @@ const MyitemPOCancel: FC<MyitemPOCancelProps> = ({ costUser }) => {
         rowData={Array.isArray(PurchaserequestheaderData) ? PurchaserequestheaderData : []}
         columnDefs={columnDefs}
         getRowId={(params: any) => params.data?.request_number}
-        onSortChanged={onSortChanged}
         suppressRowTransform={true}
         animateRows={false}
         onGridReady={onGridReady}
-        onFilterChanged={onFilterChanged}
         onPaginationChanged={onPaginationChanged}
         pagination
         paginationPageSize={6000}

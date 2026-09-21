@@ -2,7 +2,6 @@ import { DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { Button, TextField, InputAdornment, Box } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { ISearch } from 'components/filters/SearchFilter';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import AddPurchaserequestPfForm from 'components/forms/Purchaseflow/AddPurchaserequestPfForm';
 import useAuth from 'hooks/useAuth';
@@ -24,10 +23,24 @@ import CustomAgGrid from 'components/grid/CustomAgGrid';
 import { ColDef } from 'ag-grid-community';
 import { PlusOutlined } from '@ant-design/icons';
 import { TDivisionmaster } from './type/division-pf-types';
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
+
+// AG Grid date filter: cell values are strings (not Date objects), so normalise the cell value
+// to midnight (same parsing as the column's valueFormatter) before comparing with the filter date.
+const dateFilterParams = {
+  buttons: ['reset', 'apply'],
+  comparator: (filterLocalDateAtMidnight: Date, cellValue: any) => {
+    if (!cellValue) return -1;
+    const cellDate = dayjs(cellValue);
+    if (!cellDate.isValid()) return -1;
+
+    const cellTime = cellDate.startOf('day').valueOf();
+    const filterTime = filterLocalDateAtMidnight.getTime();
+
+    if (cellTime === filterTime) return 0;
+    return cellTime < filterTime ? -1 : 1;
+  }
 };
+
 interface MyTaskClosedRequestTabProps {
   costUser: string | null;
 }
@@ -37,7 +50,6 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
   const pathNameList = getPathNameList(location.pathname);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
   const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 50 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
   const [globalFilter, setGlobalFilter] = useState<string>('');
   const [gridApi, setGridApi] = useState<any>(null);
   const [PurchaserequestheaderFormPopup, setPurchaserequestheaderFormPopup] = useState<TUniversalDialogProps>({
@@ -65,6 +77,7 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
         field: 'request_date',
         flex: 1,
         filter: 'agDateColumnFilter',
+        filterParams: dateFilterParams,
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : '-';
@@ -124,29 +137,6 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
     } catch (error) {}
   };
 
-  const onSortChanged = useCallback((params: any) => {
-    const sortState = params.api.getColumnState();
-    const sortedColumn = sortState.find((column: any) => column.sort);
-    setSearchData((prevData) => ({
-      ...prevData,
-      sort: sortedColumn ? { field_name: sortedColumn.colId, desc: sortedColumn.sort === 'desc' } : { field_name: 'updated_at', desc: true }
-    }));
-  }, []);
-
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
-      }
-    ]);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
   const onPaginationChanged = useCallback((params: any) => {
     const currentPage = params.api.paginationGetCurrentPage();
     const pageSize = params.api.paginationGetPageSize();
@@ -158,7 +148,9 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
   const permissionCheck = !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
   const isQueryEnabled = Boolean(permissionCheck);
   const { data: PurchaserequestheaderData, refetch: refetchPurchaserequestheaderData } = useQuery({
-    queryKey: ['Purchaserequestheader_data', searchData, paginationData],
+    // Filter/sort/search are client-side (AG Grid), so the key only holds what the API call actually uses,
+    // plus the endpoint name so different tabs never share a cache entry.
+    queryKey: ['Purchaserequestheader_data', 'My_History', paginationData],
     queryFn: () => PfSerivceInstance.getMasters(app, 'My_History', { page: paginationData.page, rowsPerPage: paginationData.rowsPerPage }),
     enabled: isQueryEnabled
   });
@@ -259,10 +251,8 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
   const handleGlobalFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setGlobalFilter(value);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: [[{ field_name: 'global', field_value: value }]] as ISearch['search']
-    }));
+    // Client-side quick filter across all columns (AG Grid v31+)
+    gridApi?.setGridOption('quickFilterText', value);
   };
   useEffect(() => {
     return () => {};
@@ -322,11 +312,9 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
         rowData={Array.isArray(PurchaserequestheaderData) ? PurchaserequestheaderData : []}
         columnDefs={columnDefs}
         getRowId={(params: any) => params.data?.request_number}
-        onSortChanged={onSortChanged}
         suppressRowTransform={true}
         animateRows={false}
         onGridReady={onGridReady}
-        onFilterChanged={onFilterChanged}
         onPaginationChanged={onPaginationChanged}
         pagination
         paginationPageSize={6000}

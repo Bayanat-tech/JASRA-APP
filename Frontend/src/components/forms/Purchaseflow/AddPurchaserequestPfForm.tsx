@@ -5288,7 +5288,8 @@ useEffect(() => {
                 </Button>
                 </Tooltip>
                 <Tooltip title="Print & View">
-                  <Button disabled={!purchaseRequest.request_number} color="primary" onClick={handleOpenRequestForm}>
+                  {/* <Button disabled={!purchaseRequest.request_number} color="primary" onClick={handleOpenRequestForm}> */}
+                    <Button disabled color="primary" onClick={handleOpenRequestForm}>
                     <IoPrintSharp />
                   </Button>
                 </Tooltip>

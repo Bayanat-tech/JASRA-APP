@@ -6,7 +6,6 @@ import Checkbox from '@mui/material/Checkbox';
 import dayjs from 'dayjs';
 import SearchIcon from '@mui/icons-material/Search';
 import { useQuery } from '@tanstack/react-query';
-import { ISearch } from 'components/filters/SearchFilter';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import useAuth from 'hooks/useAuth';
 import { useMemo, useState, useCallback } from 'react';
@@ -33,11 +32,6 @@ import { ColDef } from 'ag-grid-community';
 import ReportDialogPage from 'pages/Report/ReportDialogPage';
 import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
-};
-
 interface MyitemPOConfirmProps {
   costUser: string | null;
   userlevel?: number;
@@ -57,7 +51,6 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   const [createPR, setCreatePR] = useState<boolean>(false);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
   const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 6000 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
   // const [toggleFilter, setToggleFilter] = useState<boolean | null>(null);
   const [globalFilter, setGlobalFilter] = useState<string>('');
   const [PurchaserequestheaderFormPopup, setPurchaserequestheaderFormPopup] = useState<TUniversalDialogProps>({
@@ -92,6 +85,24 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {
         headerName: 'Request Date',
         field: 'request_date',
+        filter: 'agDateColumnFilter',
+        flex: 1,
+        // Cell values are strings, AG Grid's default date comparator expects Date objects.
+        // Normalise the cell value to midnight (same parsing as valueFormatter) and compare with the filter date.
+        filterParams: {
+          buttons: ['reset', 'apply'],
+          comparator: (filterLocalDateAtMidnight: Date, cellValue: any) => {
+            if (!cellValue) return -1;
+            const cellDate = dayjs(cellValue);
+            if (!cellDate.isValid()) return -1;
+
+            const cellTime = cellDate.startOf('day').valueOf();
+            const filterTime = filterLocalDateAtMidnight.getTime();
+
+            if (cellTime === filterTime) return 0;
+            return cellTime < filterTime ? -1 : 1;
+          }
+        },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : '-';
@@ -124,8 +135,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         field: 'actions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
-          const actionButtons: TAvailableActionButtons[] = ['view']; //default action button
-
+          // const actionButtons: TAvailableActionButtons[] = ['view']; //default action button bold report
+         const actionButtons: TAvailableActionButtons[] = []; 
           if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
             actionButtons.push('edit');
           }
@@ -138,7 +149,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         }
       },
       {
-        headerName: 'React PO Report',
+        headerName: 'PO Report',
         field: 'actions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
@@ -154,33 +165,9 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     [userlevel]
   );
 
-  const onSortChanged = useCallback((params: any) => {
-    const sortState = params.api.getColumnState().find((col: any) => col.sort);
-    setSearchData((prevData) => ({
-      ...prevData,
-      sort: sortState ? { field_name: sortState.colId, desc: sortState.sort === 'desc' } : { field_name: 'updated_at', desc: true }
-    }));
-  }, []);
-
   const onGridReady = (params: any) => {
     setGridApi(params.api);
   };
-
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
-      }
-    ]);
-
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
 
   const onPaginationChanged = useCallback((params: any) => {
     const currentPage = params.api.paginationGetCurrentPage();
@@ -203,7 +190,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     // isFetching: isPurchaserequestheaderFetchLoading,
     refetch: refetchPurchaserequestheaderData
   } = useQuery({
-    queryKey: ['Purchaserequestheader_data', searchData, paginationData],
+    // Filtering/sorting/search are all client-side (AG Grid), so only pagination belongs in the key.
+    queryKey: ['Purchaserequestheader_data', paginationData],
     queryFn: () => PfSerivceInstance.getMasters(app, 'po_modify', { page: paginationData.page, rowsPerPage: paginationData.rowsPerPage })
   });
 
@@ -298,10 +286,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   const handleGlobalFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setGlobalFilter(value);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: [[{ field_name: 'global', field_value: value }]] as ISearch['search']
-    }));
+    // Client-side quick filter across all columns (AG Grid v31+). On older versions use gridApi?.setQuickFilter(value)
+    gridApi?.setGridOption('quickFilterText', value);
   };
 
   const dispatch = useDispatch();
@@ -423,11 +409,9 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         rowData={Array.isArray(PurchaserequestheaderData) ? PurchaserequestheaderData : []}
         columnDefs={columnDefs}
         getRowId={(params: any) => params.data?.request_number}
-        onSortChanged={onSortChanged}
         suppressRowTransform={true}
         animateRows={false}
         onGridReady={onGridReady}
-        onFilterChanged={onFilterChanged}
         onPaginationChanged={onPaginationChanged}
         pagination
         paginationPageSize={6000}

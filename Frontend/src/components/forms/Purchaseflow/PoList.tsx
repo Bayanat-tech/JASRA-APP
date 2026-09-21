@@ -72,11 +72,11 @@ const PoList = ({ PoOpen, setPoOpen, POdata, requestNumber, div_code }: PoListPr
         key: 'action',
         render: (_: any, record: any) => (
           <>
-          <Button size="small" onClick={() => handlePDF(record.po_number)}>
+          <Button disabled size="small" onClick={() => handlePDF(record.po_number)}>
             <EyeOutlined />
           </Button>
           <Button size="small" onClick={() => setHandleReportOpen({ open: true, poNumber: record.po_number, divCode: div_code || '' })}>
-            <EyeOutlined /> 2
+            <EyeOutlined />  
           </Button>  
           </>
         )
