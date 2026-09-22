@@ -133,13 +133,14 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {
         headerName: 'Actions',
         field: 'actions',
+          colId: 'prActions',          // <-- unique id
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
-          // const actionButtons: TAvailableActionButtons[] = ['view']; //default action button bold report
-         const actionButtons: TAvailableActionButtons[] = []; 
-          if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
-            actionButtons.push('edit');
-          }
+          const actionButtons: TAvailableActionButtons[] = ['view']; //default action button bold report
+        //  const actionButtons: TAvailableActionButtons[] = []; 
+        //   if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
+        //     actionButtons.push('edit');
+        //   }
 
           if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
             actionButtons.push('cancel');
@@ -151,6 +152,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {
         headerName: 'PO Report',
         field: 'actions',
+          colId: 'poReportActions',    // <-- unique id, different from above
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
           const actionButtons: TAvailableActionButtons[] = ['view'];
@@ -245,20 +247,36 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     }));
   };
 
-  const handleActions = async (actionType: string, rowOriginal: TVPurchaserequestheader) => {
-    const REQUEST_NUMBER = rowOriginal.request_number;
+const handleActions = async (actionType: string, rowOriginal: TVPurchaserequestheader) => {
+  const REQUEST_NUMBER = rowOriginal.request_number;
 
-    switch (actionType) {
-      case 'view':
-        handleViewPurchaserequestheader(rowOriginal);
-        break;
-      case 'cancel':
-        if (REQUEST_NUMBER.includes('PO$')) {
-          handleCancelPopupOpen(REQUEST_NUMBER);
+  switch (actionType) {
+    case 'view':
+      handleViewPurchaserequestheader(rowOriginal);
+      break;
+    case 'edit': {
+      const normalizedRequestNumber = REQUEST_NUMBER.replace(/\$/g, '/');
+      const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
+      const title = isBudgetRequest ? 'Budget Request' : 'Edit Purchase Request';
+
+      setPurchaserequestheaderFormPopup((prev) => ({
+        action: { ...prev.action, open: !prev.action.open },
+        title,
+        data: {
+          isEditMode: true,
+          isViewMode: false, // false so it's actually editable, not read-only
+          request_number: REQUEST_NUMBER
         }
-        break;
+      }));
+      break;
     }
-  };
+    case 'cancel':
+      if (REQUEST_NUMBER.includes('PO$')) {
+        handleCancelPopupOpen(REQUEST_NUMBER);
+      }
+      break;
+  }
+};
 
   const handleDeletePurchaserequestheader = async () => {
     await PfSerivceInstance.deleteMasters(

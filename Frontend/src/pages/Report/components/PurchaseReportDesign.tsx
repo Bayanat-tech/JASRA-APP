@@ -1,4 +1,4 @@
-import { forwardRef, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import WmsSerivceInstance from 'service/wms/service.wms';
@@ -77,6 +77,14 @@ interface TermsInfo {
   PROJECT_CODE: string;
 }
 
+interface SupplierInfo {
+  SUPP_CODE: string;
+  SUPP_TELNO1: string;
+  SUPP_FAXNO1: string;
+  MOBILE: string;
+  SUPP_EMAIL1: string;
+}
+
 // ── Props: accepts required_values so it can plug into ReportDialogPage ──
 export interface PurchaseReportDesignProps {
   required_values: {
@@ -104,6 +112,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
   ({ required_values }, ref) => {
     let { divCode, refDocNo } = required_values;
     console.log('Rendering PurchaseReportDesign with:', { divCode, refDocNo });
+const [suppCode, setSuppCode] = useState<string>('');
 
     const div_code_sql = useMemo(() => `
       SELECT DISTINCT div_code FROM PURCHASE_REQUEST_DETAILS WHERE ref_doc_no = REPLACE('${refDocNo}', '/', '$')
@@ -199,6 +208,53 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     // PROJECT_CODE — it has nothing to do with the supplier's own
     // contact fields, which is what the report was mistakenly showing
     // under "Contact Name" / "Contact No" before.
+
+    // ── Step 1: find the real JASRA SUPP_CODE for this PO.
+// Swap the WHERE criteria below for whatever uniquely identifies the
+// supplier row (e.g. SUPP_NAME + COMPANY_CODE, or a bridge table).
+const sql_for_supp_code = useMemo(() => `
+  SELECT SUPP_CODE
+  FROM MS_SUPPLIER_JASRA
+  WHERE TRIM(SUPP_NAME) = TRIM('${poData?.SUPP_NAME}')
+    AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
+`, [poData?.SUPP_NAME, poData?.COMPANY_CODE]);
+
+const { data: resolvedSuppCode, isFetching: isSuppCodeLoading } = useQuery({
+  queryKey: ['purchase_report_supp_code', poData?.SUPP_NAME, poData?.COMPANY_CODE],
+  staleTime: 1000 * 60 * 5,
+  queryFn: async () => {
+    const res: any = await WmsSerivceInstance.executeRawSql(sql_for_supp_code);
+    // executeRawSql may hand back either the array directly or { data: [...] }
+    const rows: any[] = Array.isArray(res) ? res : res?.data ?? [];
+    // Row 0 (00089) is NOT the right supplier — the second row is.
+    return rows[1]?.SUPP_CODE || '';
+  },
+  enabled: !!poData?.SUPP_NAME && !!poData?.COMPANY_CODE,
+});
+
+useEffect(() => {
+  setSuppCode(resolvedSuppCode ?? '');
+}, [resolvedSuppCode]);
+
+// ── Step 2: fetch the supplier's contact fields using the SUPP_CODE
+// resolved by query 1 (held in state, not poData.SUPP_CODE).
+const sql_for_supplier_info = useMemo(() => `
+  SELECT SUPP_CODE, SUPP_TELNO1, SUPP_FAXNO1, MOBILE, SUPP_EMAIL1
+  FROM MS_SUPPLIER_JASRA
+  WHERE SUPP_CODE = '${suppCode}'
+    AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
+`, [suppCode, poData?.COMPANY_CODE]);
+
+const { data: supplierInfo, isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
+  queryKey: ['purchase_report_supplier_info', suppCode, poData?.COMPANY_CODE],
+  staleTime: 1000 * 60 * 5,
+  queryFn: async () => {
+    const res: any = await WmsSerivceInstance.executeRawSql(sql_for_supplier_info);
+    const rows: any[] = Array.isArray(res) ? res : res?.data ?? [];
+    return rows[0];
+  },
+  enabled: !!suppCode && !!poData?.COMPANY_CODE,
+});
     const sql_for_delivery_info = useMemo(() => `
       SELECT STORE_NAME, CONTACT_NUMBER, CONTACT_PERSON
       FROM MS_PS_PROJECT_MASTER
@@ -418,7 +474,7 @@ const status = useMemo(() => {
     // otherwise the report can be considered "ready" (and printed/exported)
     // before the signature <img> has its src set / has finished loading,
     // while every other image on the page is available synchronously.
-    if (isDeptdataLoading || isSignatureLoading) {
+if (isDeptdataLoading || isSignatureLoading || isSuppCodeLoading || isSupplierLoading) {
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
           <Typography variant="body2">Loading report...</Typography>
@@ -463,13 +519,17 @@ const status = useMemo(() => {
           {/* Supplier */}
           <Box>
             <Typography sx={{ fontWeight: 600, mb: 0.5 }}>Supplier Details:</Typography>
-            <Typography>Supplier Number: {poData.SUPP_CODE}</Typography>
+           <Typography>Supplier Number: {supplierInfo?.SUPP_CODE || '-'}</Typography>
             <Typography sx={{ fontWeight: 600, textTransform: 'uppercase' }}>{poData.SUPP_NAME}</Typography>
             <Typography>{poData.ADDRESS}</Typography>
-            <Typography>TEL- {poData.SUPP_TELNO1 || '-'}</Typography>
+            <Typography>TEL- {supplierInfo?.SUPP_TELNO1 || '-'}</Typography>
+            <Typography>FAX- {supplierInfo?.SUPP_FAXNO1 || '-'}</Typography>
+            <Typography>MOB - {supplierInfo?.MOBILE || '-'}</Typography>
+            <Typography>EMAIL: {supplierInfo?.SUPP_EMAIL1 || '-'}</Typography>
+            {/* <Typography>TEL- {poData.SUPP_TELNO1 || '-'}</Typography>
             <Typography>FAX- {poData.SUPP_FAXNO1 || '-'}</Typography>
             <Typography>MOB - {poData.MOBILE || '-'}</Typography>
-            <Typography>EMAIL: {poData.SUPP_EMAIL1 || '-'}</Typography>
+            <Typography>EMAIL: {poData.SUPP_EMAIL1 || '-'}</Typography> */}
           </Box>
 
           {/* Status stamp */}
