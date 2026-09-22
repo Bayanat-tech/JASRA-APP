@@ -19,7 +19,6 @@ import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
 import { TVPurchaserequestheader } from './type/purchaserequestheader_pf-types';
 import AddBudgetrequestPfForm from 'components/forms/Purchaseflow/AddBudgetrequestPfForm';
-import PurchaseOrderReport from 'components/reports/purchase/PurchaseOrderReport';
 import { closeBackdrop, openBackdrop } from 'store/reducers/backdropSlice';
 
 import { showAlert } from 'store/CustomAlert/alertSlice'; // adjust path as needed
@@ -29,8 +28,6 @@ import { useDispatch } from 'store'; // adjust this path based on your folder st
 
 import CustomAgGrid from 'components/grid/CustomAgGrid';
 import { ColDef } from 'ag-grid-community';
-import ReportDialogPage from 'pages/Report/ReportDialogPage';
-import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 interface MyitemPOConfirmProps {
   costUser: string | null;
@@ -38,11 +35,6 @@ interface MyitemPOConfirmProps {
 }
 
 const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
-  const [handleReportOpen, setHandleReportOpen] = useState({
-    open: false,
-    poNumber: '',
-    divCode: ''
-  });
   console.log('Userlevel in after sending:', userlevel);
   //--------------constants----------
   const { permissions, user_permission, user } = useAuth();
@@ -133,14 +125,14 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {
         headerName: 'Actions',
         field: 'actions',
-          colId: 'prActions',          // <-- unique id
+        colId: 'prActions',          // <-- unique id
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
           const actionButtons: TAvailableActionButtons[] = ['view']; //default action button bold report
-        //  const actionButtons: TAvailableActionButtons[] = []; 
-        //   if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
-        //     actionButtons.push('edit');
-        //   }
+          //  const actionButtons: TAvailableActionButtons[] = []; 
+          //   if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
+          //     actionButtons.push('edit');
+          //   }
 
           if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
             actionButtons.push('cancel');
@@ -148,21 +140,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
         }
-      },
-      {
-        headerName: 'PO Report',
-        field: 'actions',
-          colId: 'poReportActions',    // <-- unique id, different from above
-        cellStyle: { fontSize: '12px' },
-        cellRenderer: (params: any) => {
-          const actionButtons: TAvailableActionButtons[] = ['view'];
-          return (
-              <div className="flex flex-col gap-1">
-              <ActionButtonsGroup handleActions={()=>{setHandleReportOpen({ open: true, poNumber: params.data.document_number, divCode: params.data.division_code })}} buttons={actionButtons} /> 
-              </div>
-        );
-        }
-      },
+      }
     ],
     [userlevel]
   );
@@ -247,36 +225,36 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     }));
   };
 
-const handleActions = async (actionType: string, rowOriginal: TVPurchaserequestheader) => {
-  const REQUEST_NUMBER = rowOriginal.request_number;
+  const handleActions = async (actionType: string, rowOriginal: TVPurchaserequestheader) => {
+    const REQUEST_NUMBER = rowOriginal.request_number;
 
-  switch (actionType) {
-    case 'view':
-      handleViewPurchaserequestheader(rowOriginal);
-      break;
-    case 'edit': {
-      const normalizedRequestNumber = REQUEST_NUMBER.replace(/\$/g, '/');
-      const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
-      const title = isBudgetRequest ? 'Budget Request' : 'Edit Purchase Request';
+    switch (actionType) {
+      case 'view':
+        handleViewPurchaserequestheader(rowOriginal);
+        break;
+      case 'edit': {
+        const normalizedRequestNumber = REQUEST_NUMBER.replace(/\$/g, '/');
+        const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
+        const title = isBudgetRequest ? 'Budget Request' : 'Edit Purchase Request';
 
-      setPurchaserequestheaderFormPopup((prev) => ({
-        action: { ...prev.action, open: !prev.action.open },
-        title,
-        data: {
-          isEditMode: true,
-          isViewMode: false, // false so it's actually editable, not read-only
-          request_number: REQUEST_NUMBER
-        }
-      }));
-      break;
-    }
-    case 'cancel':
-      if (REQUEST_NUMBER.includes('PO$')) {
-        handleCancelPopupOpen(REQUEST_NUMBER);
+        setPurchaserequestheaderFormPopup((prev) => ({
+          action: { ...prev.action, open: !prev.action.open },
+          title,
+          data: {
+            isEditMode: true,
+            isViewMode: false, // false so it's actually editable, not read-only
+            request_number: REQUEST_NUMBER
+          }
+        }));
+        break;
       }
-      break;
-  }
-};
+      case 'cancel':
+        if (REQUEST_NUMBER.includes('PO$')) {
+          handleCancelPopupOpen(REQUEST_NUMBER);
+        }
+        break;
+    }
+  };
 
   const handleDeletePurchaserequestheader = async () => {
     await PfSerivceInstance.deleteMasters(
@@ -295,11 +273,6 @@ const handleActions = async (actionType: string, rowOriginal: TVPurchaserequesth
       isPORequest: false
     }));
   };
-
-  // useEffect(() => {
-  //   setToggleFilter(null as any);
-  //   return () => {};
-  // }, []);
 
   const handleGlobalFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -452,8 +425,6 @@ const handleActions = async (actionType: string, rowOriginal: TVPurchaserequesth
               existingData={PurchaserequestheaderFormPopup.data.existingData || {}}
             />
           </UniversalDialog>
-        ) : PurchaserequestheaderFormPopup.data.request_number?.replace(/\//g, '$')?.includes('PO$') ? (
-          <PurchaseOrderReport poNumber={PurchaserequestheaderFormPopup.data.request_number} onClose={togglePurchaserequestheaderPopup} />
         ) : (
           <UniversalDialog
             action={{ ...PurchaserequestheaderFormPopup.action }}
@@ -492,15 +463,6 @@ const handleActions = async (actionType: string, rowOriginal: TVPurchaserequesth
             )}
           </div>
         </UniversalDialog>
-      )}
-
-      {handleReportOpen.open && (
-        <ReportDialogPage
-        Report={PurchaseReportDesign}
-        required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber }}
-        title="Purchase Order"
-        onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '' })}
-      />
       )}
     </div>
   );
