@@ -127,8 +127,8 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         } as any,
         minWidth: 140,
         suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName:  intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
@@ -140,8 +140,8 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -150,14 +150,14 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         width: 120,
         minWidth: 220,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
        headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
+        sortable: true,
+        filter: true,
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' }
@@ -173,8 +173,8 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -187,8 +187,8 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
        {
               headerName: intl.formatMessage({ id: 'Actual Resume Date' }) || 'Actual Resume Date',
@@ -200,8 +200,8 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
               width: 140,
               minWidth: 180,
               cellStyle: { fontSize: '12px' },
-              sortable: false,
-              filter: false
+              sortable: true,
+              filter: true
             },
             {
               headerName: intl.formatMessage({ id: 'Duty Resume Date' }) || 'Duty Resume Date',
@@ -213,15 +213,15 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
               width: 140,
               minWidth: 180,
               cellStyle: { fontSize: '12px' },
-              sortable: false,
-              filter: false
+              sortable: true,
+              filter: true
             },
           {
               headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',
       
               field: 'REMARKS',
-              sortable: false,
-              filter: false,
+              sortable: true,
+              filter: true,
                  width: 120,
               minWidth: 150,
               cellStyle: { fontSize: '12px' }

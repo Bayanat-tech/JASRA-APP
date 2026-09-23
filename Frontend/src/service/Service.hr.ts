@@ -121,17 +121,19 @@ class HRService {
     sql_string?: string
   ) => {
     try {
-      dispatch(openBackdrop()); 
-      const page = paginationData?.page ? paginationData.page + 1 : undefined;
-      const limit = paginationData?.rowsPerPage;
+      dispatch(openBackdrop());
+
+      // 1-based page, no shifting
+      const page  = paginationData?.page      ?? undefined;
+      const limit = paginationData?.rowsPerPage ?? undefined;
 
       const shouldAddCode = master === 'Pg_Leave_flow' || master !== 'hrSection';
 
-      const response: IApiResponse<{ tableData: unknown[]; count: number }> = await axiosServices.get(
+      const response = await axiosServices.get(
         `api/${app_code}/JASRA/${master}${shouldAddCode ? `?code=${code}` : ''}`,
         {
           params: {
-            ...(page !== undefined && { page }),
+            ...(page  !== undefined && { page }),
             ...(limit !== undefined && { limit }),
             ...(searchData && { filter: JSON.stringify(searchData) })
           }
@@ -139,12 +141,10 @@ class HRService {
       );
 
       if (response.data.success) {
-         dispatch(closeBackdrop());
+        dispatch(closeBackdrop());
         return response.data.data;
-      } else {
-        throw new Error('Failed to fetch data');
       }
-      
+      throw new Error('Failed to fetch data');
     } catch (error: any) {
       dispatch(
         openSnackbar({
@@ -157,7 +157,7 @@ class HRService {
         })
       );
     } finally {
-      dispatch(closeBackdrop()); 
+      dispatch(closeBackdrop());
     }
   };
 

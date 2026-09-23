@@ -126,8 +126,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
         } as any,
         minWidth: 140,
         suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
@@ -139,8 +139,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -149,14 +149,14 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
         width: 120,
         minWidth: 220,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
+        sortable: true,
+        filter: true,
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' }
@@ -172,8 +172,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -186,8 +186,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
      {
             headerName: intl.formatMessage({ id: 'Actual Resume Date' }) || 'Actual Resume Date',
@@ -199,8 +199,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
             width: 140,
             minWidth: 180,
             cellStyle: { fontSize: '12px' },
-            sortable: false,
-            filter: false
+            sortable: true,
+            filter: true
           },
           {
             headerName: intl.formatMessage({ id: 'Duty Resume Date' }) || 'Duty Resume Date',
@@ -212,8 +212,8 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
             width: 140,
             minWidth: 180,
             cellStyle: { fontSize: '12px' },
-            sortable: false,
-            filter: false
+            sortable: true,
+            filter: true
           },
         {
             headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',

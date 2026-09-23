@@ -756,7 +756,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       }));
       return;
     }
-
     await runLeaveValidation(requestedDays);
   };
 
@@ -864,10 +863,9 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
             'Attachment is required for this leave type.'
         );
       }
-
       const requestedDays = Number(leave_days);
 
-      if (requestedDays > 0) {
+      if (requestedDays > 0 && !actual_resume_date) {
         const { isValid, availableBalance } = await runLeaveValidation(requestedDays);
 
         const hasInsufficientBalance =availableBalance !== null &&
@@ -882,6 +880,10 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
           return;
         }
       }
+
+      // if(leave_start_date){
+      //   errors.push(intl.formatMessage({ id: 'tst', defaultMessage: 'tst' }))
+      // }
 
       if (errors.length) {
         dispatch(closeBackdrop());

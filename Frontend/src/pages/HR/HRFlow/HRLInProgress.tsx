@@ -1,9 +1,9 @@
 import dayjs from 'dayjs';
-import { Typography, IconButton, Menu, MenuItem, Snackbar, Alert } from '@mui/material';
+import { IconButton, Menu, MenuItem, Snackbar, Alert, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { ISearch } from 'components/filters/SearchFilter';
 import useAuth from 'hooks/useAuth';
-import { useEffect, useMemo, useState, useCallback, FC } from 'react';
+import { useMemo, useState, useCallback, useRef, FC } from 'react';
 import { useLocation } from 'react-router';
 import { useSelector } from 'store';
 import { getPathNameList } from 'utils/functions';
@@ -19,223 +19,233 @@ import { useIntl } from 'react-intl';
 import * as XLSX from 'xlsx';
 import useScreenSize from 'hooks/useScreenSize';
 
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
+// AG Grid filter type → backend operator
+const OPERATOR_MAP: Record<string, string> = {
+  contains: 'contains',
+  notContains: 'not_contains',
+  equals: 'equals',
+  notEqual: 'not_equals',
+  startsWith: 'starts_with',
+  endsWith: 'ends_with',
+  greaterThan: 'gt',
+  greaterThanOrEqual: 'gte',
+  lessThan: 'lt',
+  lessThanOrEqual: 'lte',
+  inRange: 'between',
+  blank: 'is_null',
+  notBlank: 'is_not_null'
 };
+
+function toSearchClause(field: string, model: any) {
+  const type = String(model?.type ?? 'equals');
+  const operator = OPERATOR_MAP[type] ?? 'equals';
+  let value: any = model?.filter ?? model?.value ?? '';
+
+  if (model?.filterType === 'date') {
+    value = type === 'inRange' ? [model.dateFrom, model.dateTo] : model.dateFrom ?? '';
+  } else if (model?.filterType === 'number') {
+    value = type === 'inRange' ? [model.filter, model.filterTo] : model.filter;
+  }
+
+  // Field name is already uppercase in AG Grid (matches backend whitelist)
+  return { field_name: field, field_value: value, operator };
+}
+
+/** AG Grid cache block size. Must be ≤ backend's maxLimit (100 for InProgress). */
+const CACHE_BLOCK_SIZE = 20;
 
 interface HRLInProgressProps {}
 
-const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
-  const { permissions, user_permission } = useAuth();
+const HRLInProgress: FC<HRLInProgressProps> = () => {
+  const intl = useIntl();
+  const { user, permissions, user_permission } = useAuth();
   const location = useLocation();
-  const [gridApi, setGridApi] = useState<any>(null);
   const pathNameList = getPathNameList(location.pathname);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
-  const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 50 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
-  const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
-  const { user } = useAuth();
-  const [showFormDialog, setShowFormDialog] = useState(false);
-  const [viewMode, setViewMode] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
-  const openMenu = Boolean(anchorEl);
   const { isMobile } = useScreenSize();
 
+  const [gridApi, setGridApi] = useState<any>(null);
+  const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState(false);
+  const [showFormDialog, setShowFormDialog] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'error' | 'warning'
+  });
+  const openMenu = Boolean(anchorEl);
+  const gridRef = useRef<any>(null);
 
-  const intl = useIntl();
+  /* ---------------- permission ---------------- */
+  const children = permissions?.[app.toUpperCase()]?.children || {};
+  const moduleKey = Object.keys(children).find(
+    (key) => key.toLowerCase() === pathNameList[3]?.toLowerCase()
+  );
+  const serialNumber = moduleKey ? children[moduleKey]?.serial_number?.toString() : undefined;
+  const isQueryEnabled =
+    !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
 
-  console.log(intl.locale);
-
-  useEffect(() => {
-    console.log('=== Translation Debug ===');
-    console.log('Current locale:', intl.locale);
-    console.log('Available messages:', intl.messages);
-    console.log('Test translations:', {
-      'Product Code': intl.formatMessage({ id: 'Product Code' }),
-      Actions: intl.formatMessage({ id: 'Actions' }),
-      'Product Name': intl.formatMessage({ id: 'Product Name' })
-    });
-    console.log('Direct message lookup:', {
-      'Product Code': intl.messages?.['Product Code'],
-      Actions: intl.messages?.['Actions'],
-      'Product Name': intl.messages?.['Product Name']
-    });
-  }, [intl.locale, intl.messages]);
-
+  /* ---------------- export ---------------- */
   const exportToExcel = () => {
     if (!gridApi) {
-      setSnackbar({
-        open: true,
-        message: intl.formatMessage({ id: 'Grid is not ready yet' }) || 'Grid is not ready yet',
-        severity: 'error'
-      });
+      setSnackbar({ open: true, message: 'Grid is not ready yet', severity: 'error' });
       return;
     }
-
     try {
-      // Get all row data
       const rowData: any[] = [];
-      gridApi.forEachNodeAfterFilterAndSort((node: any) => {
-        rowData.push(node.data);
-      });
+      gridApi.forEachNodeAfterFilterAndSort((node: any) => rowData.push(node.data));
 
       if (rowData.length === 0) {
-        setSnackbar({
-          open: true,
-          message: intl.formatMessage({ id: 'No data to export' }) || 'No data to export',
-          severity: 'warning'
-        });
+        setSnackbar({ open: true, message: 'No data to export', severity: 'warning' });
         return;
       }
 
-      // Get column definitions
       const columnDefs = gridApi.getColumnDefs();
-
-      // Create data with proper headers
       const exportData = rowData.map((row: any) => {
-        const exportedRow: any = {};
+        const out: any = {};
         columnDefs.forEach((col: any) => {
-          if (col.field && col.headerName) {
-            exportedRow[col.headerName] = row[col.field];
-          }
+          if (col.field && col.headerName) out[col.headerName] = row[col.field];
         });
-        return exportedRow;
+        return out;
       });
 
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Create workbook
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Leave Approvals');
-
-      // Generate file name
-      const fileName = `Leave_Approvals_InProgress_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
-
-      // Export to Excel
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, 'Leave Approvals InProgress');
+      XLSX.writeFile(wb, `Leave_Approvals_InProgress_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}.xlsx`);
       setSnackbar({ open: true, message: 'Exported to Excel successfully', severity: 'success' });
-    } catch (error) {
-      console.error('Export error:', error);
+    } catch (e) {
+      console.error('Export error:', e);
       setSnackbar({ open: true, message: 'Export failed', severity: 'error' });
     }
   };
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
+  /* ---------------- menu ---------------- */
+  const handleMenuClose = () => setAnchorEl(null);
   const handleMenuAction = (action: string) => {
-    if (action === 'export') {
-      exportToExcel();
-    }
+    if (action === 'export') exportToExcel();
     handleMenuClose();
   };
+  const handleMenuClick = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
+  const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+  /* ---------------- row actions ---------------- */
+  const handleActions = useCallback((actionType: string, row: TLeaveApproval) => {
+    if (actionType === 'view') {
+      setSelectedRequestNumber(row.REQUEST_NUMBER);
+      setViewMode(true);
+      setShowFormDialog(true);
+    }
+  }, []);
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  console.log(intl.formatMessage({ id: 'Request Date' }), 'TRANSLATIONSSSS!!!');
-
+  /* ---------------- columns (field names = backend whitelist) ---------------- */
   const columnDefs = useMemo<ColDef<TLeaveApproval>[]>(
     () => [
       {
         headerName: intl.formatMessage({ id: 'No.' }) || 'No.',
         field: 'REQUEST_NUMBER',
-        width: 50,
-        cellStyle: {
-          fontSize: '12px',
-          textAlign: 'center'
-        } as any,
         minWidth: 140,
-        suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        filterParams: { filterOptions: ['contains', 'equals', 'startsWith', 'endsWith'] },
+        cellStyle: { fontSize: '12px', textAlign: 'center' } as any
       },
       {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
         field: 'REQUEST_DATE',
-        width: 120,
         minWidth: 150,
+        sortable: true,
+        filter: 'agDateColumnFilter',
         cellStyle: { fontSize: '12px' },
-        valueFormatter: (params: any) => {
-          const date = dayjs(params.value);
-          return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
+        valueFormatter: (p: any) => {
+          const d = dayjs(p.value);
+          return d.isValid() ? d.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
       },
       {
         headerName: intl.formatMessage({ id: 'Employee Name' }) || 'Employee Name',
         field: 'EMPLOYEE_NAME_DISPLAY',
-        width: 120,
         minWidth: 220,
-        cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        cellStyle: { fontSize: '12px' }
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
-        width: 120,
         minWidth: 150,
+        sortable: true,
+        filter: 'agTextColumnFilter',
         cellStyle: { fontSize: '12px' }
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Start Date' }) || 'Leave Start Date',
         field: 'LEAVE_START_DATE',
-        valueFormatter: (params: any) => {
-          const date = dayjs(params.value);
-          return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
-        },
-        width: 120,
         minWidth: 150,
+        sortable: true,
+        filter: 'agDateColumnFilter',
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        valueFormatter: (p: any) => {
+          const d = dayjs(p.value);
+          return d.isValid() ? d.format('DD/MM/YYYY') : 'NA';
+        },
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
       },
       {
         headerName: intl.formatMessage({ id: 'Leave End Date' }) || 'Leave End Date',
         field: 'LEAVE_END_DATE',
-        valueFormatter: (params: any) => {
-          const date = dayjs(params.value);
-          return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
-        },
-        width: 120,
         minWidth: 150,
+        sortable: true,
+        filter: 'agDateColumnFilter',
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        valueFormatter: (p: any) => {
+          const d = dayjs(p.value);
+          return d.isValid() ? d.format('DD/MM/YYYY') : 'NA';
+        },
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
       },
-        {
+      {
         headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',
-
         field: 'REMARKS',
-        sortable: false,
-        filter: false,
-           width: 120,
         minWidth: 150,
+        sortable: true,
+        filter: 'agTextColumnFilter',
         cellStyle: { fontSize: '12px' }
       },
       {
         headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
         field: 'NEXT_ACTION_BY_NAME',
-        sortable: false,
-        filter: false,
-        width: 120,
         minWidth: 220,
+        sortable: true,
+        filter: 'agTextColumnFilter',
         cellStyle: { fontSize: '12px' }
       },
-     
       {
         headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',
@@ -244,108 +254,90 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
         filter: false,
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: { data: TLeaveApproval }) => (
-          <ActionButtonsGroup buttons={['view']} handleActions={(action) => handleActions(action, params.data)} />
+          <ActionButtonsGroup
+            buttons={['view']}
+            handleActions={(action) => handleActions(action, params.data)}
+          />
         )
       }
     ],
-    [intl.locale, intl.messages]
+    [handleActions, intl.locale, intl.messages]
   );
 
-  const onSortChanged = useCallback((params: any) => {
-    if (!params?.api) return;
-    try {
-      const sortModel = params.api.getSortModel();
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort:
-          sortModel?.length > 0
-            ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
-            : { field_name: 'updated_at', desc: true }
-      }));
-    } catch (error) {
-      // Fallback to default sort
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort: { field_name: 'updated_at', desc: true }
-      }));
-    }
-  }, []);
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
+  /* ---------------- infinite datasource ---------------- */
+  const datasource = useMemo(
+    () => ({
+      rowCount: undefined,
+      getRows: async (params: any) => {
+        if (!isQueryEnabled) {
+          params.successCallback([], 0);
+          return;
+        }
+
+        const pageSize = params.endRow - params.startRow;      // == cacheBlockSize
+        const pageNum = Math.floor(params.startRow / pageSize) + 1;
+
+        // Sort from AG Grid
+        const sortModel: any[] = params.sortModel ?? [];
+        const sort = sortModel.length
+          ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
+          : { field_name: 'REQUEST_DATE', desc: true };
+
+        // Filter from AG Grid
+        const filterModel: Record<string, any> = params.filterModel ?? {};
+        const search: ISearch['search'] = Object.entries(filterModel).map(([field, model]) => [
+          toSearchClause(field, model)
+        ]);
+
+        const filterPayload: ISearch = {
+          sort,
+          search: search.length ? search : [[]]
+        };
+
+        try {
+            const result = await HrServiceInstance.getMasters(
+              'hr',
+              'Pg_leave_flow_InProgress',
+              { page: pageNum, rowsPerPage: pageSize },
+              filterPayload,
+              user?.loginid1
+            );
+
+            params.successCallback(result?.tableData ?? [], result?.count ?? 0);
+        } catch (e) {
+          console.error('Grid fetch failed', e);
+          setSnackbar({
+            open: true,
+            message: 'Error loading leave approval data.',
+            severity: 'error'
+          });
+          params.failCallback();
+        }
       }
-    ]);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
-  const onPaginationChanged = useCallback((params: any) => {
-    const currentPage = params.api.paginationGetCurrentPage();
-    const pageSize = params.api.paginationGetPageSize();
-    setPaginationData({ page: currentPage, rowsPerPage: pageSize });
-  }, []);
-  const children = permissions?.[app.toUpperCase()]?.children || {};
-  const moduleKey = Object.keys(children).find((key) => key.toLowerCase() === pathNameList[3]?.toLowerCase());
-  const serialNumber = moduleKey ? children[moduleKey]?.serial_number?.toString() : undefined;
-  const permissionCheck = !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
-  const isQueryEnabled = Boolean(permissionCheck);
+    }),
+    [user?.loginid1, isQueryEnabled]
+  );
 
-  const {
-    data: HRLInProgressData,
-    refetch,
-    isError
-  } = useQuery({
-    queryKey: ['HRLInProgressData', searchData, paginationData],
-    queryFn: () => HrServiceInstance.getMasters('hr', 'Pg_leave_flow_InProgress', paginationData, searchData, user?.loginid1),
-    enabled: isQueryEnabled
-  });
-
+  /* ---------------- view dialog ---------------- */
   const { data: editData } = useQuery({
     queryKey: ['edit_leave', selectedRequestNumber],
     queryFn: () =>
       selectedRequestNumber
-        ? HrServiceInstance.getMasters('hr', 'Leaveflow_request', undefined, undefined, selectedRequestNumber)
+        ? HrServiceInstance.getMasters(
+            'hr',
+            'Leaveflow_request',
+            undefined,
+            undefined,
+            selectedRequestNumber
+          )
         : Promise.resolve(null),
     enabled: !!selectedRequestNumber
   });
 
-  const onGridReady = (params: any) => {
-    setGridApi(params.api);
-    params.api.sizeColumnsToFit();
-  };
-
-  const handleActions = useCallback((actionType: string, row: TLeaveApproval) => {
-    if (actionType === 'view') {
-      handleEditHR(row.REQUEST_NUMBER);
-      setViewMode(true);
-    }
-  }, []);
-
-  const handleEditHR = (requestNumber: string) => {
-    setSelectedRequestNumber(requestNumber);
-    setShowFormDialog(true);
-  };
-
-  useEffect(() => {
-    return () => {};
-  }, []);
-
   return (
     <div className="flex flex-col space-y-2">
       <div style={{ position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            top: 2,
-            right: 8,
-            zIndex: 2
-          }}
-        >
+        <div style={{ position: 'absolute', top: 2, right: 8, zIndex: 2 }}>
           <IconButton
             aria-label="more"
             aria-controls={openMenu ? 'packing-more-menu' : undefined}
@@ -356,8 +348,9 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
             sx={{
               background: '#fff',
               boxShadow: 1,
-              border: '1px solid #e0e0e0',
-              '&:hover': { background: '#f5f5f5' }
+              border: '1px solid',
+              borderColor: 'grey.300',
+              '&:hover': { background: 'grey.100' }
             }}
           >
             <MoreOutlined />
@@ -370,29 +363,40 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            <MenuItem onClick={() => handleMenuAction('export')}>{intl.formatMessage({ id: 'Export' }) || 'Export'}</MenuItem>
-
-            <MenuItem onClick={() => handleMenuAction('print')}>{intl.formatMessage({ id: 'Print' }) || 'Print'}</MenuItem>
+            <MenuItem onClick={() => handleMenuAction('export')}>
+              {intl.formatMessage({ id: 'Export' }) || 'Export'}
+            </MenuItem>
+            <MenuItem onClick={() => handleMenuAction('print')}>
+              {intl.formatMessage({ id: 'Print' }) || 'Print'}
+            </MenuItem>
           </Menu>
         </div>
 
-        <MyAgGrid
-          rowData={HRLInProgressData?.tableData || []}
-          height="480px"
-          rowHeight={25}
-          headerHeight={30}
-          columnDefs={columnDefs}
-          onGridReady={onGridReady}
-          onFilterChanged={onFilterChanged}
-          onPaginationChanged={onPaginationChanged}
-          onSortChanged={onSortChanged}
-          paginationPageSize={10}
-          paginationPageSizeSelector={[10, 50, 100, 500, 1000]}
-          pagination
-        />
+        {!isQueryEnabled ? (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            You do not have permission to view this data.
+          </Typography>
+        ) : (
+          <MyAgGrid
+            ref={gridRef}
+            rowModelType="infinite"
+            datasource={datasource}
+            columnDefs={columnDefs}
+            onGridReady={(p) => {
+              setGridApi(p.api);
+              p.api.sizeColumnsToFit();
+            }}
+            cacheBlockSize={CACHE_BLOCK_SIZE}
+            maxBlocksInCache={2}
+            infiniteInitialRowCount={CACHE_BLOCK_SIZE}
+            blockLoadDebounceMillis={400}
+            height="480px"
+            rowHeight={25}
+            headerHeight={30}
+          />
+        )}
       </div>
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
@@ -404,12 +408,6 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
         </Alert>
       </Snackbar>
 
-      {isError && (
-        <Typography color="error">
-          {intl.formatMessage({ id: 'Error loading leave approval data.' }) || 'Error loading leave approval data.'}
-        </Typography>
-      )}
-
       {showFormDialog && (
         <DialogPop
           open={true}
@@ -417,20 +415,22 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
             setShowFormDialog(false);
             setSelectedRequestNumber(null);
           }}
-          title={
-              "View Leave Request"
-          }
+          title={'View Leave Request'}
           width={isMobile ? '90%' : '65%'}
         >
           <AddLeaveApprovalForm
-          LeavePage={false}
-          viewMode={viewMode}
+            LeavePage={false}
+            viewMode={viewMode}
             disableButtons={true}
-            data={editData?.tableData && editData.tableData[0] ? (editData.tableData[0] as TLeaveApproval) : null}
+            data={
+              editData?.tableData && editData.tableData[0]
+                ? (editData.tableData[0] as TLeaveApproval)
+                : null
+            }
             onClose={() => setShowFormDialog(false)}
             onSuccess={() => {
               setShowFormDialog(false);
-              refetch();
+              gridApi?.refreshInfiniteCache();
             }}
           />
         </DialogPop>
@@ -438,4 +438,5 @@ const HRLInProgress: FC<HRLInProgressProps> = ({}) => {
     </div>
   );
 };
+
 export default HRLInProgress;

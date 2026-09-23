@@ -129,8 +129,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         } as any,
         minWidth: 120,
         suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
@@ -142,8 +142,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -152,14 +152,14 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         width: 120,
         minWidth: 220,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
+        sortable: true,
+        filter: true,
         width: 120,
         minWidth: 120,
         cellStyle: { fontSize: '12px' }
@@ -175,8 +175,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         width: 120,
         minWidth: 110,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -189,8 +189,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         width: 120,
         minWidth: 110,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Actual Resume Date' }) || 'Actual Resume Date',
@@ -202,8 +202,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         width: 140,
         minWidth: 120,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Duty Resume Date' }) || 'Duty Resume Date',
@@ -215,8 +215,8 @@ const HRLeaveResumptionCancelRequest: FC<HRLCancelRequestProps> = ({ }) => {
         width: 140,
         minWidth: 120,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',

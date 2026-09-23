@@ -176,8 +176,8 @@ const LeaveResumptionApprovalPage = () => {
         } as any,
         minWidth: 140,
         suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
@@ -189,8 +189,8 @@ const LeaveResumptionApprovalPage = () => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -199,14 +199,14 @@ const LeaveResumptionApprovalPage = () => {
         width: 120,
         minWidth: 220,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
+        sortable: true,
+        filter: true,
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' }
@@ -222,8 +222,8 @@ const LeaveResumptionApprovalPage = () => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
 
       {
@@ -236,8 +236,8 @@ const LeaveResumptionApprovalPage = () => {
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Actual Resume Date' }) || 'Actual Resume Date',
@@ -249,8 +249,8 @@ const LeaveResumptionApprovalPage = () => {
         width: 140,
         minWidth: 180,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
       {
         headerName: intl.formatMessage({ id: 'Duty Resume Date' }) || 'Duty Resume Date',
@@ -262,8 +262,8 @@ const LeaveResumptionApprovalPage = () => {
         width: 140,
         minWidth: 180,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: true
       },
     {
         headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',
@@ -285,9 +285,6 @@ const LeaveResumptionApprovalPage = () => {
         minWidth: 220,
         cellStyle: { fontSize: '12px' }
       },
-
-    
-
       {
         headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',

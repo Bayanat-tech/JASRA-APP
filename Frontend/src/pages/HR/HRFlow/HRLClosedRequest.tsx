@@ -3,12 +3,11 @@ import { Typography, IconButton, Menu, MenuItem, Snackbar, Alert, Chip } from '@
 import { useQuery } from '@tanstack/react-query';
 import { ISearch } from 'components/filters/SearchFilter';
 import useAuth from 'hooks/useAuth';
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, FC } from 'react';
 import { useLocation } from 'react-router';
 import { useSelector } from 'store';
 import { getPathNameList } from 'utils/functions';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
-import { FC } from 'react';
 import HrServiceInstance from 'service/Service.hr';
 import MyAgGrid from 'components/grid/MyAgGrid';
 import { ColDef } from 'ag-grid-community';
@@ -20,33 +19,75 @@ import { useIntl } from 'react-intl';
 import * as XLSX from 'xlsx';
 import useScreenSize from 'hooks/useScreenSize';
 
-const filter: ISearch = {
-  sort: { field_name: 'last_updated', desc: true },
-  search: [[]]
+/* ---------- AG Grid filter type → backend operator ---------- */
+const OPERATOR_MAP: Record<string, string> = {
+  contains: 'contains',
+  notContains: 'not_contains',
+  equals: 'equals',
+  notEqual: 'not_equals',
+  startsWith: 'starts_with',
+  endsWith: 'ends_with',
+  greaterThan: 'gt',
+  greaterThanOrEqual: 'gte',
+  lessThan: 'lt',
+  lessThanOrEqual: 'lte',
+  inRange: 'between',
+  blank: 'is_null',
+  notBlank: 'is_not_null'
 };
+
+function toSearchClause(field: string, model: any) {
+  const type = String(model?.type ?? 'equals');
+  const operator = OPERATOR_MAP[type] ?? 'equals';
+  let value: any = model?.filter ?? model?.value ?? '';
+
+  if (model?.filterType === 'date') {
+    value = type === 'inRange' ? [model.dateFrom, model.dateTo] : model.dateFrom ?? '';
+  } else if (model?.filterType === 'number') {
+    value = type === 'inRange' ? [model.filter, model.filterTo] : model.filter;
+  }
+
+  return { field_name: field, field_value: value, operator };
+}
+
+/** cache block size; must be ≤ backend maxLimit (100) */
+const CACHE_BLOCK_SIZE = 20;
+const MASTER = 'Pg_leave_flow_close';
 
 interface HRLClosedRequestProps {}
 
-const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
+const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
   const intl = useIntl();
-  const { permissions, user_permission } = useAuth();
+  const { user, permissions, user_permission } = useAuth();
   const location = useLocation();
-  const [gridApi, setGridApi] = useState<any>(null);
   const pathNameList = getPathNameList(location.pathname);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
-  const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 50 });
-  const [searchData, setSearchData] = useState<ISearch>(filter);
-  const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
-  const { user } = useAuth();
-  const [viewMode, setViewMode] = useState(false);
-  const [filterData] = useState<ISearch>(filter);
-  const [showFormDialog, setShowFormDialog] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' });
-  const openMenu = Boolean(anchorEl);
-  const closed = true;
   const { isMobile } = useScreenSize();
 
+  const [gridApi, setGridApi] = useState<any>(null);
+  const [selectedRequestNumber, setSelectedRequestNumber] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState(false);
+  const [showFormDialog, setShowFormDialog] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'error' | 'warning'
+  });
+  const openMenu = Boolean(anchorEl);
+  const closed = true;
+  const gridRef = useRef<any>(null);
+
+  /* ---------------- permission ---------------- */
+  const children = permissions?.[app.toUpperCase()]?.children || {};
+  const moduleKey = Object.keys(children).find(
+    (key) => key.toLowerCase() === pathNameList[3]?.toLowerCase()
+  );
+  const serialNumber = moduleKey ? children[moduleKey]?.serial_number?.toString() : undefined;
+  const isQueryEnabled =
+    !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
+
+  /* ---------------- export ---------------- */
   const exportToExcel = () => {
     if (!gridApi) {
       setSnackbar({
@@ -58,11 +99,8 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
     }
 
     try {
-      // Get all row data
       const rowData: any[] = [];
-      gridApi.forEachNodeAfterFilterAndSort((node: any) => {
-        rowData.push(node.data);
-      });
+      gridApi.forEachNodeAfterFilterAndSort((node: any) => rowData.push(node.data));
 
       if (rowData.length === 0) {
         setSnackbar({
@@ -73,32 +111,21 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         return;
       }
 
-      // Get column definitions
       const columnDefs = gridApi.getColumnDefs();
-
-      // Create data with proper headers
       const exportData = rowData.map((row: any) => {
         const exportedRow: any = {};
         columnDefs.forEach((col: any) => {
-          if (col.field && col.headerName) {
-            exportedRow[col.headerName] = row[col.field];
-          }
+          if (col.field && col.headerName) exportedRow[col.headerName] = row[col.field];
         });
         return exportedRow;
       });
 
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(exportData);
-
-      // Create workbook
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Closed Leave Requests');
-
-      // Generate file name
       const fileName = `Closed_Leave_Requests_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}`;
-
-      // Export to Excel
       XLSX.writeFile(wb, `${fileName}.xlsx`);
+
       setSnackbar({ open: true, message: 'Exported to Excel successfully', severity: 'success' });
     } catch (error) {
       console.error('Export error:', error);
@@ -106,39 +133,37 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
     }
   };
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
+  /* ---------------- menu ---------------- */
+  const handleMenuClose = () => setAnchorEl(null);
   const handleMenuAction = (action: string) => {
-    if (action === 'export') {
-      exportToExcel();
-    }
+    if (action === 'export') exportToExcel();
     handleMenuClose();
   };
+  const handleMenuClick = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
+  const handleCloseSnackbar = () => setSnackbar({ ...snackbar, open: false });
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+  /* ---------------- row actions ---------------- */
+  const handleActions = useCallback((actionType: string, row: TLeaveApproval) => {
+    if (actionType === 'view') {
+      setSelectedRequestNumber(row.REQUEST_NUMBER);
+      setViewMode(true);
+      setShowFormDialog(true);
+    }
+  }, []);
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
+  /* ---------------- columns ---------------- */
   const columnDefs = useMemo<ColDef<TLeaveApproval>[]>(
     () => [
       {
         headerName: intl.formatMessage({ id: 'No.' }) || 'No.',
         field: 'REQUEST_NUMBER',
         width: 50,
-        cellStyle: {
-          fontSize: '12px',
-          textAlign: 'center'
-        } as any,
         minWidth: 140,
+        cellStyle: { fontSize: '12px', textAlign: 'center' } as any,
         suppressMenu: true,
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agTextColumnFilter',
+        filterParams: { filterOptions: ['contains', 'equals', 'startsWith', 'endsWith'] }
       },
       {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
@@ -150,94 +175,114 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
       },
-
       {
         headerName: intl.formatMessage({ id: 'Employee Name' }) || 'Employee Name',
         field: 'EMPLOYEE_NAME_DISPLAY',
         width: 120,
         minWidth: 220,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agTextColumnFilter'
       },
       {
         headerName: intl.formatMessage({ id: 'Leave Type' }) || 'Leave Type',
         field: 'LEAVE_TYPE_DESC',
-        sortable: false,
-        filter: false,
         width: 120,
         minWidth: 150,
-        cellStyle: { fontSize: '12px' }
+        cellStyle: { fontSize: '12px' },
+        sortable: true,
+        filter: 'agTextColumnFilter'
       },
-
       {
         headerName: intl.formatMessage({ id: 'Leave Start Date' }) || 'Leave Start Date',
         field: 'LEAVE_START_DATE',
+        width: 120,
+        minWidth: 150,
+        cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
-        width: 120,
-        minWidth: 150,
-        cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
+        sortable: true,
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
       },
-
       {
         headerName: intl.formatMessage({ id: 'Leave End Date' }) || 'Leave End Date',
         field: 'LEAVE_END_DATE',
+        width: 120,
+        minWidth: 150,
+        cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
+        sortable: true,
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          filterOptions: ['inRange', 'equals', 'greaterThan', 'lessThan'],
+          comparator: (fd: Date, cv: any) => {
+            const c = dayjs(cv);
+            if (!c.isValid()) return -1;
+            if (c.isSame(fd, 'day')) return 0;
+            return c.isBefore(fd) ? -1 : 1;
+          }
+        }
+      },
+      {
+        headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',
+        field: 'REMARKS',
         width: 120,
         minWidth: 150,
         cellStyle: { fontSize: '12px' },
-        sortable: false,
-        filter: false
-      },
-
-      {
-        headerName: intl.formatMessage({ id: 'Remarks' }) || 'Remarks',
-
-        field: 'REMARKS',
-        sortable: false,
-        filter: false,
-        width: 120,
-        minWidth: 150,
-        cellStyle: { fontSize: '12px' }
+        sortable: true,
+        filter: 'agTextColumnFilter'
       },
       // {
       //   headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
       //   field: 'NEXT_ACTION_BY_NAME',
-      //   sortable: false,
-      //   filter: false,
-      //   width: 120,
-      //   minWidth: 220,
-      //   cellStyle: { fontSize: '12px' }
+      //   width: 120, minWidth: 220,
+      //   cellStyle: { fontSize: '12px' },
+      //   sortable: true, filter: 'agTextColumnFilter'
       // },
       {
-      headerName: intl.formatMessage({ id: 'Status' }) || 'Status',
-      field: 'FINAL_APPROVED',
-      width: 120,
-      minWidth: 120,
-      cellStyle: { fontSize: '12px' },
-      sortable: false,
-      filter: false,
-      cellRenderer: () => (
-        <Chip
-          label="Approved"
-          size="small"
-          color="success"
-          variant="filled"
-          sx={{ fontWeight: 500 }}
-        />
-      )
-    },
+        headerName: intl.formatMessage({ id: 'Status' }) || 'Status',
+        field: 'FINAL_APPROVED',
+        width: 120,
+        minWidth: 120,
+        cellStyle: { fontSize: '12px' },
+        sortable: false,
+        filter: false,
+        cellRenderer: () => (
+          <Chip
+            label="Approved"
+            size="small"
+            color="success"
+            variant="filled"
+            sx={{ fontWeight: 500 }}
+          />
+        )
+      },
       {
         headerName: intl.formatMessage({ id: 'Actions' }) || 'Actions',
         pinned: 'right',
@@ -246,108 +291,93 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         filter: false,
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: { data: TLeaveApproval }) => (
-          <ActionButtonsGroup buttons={['view']} handleActions={(action) => handleActions(action, params.data)} />
+          <ActionButtonsGroup
+            buttons={['view']}
+            handleActions={(action) => handleActions(action, params.data)}
+          />
         )
       }
     ],
-    []
+    [handleActions, intl.locale, intl.messages]
   );
 
-  const onSortChanged = useCallback((params: any) => {
-    if (!params?.api) return;
-    try {
-      const sortModel = params.api.getSortModel();
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort:
-          sortModel?.length > 0
-            ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
-            : { field_name: 'updated_at', desc: true }
-      }));
-    } catch (error) {
-      // Fallback to default sort
-      setSearchData((prevData) => ({
-        ...prevData,
-        sort: { field_name: 'updated_at', desc: true }
-      }));
-    }
-  }, []);
-  const onFilterChanged = useCallback((event: any) => {
-    const filterModel = event.api.getFilterModel();
-    const filters: ISearch['search'] = Object.entries(filterModel).map(([field, value]: [string, any]) => [
-      {
-        field_name: field,
-        field_value: value.filter || value.value,
-        operator: 'equals'
+  /* ---------------- infinite datasource ---------------- */
+  const datasource = useMemo(
+    () => ({
+      rowCount: undefined,
+      getRows: async (params: any) => {
+        if (!isQueryEnabled) {
+          params.successCallback([], 0);
+          return;
+        }
+
+        const pageSize = params.endRow - params.startRow;
+        const pageNum = Math.floor(params.startRow / pageSize) + 1; // 1-based
+
+        // Sort from AG Grid
+        const sortModel: any[] = params.sortModel ?? [];
+        const sort = sortModel.length
+          ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
+          : { field_name: 'REQUEST_DATE', desc: true };
+
+        // Filter from AG Grid
+        const filterModel: Record<string, any> = params.filterModel ?? {};
+        const search: ISearch['search'] = Object.entries(filterModel).map(([field, model]) => [
+          toSearchClause(field, model)
+        ]);
+
+        const filterPayload: ISearch = {
+          sort,
+          search: search.length ? search : [[]]
+        };
+
+        try {
+          const result = await HrServiceInstance.getMasters(
+            'hr',
+            MASTER,
+            { page: pageNum, rowsPerPage: pageSize },   // service maps → ?limit=
+            filterPayload,
+            user?.loginid1                                // → ?code=
+          );
+
+          params.successCallback(result?.tableData ?? [], result?.count ?? 0);
+        } catch (e) {
+          console.error('Grid fetch failed', e);
+          setSnackbar({
+            open: true,
+            message:
+              intl.formatMessage({ id: 'Error loading leave approval data.' }) ||
+              'Error loading leave approval data.',
+            severity: 'error'
+          });
+          params.failCallback();
+        }
       }
-    ]);
-    setSearchData((prevData) => ({
-      ...prevData,
-      search: filters.length > 0 ? filters : [[]]
-    }));
-  }, []);
-  const onPaginationChanged = useCallback((params: any) => {
-    const currentPage = params.api.paginationGetCurrentPage();
-    const pageSize = params.api.paginationGetPageSize();
-    setPaginationData({ page: currentPage, rowsPerPage: pageSize });
-  }, []);
-  const children = permissions?.[app.toUpperCase()]?.children || {};
-  const moduleKey = Object.keys(children).find((key) => key.toLowerCase() === pathNameList[3]?.toLowerCase());
-  const serialNumber = moduleKey ? children[moduleKey]?.serial_number?.toString() : undefined;
-  const permissionCheck = !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
-  const isQueryEnabled = Boolean(permissionCheck);
+    }),
+    [user?.loginid1, isQueryEnabled, intl]
+  );
 
-  const {
-    data: HRLClosedRequestData,
-    refetch,
-    isError
-  } = useQuery({
-    queryKey: ['HRLClosedRequestData', searchData, paginationData],
-    queryFn: () => HrServiceInstance.getMasters('hr', 'Pg_leave_flow_close', paginationData, filterData, user?.loginid1),
-    enabled: isQueryEnabled
-  });
-
+  /* ---------------- view fetch ---------------- */
   const { data: editData } = useQuery({
     queryKey: ['edit_leave', selectedRequestNumber],
     queryFn: () =>
       selectedRequestNumber
-        ? HrServiceInstance.getMasters('hr', 'Leaveflow_request', undefined, undefined, selectedRequestNumber)
+        ? HrServiceInstance.getMasters(
+            'hr',
+            'Leaveflow_request',
+            undefined,
+            undefined,
+            selectedRequestNumber
+          )
         : Promise.resolve(null),
     enabled: !!selectedRequestNumber
   });
 
-  const onGridReady = (params: any) => {
-    setGridApi(params.api);
-    params.api.sizeColumnsToFit();
-  };
-
-  const handleActions = useCallback((actionType: string, row: TLeaveApproval) => {
-    if (actionType === 'view') {
-      handleEditHR(row.REQUEST_NUMBER);
-      setViewMode(true);
-    }
-  }, []);
-
-  const handleEditHR = (requestNumber: string) => {
-    setSelectedRequestNumber(requestNumber);
-    setShowFormDialog(true);
-  };
-
-  useEffect(() => {
-    return () => {};
-  }, []);
-
+  /* ---------------- render ---------------- */
   return (
     <div className="flex flex-col space-y-2">
       <div style={{ position: 'relative' }}>
-        <div
-          style={{
-            position: 'absolute',
-            top: 2,
-            right: 8,
-            zIndex: 2
-          }}
-        >
+        <div style={{ position: 'absolute', top: 2, right: 8, zIndex: 2 }}>
           <IconButton
             aria-label="more"
             aria-controls={openMenu ? 'packing-more-menu' : undefined}
@@ -358,7 +388,7 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
             sx={{
               background: '#fff',
               boxShadow: 1,
-              border: '1px solid ',
+              border: '1px solid',
               borderColor: 'grey.300',
               '&:hover': { background: 'grey.100' }
             }}
@@ -373,29 +403,41 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            <MenuItem onClick={() => handleMenuAction('export')}>{intl.formatMessage({ id: 'Export' }) || 'Export'}</MenuItem>
-
-            <MenuItem onClick={() => handleMenuAction('print')}>{intl.formatMessage({ id: 'Print' }) || 'Print'}</MenuItem>
+            <MenuItem onClick={() => handleMenuAction('export')}>
+              {intl.formatMessage({ id: 'Export' }) || 'Export'}
+            </MenuItem>
+            <MenuItem onClick={() => handleMenuAction('print')}>
+              {intl.formatMessage({ id: 'Print' }) || 'Print'}
+            </MenuItem>
           </Menu>
         </div>
 
-        <MyAgGrid
-          rowData={HRLClosedRequestData?.tableData || []}
-          columnDefs={columnDefs}
-          onGridReady={onGridReady}
-          onFilterChanged={onFilterChanged}
-          onPaginationChanged={onPaginationChanged}
-          onSortChanged={onSortChanged}
-          paginationPageSize={10}
-          paginationPageSizeSelector={[10, 50, 100]}
-          pagination
-          height="480px"
-          rowHeight={25}
-          headerHeight={30}
-        />
+        {!isQueryEnabled ? (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            {intl.formatMessage({ id: 'You do not have permission to view this data.' }) ||
+              'You do not have permission to view this data.'}
+          </Typography>
+        ) : (
+          <MyAgGrid
+            ref={gridRef}
+            rowModelType="infinite"
+            datasource={datasource}
+            columnDefs={columnDefs}
+            onGridReady={(p) => {
+              setGridApi(p.api);
+              p.api.sizeColumnsToFit();
+            }}
+            cacheBlockSize={CACHE_BLOCK_SIZE}
+            maxBlocksInCache={2}
+            infiniteInitialRowCount={CACHE_BLOCK_SIZE}
+            blockLoadDebounceMillis={400}
+            height="480px"
+            rowHeight={25}
+            headerHeight={30}
+          />
+        )}
       </div>
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
@@ -407,33 +449,7 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         </Alert>
       </Snackbar>
 
-      {isError && (
-        <Typography color="error">
-          {intl.formatMessage({ id: 'Error loading leave approval data.' }) || 'Error loading leave approval data.'}
-        </Typography>
-      )}
-
-      {showFormDialog && (
-        <DialogPop
-          open={true}
-          onClose={() => {
-            setShowFormDialog(false);
-            setSelectedRequestNumber(null);
-          }}
-          title={selectedRequestNumber ? 'Edit Leave Request' : 'Add Leave Request'}
-          width={isMobile ? '90%' : '55%'}
-        >
-          <AddLeaveApprovalForm
-            data={editData?.tableData && editData.tableData[0] ? (editData.tableData[0] as TLeaveApproval) : null}
-            onClose={() => setShowFormDialog(false)}
-            onSuccess={() => {
-              setShowFormDialog(false);
-              refetch();
-            }}
-          />
-        </DialogPop>
-      )}
-
+      {/* View dialog (only one is needed now — the "add/edit" one is unused in closed page) */}
       {showFormDialog && (
         <DialogPop
           open={true}
@@ -445,15 +461,19 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
           width={isMobile ? '90%' : '65%'}
         >
           <AddLeaveApprovalForm
-          closed={closed}
-             LeavePage={false}
+            closed={closed}
+            LeavePage={false}
             viewMode={viewMode}
             disableButtons={true}
-            data={editData?.tableData && editData.tableData[0] ? (editData.tableData[0] as TLeaveApproval) : null}
+            data={
+              editData?.tableData && editData.tableData[0]
+                ? (editData.tableData[0] as TLeaveApproval)
+                : null
+            }
             onClose={() => setShowFormDialog(false)}
             onSuccess={() => {
               setShowFormDialog(false);
-              refetch();
+              gridApi?.refreshInfiniteCache();
             }}
           />
         </DialogPop>
@@ -461,4 +481,5 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
     </div>
   );
 };
+
 export default HRLClosedRequest;
