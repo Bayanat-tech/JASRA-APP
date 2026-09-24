@@ -28,6 +28,9 @@ import { useDispatch } from 'store'; // adjust this path based on your folder st
 
 import CustomAgGrid from 'components/grid/CustomAgGrid';
 import { ColDef } from 'ag-grid-community';
+// Added back the report imports
+import ReportDialogPage from 'pages/Report/ReportDialogPage';
+import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 interface MyitemPOConfirmProps {
   costUser: string | null;
@@ -35,6 +38,13 @@ interface MyitemPOConfirmProps {
 }
 
 const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
+  // Added back the report state
+  const [handleReportOpen, setHandleReportOpen] = useState({
+    open: false,
+    poNumber: '',
+    divCode: '',
+      companyCode: '' // <-- Add this
+  });
   console.log('Userlevel in after sending:', userlevel);
   //--------------constants----------
   const { permissions, user_permission, user } = useAuth();
@@ -63,6 +73,9 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     title: 'Cancel Request',
     data: { request_number: '', remarks: '' }
   });
+
+  // Needed by AddPurchaserequestPfForm, same as MyTaskClosedRequestTab
+  const [divCode, setDivCode] = useState<string>('');
 
   const [gridApi, setGridApi] = useState<any>(null);
 
@@ -140,7 +153,42 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
         }
-      }
+      },
+      // Added back the PO Report column
+{
+  headerName: 'PO Report',
+  field: 'actions',
+  colId: 'poReportActions',    
+  cellStyle: { fontSize: '12px' },
+  cellRenderer: (params: any) => {
+    const actionButtons: TAvailableActionButtons[] = ['view'];
+    
+    // --- FIX START ---
+    // 1. Replace '$' with '/' to match backend expectations
+    const rawDocNumber = params.data.document_number || '';
+    const formattedDocNumber = rawDocNumber.replace(/\$/g, '/');
+    
+    // 2. Check for both 'div_code' and 'division_code' to ensure we get the value
+    const divisionCode = params.data.div_code || params.data.division_code || '';
+    // --- FIX END ---
+
+    return (
+      <div className="flex flex-col gap-1">
+        <ActionButtonsGroup 
+          handleActions={() => {
+            setHandleReportOpen({ 
+              open: true, 
+              poNumber: formattedDocNumber, // <-- Pass formatted doc number
+              divCode: divisionCode      ,  // <-- Pass correct div code
+              companyCode: params.data.company_code || user?.company_code || ''
+            });
+          }} 
+          buttons={actionButtons} 
+        />
+      </div>
+    );
+  }
+},
     ],
     [userlevel]
   );
@@ -410,8 +458,9 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       />
 
       {PurchaserequestheaderFormPopup.action.open &&
+        (costUser === 'YES' &&
         (PurchaserequestheaderFormPopup.data.request_number?.replace(/\//g, '$')?.startsWith('BUDGET') ||
-          !PurchaserequestheaderFormPopup.data.isEditMode ? (
+          !PurchaserequestheaderFormPopup.data.isEditMode) ? (
           <UniversalDialog
             action={{ ...PurchaserequestheaderFormPopup.action }}
             onClose={togglePurchaserequestheaderPopup}
@@ -433,6 +482,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
             hasPrimaryButton={false}
           >
             <AddPurchaserequestPfForm
+              divCode={divCode}
+              setDivCode={setDivCode}
               request_number={PurchaserequestheaderFormPopup.data.request_number}
               onClose={togglePurchaserequestheaderPopup}
               isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
@@ -463,6 +514,16 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
             )}
           </div>
         </UniversalDialog>
+      )}
+
+      {/* Added back the Report Dialog Page */}
+      {handleReportOpen.open && (
+        <ReportDialogPage
+          Report={PurchaseReportDesign}
+          required_values={{ divCode: handleReportOpen.divCode, refDocNo: handleReportOpen.poNumber,      companyCode: handleReportOpen.companyCode  }}
+          title="Purchase Order"
+          onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '', companyCode: '' })}
+        />
       )}
     </div>
   );

@@ -41,7 +41,7 @@ const dateFilterParams = {
   }
 };
 
-interface MyTaskClosedRequestTabProps {
+interface MyTaskClosedRequestTabProps { 
   costUser: string | null;
 }
 const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) => {
