@@ -135,62 +135,73 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         cellClass: 'text-right',
         cellStyle: { fontSize: '12px' }
       },
-      {
-        headerName: 'Actions',
-        field: 'actions',
-        colId: 'prActions',          // <-- unique id
-        cellStyle: { fontSize: '12px' },
-        cellRenderer: (params: any) => {
-          const actionButtons: TAvailableActionButtons[] = ['view']; //default action button bold report
-          //  const actionButtons: TAvailableActionButtons[] = []; 
-          //   if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
-          //     actionButtons.push('edit');
-          //   }
+{
+  headerName: 'Actions',
+  field: 'actions',
+  colId: 'prActions',
+  cellStyle: { fontSize: '12px' },
+  cellRenderer: (params: any) => {
+    const docType = (params.data.document_type || '').toUpperCase();
+    const docNumber = (params.data.document_number || '').replace(/\$/g, '/').toUpperCase();
+    // Hide Actions for Purchase Orders
+    const isPO =
+      docType.includes('PURCHASE ORDER') ||
+      docNumber.includes('/PO/');
 
-          if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
-            actionButtons.push('cancel');
-          }
+    if (isPO) return null;
 
-          return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
-        }
-      },
+    const actionButtons: TAvailableActionButtons[] = ['view'];
+    if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
+      actionButtons.push('cancel');
+    }
+
+    return (
+      <ActionButtonsGroup
+        handleActions={(action) => handleActions(action, params.data)}
+        buttons={actionButtons}
+      />
+    );
+  }
+},
       // Added back the PO Report column
 {
   headerName: 'PO Report',
   field: 'actions',
-  colId: 'poReportActions',    
+  colId: 'poReportActions',
   cellStyle: { fontSize: '12px' },
   cellRenderer: (params: any) => {
-    const actionButtons: TAvailableActionButtons[] = ['view'];
-    
-    // --- FIX START ---
-    // 1. Replace '$' with '/' to match backend expectations
     const rawDocNumber = params.data.document_number || '';
     const formattedDocNumber = rawDocNumber.replace(/\$/g, '/');
-    
-    // 2. Check for both 'div_code' and 'division_code' to ensure we get the value
+
+    // Robust PR detection: matches .../PR/... anywhere in the doc number,
+    // regardless of document_type accuracy
+    const isPR = /\/PR\//i.test(formattedDocNumber);
+
     const divisionCode = params.data.div_code || params.data.division_code || '';
-    // --- FIX END ---
 
     return (
-      <div className="flex flex-col gap-1">
-        <ActionButtonsGroup 
+      <div
+        className="flex flex-col gap-1"
+        style={isPR ? { opacity: 0.4, pointerEvents: 'none', cursor: 'not-allowed' } : undefined}
+      >
+        <ActionButtonsGroup
           handleActions={() => {
-            setHandleReportOpen({ 
-              open: true, 
-              poNumber: formattedDocNumber, // <-- Pass formatted doc number
-              divCode: divisionCode      ,  // <-- Pass correct div code
+            if (isPR) return; // extra safety guard
+            setHandleReportOpen({
+              open: true,
+              poNumber: formattedDocNumber,
+              divCode: divisionCode,
               companyCode: params.data.company_code || user?.company_code || ''
             });
-          }} 
-          buttons={actionButtons} 
+          }}
+          buttons={['view']}
         />
       </div>
     );
   }
 },
     ],
-    [userlevel]
+    [userlevel,user]
   );
 
   const onGridReady = (params: any) => {
@@ -208,7 +219,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   const moduleKey = Object.keys(children).find((key) => key.toLowerCase() === pathNameList[3]?.toLowerCase());
 
   const serialNumber = moduleKey ? children[moduleKey]?.serial_number?.toString() : undefined;
-  console.log('Resolved Serial Number:', serialNumber);
+  // console.log('Resolved Serial Number:', serialNumber);
 
   const permissionCheck = !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
   console.log('Permission Check:', permissionCheck);
@@ -456,6 +467,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         paginationPageSize={6000}
         paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000]}
       />
+        {/* (costUser === 'YES' && */}
 
       {PurchaserequestheaderFormPopup.action.open &&
         (costUser === 'YES' &&

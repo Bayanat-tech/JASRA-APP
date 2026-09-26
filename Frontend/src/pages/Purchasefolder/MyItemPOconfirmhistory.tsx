@@ -20,7 +20,6 @@ import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
 import { TVPurchaserequestheader } from './type/purchaserequestheader_pf-types';
 import AddBudgetrequestPfForm from 'components/forms/Purchaseflow/AddBudgetrequestPfForm';
-import PurchaseOrderReport from 'components/reports/purchase/PurchaseOrderReport';
 import { closeBackdrop, openBackdrop } from 'store/reducers/backdropSlice';
 
 import { showAlert } from 'store/CustomAlert/alertSlice'; // adjust path as needed
@@ -30,6 +29,9 @@ import { useDispatch } from 'store'; // adjust this path based on your folder st
 
 import CustomAgGrid from 'components/grid/CustomAgGrid';
 import { ColDef } from 'ag-grid-community';
+// Report imports — same as MyitemPOConfirm
+import ReportDialogPage from 'pages/Report/ReportDialogPage';
+import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 const filter: ISearch = {
   sort: { field_name: 'last_updated', desc: true },
@@ -42,6 +44,14 @@ interface MyitemPOConfirmProps {
 }
 
 const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
+  // PO Report dialog state — same shape as MyitemPOConfirm
+  const [handleReportOpen, setHandleReportOpen] = useState({
+    open: false,
+    poNumber: '',
+    divCode: '',
+    companyCode: ''
+  });
+
   console.log('Userlevel in after sending:', userlevel);
   //--------------constants----------
   const { permissions, user_permission, user } = useAuth();
@@ -71,15 +81,31 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     title: 'Cancel Request',
     data: { request_number: '', remarks: '' }
   });
+  const [divCode, setDivCode] = useState<string>('');
 
   const [gridApi, setGridApi] = useState<any>(null);
+
+  // Helper: robust PR/PO detection off the (possibly $-delimited) doc number,
+  // same pattern used in MyitemPOConfirm — doesn't rely on document_type accuracy.
+  const getDocFlags = (rawDocNumber: unknown) => {
+    const safeRaw = typeof rawDocNumber === 'string' ? rawDocNumber : '';
+    const formattedDocNumber = safeRaw.replace(/\$/g, '/');
+    const isPR = /\/PR\//i.test(formattedDocNumber);
+    const isPO = /\/PO\//i.test(formattedDocNumber);
+    return { formattedDocNumber, isPR, isPO };
+  };
 
   const columnDefs: ColDef[] = useMemo(
     () => [
       {
         headerName: 'Document No.',
         field: 'document_number',
-        valueFormatter: (params: any) => (params.value ? params.value.replace(/\$/g, '/') : ''),
+        valueFormatter: (params: any) => {
+          const v = params.value;
+          if (typeof v === 'string') return v.replace(/\$/g, '/');
+          if (v && typeof v === 'object' && 'message' in v) return String(v.message);
+          return '';
+        },
         cellStyle: { fontSize: '12px' }
       },
       {
@@ -91,12 +117,36 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         },
         cellStyle: { fontSize: '12px' }
       },
-      { headerName: 'Project Name', field: 'project_name', cellStyle: { fontSize: '12px' } },
-      { headerName: 'Description', field: 'description', cellStyle: { fontSize: '12px' } },
-      { headerName: 'Document Type', field: 'document_type', cellStyle: { fontSize: '12px' } },
-      { headerName: 'Status', field: 'status', cellStyle: { fontSize: '12px' } },
-      // { headerName: 'Company Name', field: 'company_name' },
-      { headerName: 'Reference Doc No.', field: 'reference_doc_no', cellStyle: { fontSize: '12px' } },
+      {
+        headerName: 'Project Name',
+        field: 'project_name',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
+      {
+        headerName: 'Description',
+        field: 'description',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
+      {
+        headerName: 'Document Type',
+        field: 'document_type',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
+      {
+        headerName: 'Status',
+        field: 'status',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
+      {
+        headerName: 'Reference Doc No.',
+        field: 'reference_doc_no',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
       {
         headerName: 'Amount',
         field: 'amount',
@@ -110,8 +160,15 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       {
         headerName: 'Actions',
         field: 'actions',
+        colId: 'prActions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
+          const { isPO } = getDocFlags(params.data?.document_number);
+
+          // Only PR / Budget rows get the Actions (view) button — PO rows hide it,
+          // same as MyitemPOConfirm's prActions column.
+          if (isPO) return null;
+
           const actionButtons: TAvailableActionButtons[] = ['view']; //default action button
 
           if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
@@ -124,9 +181,39 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
         }
+      },
+      // PO Report column — only PO rows get the report view button, PR rows hide it.
+      {
+        headerName: 'PO Report',
+        field: 'actions',
+        colId: 'poReportActions',
+        cellStyle: { fontSize: '12px' },
+        cellRenderer: (params: any) => {
+          const { formattedDocNumber, isPR } = getDocFlags(params.data?.document_number);
+
+          if (isPR) return null;
+
+          const divisionCode = params.data?.div_code || params.data?.division_code || '';
+
+          return (
+            <div className="flex flex-col gap-1">
+              <ActionButtonsGroup
+                handleActions={() => {
+                  setHandleReportOpen({
+                    open: true,
+                    poNumber: formattedDocNumber,
+                    divCode: divisionCode,
+                    companyCode: params.data?.company_code || user?.company_code || ''
+                  });
+                }}
+                buttons={['view']}
+              />
+            </div>
+          );
+        }
       }
     ],
-    [userlevel]
+    [userlevel, user]
   );
 
   const onGridReady = (params: any) => {
@@ -187,20 +274,28 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   });
 
   const handleViewPurchaserequestheader = (existingData: TVPurchaserequestheader) => {
-    // Normalize request_number by replacing delimiters with plain text
-    const normalizedRequestNumber = existingData.request_number.replace(/\$/g, '/');
+    // 🛑 HARD GUARD: if request_number is not a string, abort
+    const rawRequestNumber = existingData?.request_number;
+    if (typeof rawRequestNumber !== 'string' || !rawRequestNumber) {
+      console.error('Invalid request_number received:', rawRequestNumber);
+      return;
+    }
+
+    const normalizedRequestNumber = rawRequestNumber.replace(/\$/g, '/');
     const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
     const title = isBudgetRequest ? 'Budget Request' : 'View Purchase Request';
 
-    setPurchaserequestheaderFormPopup((prev) => ({
-      action: { ...prev.action, open: !prev.action.open },
-      title,
-      data: {
-        isEditMode: true,
-        isViewMode: true,
-        request_number: existingData.request_number // Pass the original request_number
-      }
-    }));
+    setPurchaserequestheaderFormPopup((prev) => {
+      return ({
+        action: { ...prev.action, open: !prev.action.open },
+        title,
+        data: {
+          isEditMode: true,
+          isViewMode: true,
+          request_number: rawRequestNumber
+        }
+      });
+    });
   };
 
   const togglePurchaserequestheaderPopup = () => {
@@ -237,7 +332,13 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   };
 
   const handleActions = async (actionType: string, rowOriginal: TVPurchaserequestheader) => {
-    const REQUEST_NUMBER = rowOriginal.request_number;
+    const raw = rowOriginal?.request_number;
+    // 🛑 If request_number is an object (like { message }), abort
+    if (typeof raw !== 'string') {
+      console.error('Invalid request_number in row:', raw);
+      return;
+    }
+    const REQUEST_NUMBER = raw;
 
     switch (actionType) {
       case 'view':
@@ -285,7 +386,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
   const dispatch = useDispatch();
   const handleAlert = async () => {
-    let popupMessage: string | null = null;
+    let popupMessage: string = 'Records saved successfully!';
     let severity: 'success' | 'info' | 'warning' | 'error' = 'success';
 
     try {
@@ -297,26 +398,32 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
       if (messageBoxData && messageBoxData.length > 0) {
         const box = messageBoxData[0] as any;
-        popupMessage = box.MESSAGE_BOX ?? 'Records saved successfully!';
-        severity = (box.MESSAGE_TYPE?.toLowerCase() as typeof severity) ?? 'success';
+        // 🛑 SAFE: Convert whatever comes back into a string
+        const rawMessage = box?.MESSAGE_BOX;
+        popupMessage =
+          typeof rawMessage === 'string'
+            ? rawMessage
+            : rawMessage?.message
+              ? String(rawMessage.message)
+              : rawMessage
+                ? JSON.stringify(rawMessage)
+                : 'Records saved successfully!';
+
+        const rawType = box?.MESSAGE_TYPE;
+        const typeStr = typeof rawType === 'string' ? rawType.toLowerCase() : 'success';
+        severity = (['success', 'info', 'warning', 'error'].includes(typeStr) ? typeStr : 'success') as typeof severity;
       } else {
         popupMessage = 'Contact Help desk for checking Message!';
       }
 
-      dispatch(
-        showAlert({
-          severity,
-          message: popupMessage ?? '',
-          open: true
-        })
-      );
+      dispatch(showAlert({ severity, message: popupMessage, open: true }));
     } catch (error) {
       console.error('Error fetching alert message:', error);
       dispatch(
         showAlert({
           severity: 'error',
           message: 'An error occurred while fetching the alert message.',
-          open: false
+          open: true
         })
       );
     }
@@ -398,7 +505,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         )}
       </div>
 
-       <CustomAgGrid
+      <CustomAgGrid
         rowData={Array.isArray(PurchaserequestheaderData) ? PurchaserequestheaderData : []}
         columnDefs={columnDefs}
         getRowId={(params: any) => params.data?.request_number}
@@ -414,39 +521,52 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
       />
 
       {PurchaserequestheaderFormPopup.action.open &&
-        (PurchaserequestheaderFormPopup.data.request_number?.replace(/\//g, '$')?.startsWith('BUDGET') ||
-        !PurchaserequestheaderFormPopup.data.isEditMode ? (
-          <UniversalDialog
-            action={{ ...PurchaserequestheaderFormPopup.action }}
-            onClose={togglePurchaserequestheaderPopup}
-            title={PurchaserequestheaderFormPopup.title}
-            hasPrimaryButton={false}
-          >
-            <AddBudgetrequestPfForm
-              request_number={PurchaserequestheaderFormPopup.data.request_number}
+        (() => {
+          // 🛑 Safely compute existingData — if it's an error object, use {} instead
+          const rawExisting = PurchaserequestheaderFormPopup.data.existingData;
+          const safeExistingData =
+            rawExisting && typeof rawExisting === 'object' && !Array.isArray(rawExisting) && !('message' in rawExisting) ? rawExisting : {};
+
+          const normalizedRequestNumber = PurchaserequestheaderFormPopup.data.request_number?.replace(/\$/g, '/') || '';
+          const isBudget = normalizedRequestNumber.includes('BUDGET');
+
+          if (isBudget || !PurchaserequestheaderFormPopup.data.isEditMode) {
+            return (
+              <UniversalDialog
+                action={{ ...PurchaserequestheaderFormPopup.action }}
+                onClose={togglePurchaserequestheaderPopup}
+                title={PurchaserequestheaderFormPopup.title}
+                hasPrimaryButton={false}
+              >
+                <AddBudgetrequestPfForm
+                  request_number={normalizedRequestNumber}
+                  onClose={togglePurchaserequestheaderPopup}
+                  isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
+                  existingData={safeExistingData}
+                />
+              </UniversalDialog>
+            );
+          }
+
+          return (
+            <UniversalDialog
+              action={{ ...PurchaserequestheaderFormPopup.action }}
               onClose={togglePurchaserequestheaderPopup}
-              isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
-              existingData={PurchaserequestheaderFormPopup.data.existingData || {}}
-            />
-          </UniversalDialog>
-        ) : PurchaserequestheaderFormPopup.data.request_number?.replace(/\//g, '$')?.includes('PO$') ? (
-          <PurchaseOrderReport poNumber={PurchaserequestheaderFormPopup.data.request_number} onClose={togglePurchaserequestheaderPopup} />
-        ) : (
-          <UniversalDialog
-            action={{ ...PurchaserequestheaderFormPopup.action }}
-            onClose={togglePurchaserequestheaderPopup}
-            title={PurchaserequestheaderFormPopup.title}
-            hasPrimaryButton={false}
-          >
-            <AddPurchaserequestPfForm
-              request_number={PurchaserequestheaderFormPopup.data.request_number}
-              onClose={togglePurchaserequestheaderPopup}
-              isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
-              isViewMode={PurchaserequestheaderFormPopup.data.isViewMode}
-              existingData={PurchaserequestheaderFormPopup.data.existingData || {}}
-            />
-          </UniversalDialog>
-        ))}
+              title={PurchaserequestheaderFormPopup.title}
+              hasPrimaryButton={false}
+            >
+              <AddPurchaserequestPfForm
+                            divCode={divCode}
+              setDivCode={setDivCode}
+  request_number={PurchaserequestheaderFormPopup.data.request_number}   // ✅ raw, e.g. MFS$26$OH012$PR$0025       
+           onClose={togglePurchaserequestheaderPopup}
+                isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
+                isViewMode={PurchaserequestheaderFormPopup.data.isViewMode}
+                existingData={safeExistingData}
+              />
+            </UniversalDialog>
+          );
+        })()}
 
       {cancelPopup.action.open && (
         <UniversalDialog
@@ -461,14 +581,26 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
             <TextField label="Remarks" value={cancelPopup.data.remarks} onChange={handleCancelRemarksChange} fullWidth multiline rows={4} />
             {cancelPopup.isPORequest && (
               <FormControlLabel
-                control={
-                  <Checkbox checked={createPR} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreatePR(e.target.checked)} />
-                }
+                control={<Checkbox checked={createPR} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreatePR(e.target.checked)} />}
                 label="Create PR"
               />
             )}
           </div>
         </UniversalDialog>
+      )}
+
+      {/* PO Report Dialog — same as MyitemPOConfirm */}
+      {handleReportOpen.open && (
+        <ReportDialogPage
+          Report={PurchaseReportDesign}
+          required_values={{
+            divCode: handleReportOpen.divCode,
+            refDocNo: handleReportOpen.poNumber,
+            companyCode: handleReportOpen.companyCode
+          }}
+          title="Purchase Order"
+          onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '', companyCode: '' })}
+        />
       )}
     </div>
   );

@@ -19,7 +19,6 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import ReportDialogPage from 'pages/Report/ReportDialogPage';
 
-// 🛑 Import BOTH Report Designs for conditional rendering
 import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 import PurchaseRequestReportDesign from 'pages/Report/components/PurchaseRequestReportDesign';
 import PurchaseRequestFormReport from 'components/reports/purchase/PurchaseRequestFormReport';
@@ -66,159 +65,71 @@ import { SentBackPopup } from 'pages/Purchasefolder/MyTaskPendingRequestTab';
 import { closeBackdrop, openBackdrop } from 'store/reducers/backdropSlice';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { FaCheckCircle } from 'react-icons/fa';
-//User Level
 
 import PoList from './PoList';
 import { FetchPOListingData } from 'pages/Purchasefolder/type/polisting';
 import { gs_userlevel, useInitializeUserLevel } from 'shared/global-state';
 import { clearAlert, showAlert } from 'store/CustomAlert/alertSlice';
-import CustomAlert from 'components/@extended/CustomAlert';
+// import CustomAlert from 'components/@extended/CustomAlert';
 import { ColDef } from 'ag-grid-community';
 import { ColumnsType } from 'antd/es/table';
 import { CurrencyListResponse, IddCurrency } from 'pages/Purchasefolder/type/currency_pr_type';
 import PurchaseRequestLogReport from 'components/reports/purchase/PurchaseRequestLogReport';
-interface SupplierOption {
-  supp_code: string;
-  supp_name: string;
-}
 
-interface ParentRowData {
-  key: string;
-  items: TItemPrrequest[];
-  totalBudget: number;
-  totalPrAmount: number;
-  totalPoAmount: number;
-}
-
-interface UomOption {
-  uom_code: string;
-  uom_name: string;
-}
-
-interface UomListResponse {
-  tableData: UomOption[];
-  count: number;
-}
-
-interface ProdOption {
-  prod_code: string;
-  prod_name: string;
-  upp: number;
-  uppp: number;
-  p_uom: string;
-  l_uom: string;
-  prin_code: string;
-}
-
-interface ProdListResponse {
-  tableData: ProdOption[];
-  count: number;
-}
-
-interface CostOption {
-  cost_code: string;
-  cost_name: string;
-}
-
-interface ProjectOption {
-  project_code: string;
-  project_name: string;
-}
-
-interface ProjectListResponse {
-  tableData: ProjectOption[];
-  count: number;
-}
-
-interface AddPurchaserequestPfFormProps {
-  request_number?: string;
-}
-interface AddPurchaserequestPfFormProps {
-  request_number?: string;
-  onClose: (refetchData?: boolean) => void;
-  isEditMode: boolean;
-  existingData: TPurchaserequestPf;
-}
+interface SupplierOption { supp_code: string; supp_name: string; }
+interface ParentRowData { key: string; items: TItemPrrequest[]; totalBudget: number; totalPrAmount: number; totalPoAmount: number; }
+interface UomOption { uom_code: string; uom_name: string; }
+interface UomListResponse { tableData: UomOption[]; count: number; }
+interface ProdOption { prod_code: string; prod_name: string; upp: number; uppp: number; p_uom: string; l_uom: string; prin_code: string; }
+interface ProdListResponse { tableData: ProdOption[]; count: number; }
+interface CostOption { cost_code: string; cost_name: string; }
+interface ProjectOption { project_code: string; project_name: string; }
+interface ProjectListResponse { tableData: ProjectOption[]; count: number; }
 
 const initialPurchaseRequest = (): TPurchaserequestPf => ({
-  requestor_name: '',
-  div_code: '',
-  request_number: '',
-  request_date: new Date(),
-  need_by_date: new Date(),
-  description: '',
-  wo_number: '',
-  type_of_contract: '',
-  type_of_material_supply: 'N/A',
-  contract_soft_hard: 'N/A',
-  service_type: 'N/A',
-  amc_service_status: 'N/A',
-  amc_from: undefined,
-  remarks: '',
-  amc_to: undefined,
-  flow_level_running: 1,
-  material_mechanical: 'N',
-  material_electrical: 'N',
-  material_plumbing: 'N',
-  material_tools: 'N',
-  material_civil: 'N',
-  material_ac: 'N',
-  material_cleaning: 'N',
-  material_other: 'N',
-  services_temp_staff: 'N',
-  services_rentals: 'N',
-  services_subcon_conslt: 'N',
-  services_other: 'N',
-  other_stationery: 'N',
-  other_it: 'N',
-  other_new_uniform_ppe: 'N',
-  other_rplcmt_uniform: 'N',
-  other_other: 'N',
-  good_material_request: 'N',
-  service_request: 'N',
-  project_code: '',
-  company_code: '',
-  created_by: '',
-  updated_by: '',
-  last_action: '',
-  created_at: new Date(),
-  updated_at: new Date(),
-  fa_uploaded: 'N',
-  final_approved: 'No',
-  type_of_pr: '',
-  covered_by_contract_yes: 'N/A',
-  flag_sharing_cost: 'N/A',
-  budgeted_yes: 'N/A',
-  checked_store_yes: 'N/A',
-  amount: 0,
-  exchange_rate: 0,
-  accommodation: 'N',
-  catering: 'N',
-  laundry_housekeeping: 'N',
-  medical: 'N',
-  transportation: 'N',
-  training: 'N',
-  recruitment_hr: 'N',
-  uniform: 'N',
-  stationary: 'N',
-  it_tech: 'N',
-  furniture: 'N',
-  entertainment: 'N',
-  barber: 'N',
-  others: 'N',
-
-  items: [],
-  Termscondition: [
-    {
-      tsupplier: '',
-      remarks: '',
-      dlvr_term: '',
-      payment_terms: '',
-      quatation_reference: '',
-      delivery_address: ''
-    }
-  ]
+  requestor_name: '', div_code: '', request_number: '', request_date: new Date(), need_by_date: new Date(),
+  description: '', wo_number: '', type_of_contract: '', type_of_material_supply: 'N/A', contract_soft_hard: 'N/A',
+  service_type: 'N/A', amc_service_status: 'N/A', amc_from: undefined, remarks: '', amc_to: undefined,
+  flow_level_running: 1, material_mechanical: 'N', material_electrical: 'N', material_plumbing: 'N',
+  material_tools: 'N', material_civil: 'N', material_ac: 'N', material_cleaning: 'N', material_other: 'N',
+  services_temp_staff: 'N', services_rentals: 'N', services_subcon_conslt: 'N', services_other: 'N',
+  other_stationery: 'N', other_it: 'N', other_new_uniform_ppe: 'N', other_rplcmt_uniform: 'N', other_other: 'N',
+  good_material_request: 'N', service_request: 'N', project_code: '', company_code: '', created_by: '',
+  updated_by: '', last_action: '', created_at: new Date(), updated_at: new Date(), fa_uploaded: 'N',
+  final_approved: 'No', type_of_pr: '', covered_by_contract_yes: 'N/A', flag_sharing_cost: 'N/A',
+  budgeted_yes: 'N/A', checked_store_yes: 'N/A', amount: 0, exchange_rate: 0, accommodation: 'N',
+  catering: 'N', laundry_housekeeping: 'N', medical: 'N', transportation: 'N', training: 'N',
+  recruitment_hr: 'N', uniform: 'N', stationary: 'N', it_tech: 'N', furniture: 'N', entertainment: 'N',
+  barber: 'N', others: 'N', items: [],
+  Termscondition: [{ tsupplier: '', remarks: '', dlvr_term: '', payment_terms: '', quatation_reference: '', delivery_address: '' }]
 });
+// 🛑 Universal helper to force any value into a safe renderable string
+const toSafeString = (value: any, fallback: string = ''): string => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    if ('message' in value && typeof (value as any).message === 'string') return (value as any).message;
+    try { return JSON.stringify(value); } catch { return fallback; }
+  }
+  return fallback;
+};
+
+// 🛑 Universal helper to force any value into a safe renderable NUMBER.
+// AG Grid's default cell renderer puts a column's raw value straight into
+// the DOM as a React child — if the backend ever returns an error object
+// like { message: '...' } for a numeric field (common on older/history
+// records), React throws "Objects are not valid as a React child".
+// Every numeric grid column MUST route through this (or toSafeString for
+// text columns) instead of rendering `field` directly.
+const toSafeNumber = (value: any, fallback: number = 0): number => {
+  if (typeof value === 'number') return isNaN(value) ? fallback : value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? fallback : parsed;
+  }
+  return fallback;
+};
 
 interface AddPurchaserequestPfFormProps {
   divCode?: string;
@@ -231,33 +142,16 @@ interface AddPurchaserequestPfFormProps {
 }
 
 const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
-  divCode,
-  setDivCode = () => { },
-  request_number = '',
-  onClose,
-  isEditMode,
-  isViewMode,
-  existingData
+  divCode, setDivCode = () => { }, request_number = '', onClose, isEditMode, isViewMode, existingData
 }) => {
 
-  // 🛑 State holds documentNumber and isPo to conditionally render
-  const [prReportValues, setPrReportValues] = useState<{
-    open: boolean;
-    companyCode: string;
-    documentNumber: string;
-    divCode: string;
-    isPo: boolean;
-  }>({
-    open: false,
-    companyCode: '',
-    documentNumber: '',
-    divCode: '',
-    isPo: false
+  const [prReportValues, setPrReportValues] = useState<{ open: boolean; companyCode: string; documentNumber: string; divCode: string; isPo: boolean; }>({
+    open: false, companyCode: '', documentNumber: '', divCode: '', isPo: false
   });
 
   const [purchaseRequest, setPurchaseRequest] = useState<TPurchaserequestPf>(initialPurchaseRequest());
   const [termsConditions, setTermsConditions] = useState<TPrTermCondition[]>([]);
-  const [POdata, setPOdata] = useState<FetchPOListingData[]>([]); 
+  const [POdata, setPOdata] = useState<FetchPOListingData[]>([]);
   const [tabIndex, setTabIndex] = useState(0);
   const [, setSubmitStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -272,76 +166,48 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [isUploaded, setIsUploaded] = useState(false);
   const [currentItem, setCurrentItem] = React.useState<any>({
-    item_code: '',
-    item_desp: '',
-    item_group_code: '',
-    item_rate: 0,
-    p_uom: '',
-    flow_level_running: 1,
-    l_uom: '',
-    upp: 1,
-    item_l_qty: 1,
-    item_p_qty: 0,
-    appr_upp: 0,
-    appr_item_l_qty: 0,
-    appr_item_p_qty: 0,
-    currency_rate: 0,
-    amount: 0,
-    company_code: '',
-    updated_at: new Date(),
-    updated_by: '',
-    request_number: '',
-    curr_code: '',
-    lcurr_amt: 0,
-    allocated_approved_quantity: 0,
-    selected_item: '',
-    last_action: '',
-    history_serial: 0,
-    curr_name: '',
-    item_sequence_no: 0,
-    item_srno: 0,
-    supplier_part_code: '',
-    rate_method: '',
-    supplier: '',
-    select_item: '',
-    discount_amount: 0,
-    final_rate: 0,
-    item_cancel: '',
-    mail_attach: '',
-    cash_ind: '',
-    service_rm_flag: purchaseRequest.items.length > 0 ? 'Addl Desc' : 'Service',
-    addl_item_desc: '',
-    pr_amount: 0,
-    po_amount: 0,
-    month_budget: 0,
-    ac_name: '',
-    cost_code: '',
-    cost_name: '',
-    ref_doc_no: '',
-    doc_date: null
+    item_code: '', item_desp: '', item_group_code: '', item_rate: 0, p_uom: '', flow_level_running: 1,
+    l_uom: '', upp: 1, item_l_qty: 1, item_p_qty: 0, appr_upp: 0, appr_item_l_qty: 0, appr_item_p_qty: 0,
+    currency_rate: 0, amount: 0, company_code: '', updated_at: new Date(), updated_by: '', request_number: '',
+    curr_code: '', lcurr_amt: 0, allocated_approved_quantity: 0, selected_item: '', last_action: '',
+    history_serial: 0, curr_name: '', item_sequence_no: 0, item_srno: 0, supplier_part_code: '',
+    rate_method: '', supplier: '', select_item: '', discount_amount: 0, final_rate: 0, item_cancel: '',
+    mail_attach: '', cash_ind: '', service_rm_flag: purchaseRequest.items.length > 0 ? 'Addl Desc' : 'Service',
+    addl_item_desc: '', pr_amount: 0, po_amount: 0, month_budget: 0, ac_name: '', cost_code: '', cost_name: '',
+    ref_doc_no: '', doc_date: null
   });
 
   useInitializeUserLevel();
 
+  // 🛑 SAFE ALERT HELPER — prevents { message: ... } objects from crashing React
+  const safeShowAlert = (severity: 'success' | 'info' | 'warning' | 'error', message: any) => {
+    const safeMessage =
+      typeof message === 'string'
+        ? message
+        : message?.message
+          ? String(message.message)
+          : message
+            ? JSON.stringify(message)
+            : 'An error occurred';
+    dispatch(showAlert({ severity, message: safeMessage, open: true }));
+  };
+
   const [sentBackPopup, setSentBackPopup] = useState<TUniversalDialogProps>({
     action: { open: false, fullWidth: true, maxWidth: 'sm' },
-    title: 'Send Back Request',
-    data: { request_number: '', remarks: '', level: '' }
+    title: 'Send Back Request', data: { request_number: '', remarks: '', level: '' }
   });
 
   const [isSendBackModalOpen, setIsSendbackModalOpen] = useState(false);
 
   const [rejectPopup, setRejectPopup] = useState<TUniversalDialogProps>({
     action: { open: false, fullWidth: true, maxWidth: 'sm' },
-    title: 'Reject Request',
-    data: { request_number: '', remarks: '' }
+    title: 'Reject Request', data: { request_number: '', remarks: '' }
   });
 
   const [createPR, setCreatePR] = useState<boolean>(false);
   const [cancelPopup, setCancelPopup] = useState<TUniversalDialogProps>({
     action: { open: false, fullWidth: true, maxWidth: 'sm' },
-    title: 'Cancel Request',
-    data: { request_number: '', remarks: '' }
+    title: 'Cancel Request', data: { request_number: '', remarks: '' }
   });
 
   const { data: currency } = useQuery<CurrencyListResponse>({
@@ -349,11 +215,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "ddCurrency",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: "NULL", code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "ddCurrency", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: "NULL", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null,
       });
       const tableData = Array.isArray(response) ? response as IddCurrency[] : [];
@@ -367,11 +230,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "dduommaster",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: "NULL", code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "dduommaster", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: "NULL", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null,
       });
       const tableData = Array.isArray(response) ? response as UomOption[] : [];
@@ -380,20 +240,15 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     enabled: !!app,
   });
 
-  const theme = createTheme({
-    typography: { fontFamily: 'Roboto, Arial, sans-serif' }
-  });
+  const theme = createTheme({ typography: { fontFamily: 'Roboto, Arial, sans-serif' } });
 
   const { data: supplierList } = useQuery({
     queryKey: ['supplier_data', app],
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "ddSupplier",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: "NULL", code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "ddSupplier", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: "NULL", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null,
       });
       const tableData = Array.isArray(response) ? (response as SupplierOption[]) : [];
@@ -407,19 +262,12 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "dddivproductmaster",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: divCode ?? "",
-        code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "dddivproductmaster", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: divCode ?? "", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null
       });
       const transformedData = Array.isArray(response) ? response.map((item) => ({
-        prod_code: item.prod_code || '',
-        prod_name: item.prod_name || '',
-        upp: item.upp || 0,
-        ...item
+        prod_code: item.prod_code || '', prod_name: item.prod_name || '', upp: item.upp || 0, ...item
       })) : [];
       return { tableData: transformedData, count: transformedData.length };
     },
@@ -431,12 +279,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "dddivprojectmaster",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: divCode ?? "",
-        code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "dddivprojectmaster", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: divCode ?? "", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null
       });
       const tableData = Array.isArray(response) ? response as ProjectOption[] : [];
@@ -446,17 +290,14 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
   });
 
   const prevTabIndexRef = useRef<number | null>(null);
-  
+
   const { data: costList } = useQuery({
     queryKey: ['cost_data', app],
     queryFn: async () => {
       if (!app) return { tableData: [], count: 0 };
       const response = await PfServiceInstance.proc_build_dynamic_sql({
-        parameter: "ddcostmaster",
-        loginid: user?.loginid ?? "",
-        code1: user?.company_code ?? "",
-        code2: "NULL", code3: "NULL", code4: "NULL",
-        number1: 0, number2: 0, number3: 0, number4: 0,
+        parameter: "ddcostmaster", loginid: user?.loginid ?? "", code1: user?.company_code ?? "",
+        code2: "NULL", code3: "NULL", code4: "NULL", number1: 0, number2: 0, number3: 0, number4: 0,
         date1: null, date2: null, date3: null, date4: null,
       });
       const tableData = Array.isArray(response) ? response as CostOption[] : [];
@@ -465,45 +306,70 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     enabled: !!app,
   });
 
-  const loadPurchaseRequest = async () => {
-    if (request_number) {
-      try {
-        const purchaseRequestData = await GmPfServiceInstance.getRequestNumber(request_number);
-        if (!purchaseRequestData || !Array.isArray(purchaseRequestData.items)) {
-          console.error('Purchase request data is missing or items array is not present');
-          return;
-        }
-        if (setDivCode && typeof setDivCode === 'function') {
-          setDivCode(purchaseRequestData.div_code || '');
-        }
-        const items = purchaseRequestData.items;
-        const termsConditionsdata = purchaseRequestData.Termscondition;
-        setTermsConditions(termsConditionsdata);
-        
-        const groupedItems = groupItemsByCostName(items);
-        Object.entries(groupedItems).forEach(([cost_name, group]) => {
-          // console.log(`Cost Name: ${cost_name}, Total Budget: ${group.totalBudget}`);
-        });
+const loadPurchaseRequest = async () => {
+  if (!request_number || typeof request_number !== 'string') {
+    setPurchaseRequest(initialPurchaseRequest());
+    return;
+  }
+  try {
+    const purchaseRequestData: any = await GmPfServiceInstance.getRequestNumber(request_number);
 
-        if (purchaseRequestData) {
-          setPurchaseRequest(purchaseRequestData);
-          const nonQARItem = purchaseRequestData.items?.find(
-            (item: any) => item.curr_code && item.curr_code !== 'QAR'
-          );
-          if (nonQARItem && nonQARItem.currency_rate && nonQARItem.currency_rate !== 1) {
-            setPurchaseRequest((prev) => ({
-              ...prev,
-              exchange_rate: nonQARItem.currency_rate
-            }));
-          }
-        }
-      } catch (error) {
-        console.error('Error loading purchase request:', error);
+    // 🛑 BULLETPROOF SANITIZER: whatever comes back, force it into a valid shape
+    const safeData: TPurchaserequestPf = (() => {
+      // If it's null/undefined/not an object → return empty
+      if (!purchaseRequestData || typeof purchaseRequestData !== 'object') {
+        return initialPurchaseRequest();
       }
-    } else {
-      setPurchaseRequest(initialPurchaseRequest());
+      // If it's an array → wrap it or return empty
+      if (Array.isArray(purchaseRequestData)) {
+        return initialPurchaseRequest();
+      }
+      // If items is not an array → the API returned an error object
+      if (!Array.isArray(purchaseRequestData.items)) {
+        console.error('Invalid items:', purchaseRequestData.items);
+        return initialPurchaseRequest();
+      }
+      // Sanitize every item to ensure no field is an object
+      const sanitizedItems = purchaseRequestData.items.map((item: any) => {
+        const clean: any = { ...item };
+        Object.keys(clean).forEach((key) => {
+          const val = clean[key];
+          if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+            // Replace object with its .message if it's a string, else empty string
+            clean[key] = typeof val.message === 'string' ? val.message : '';
+          }
+        });
+        return clean;
+      });
+      // Sanitize the header too
+      const clean: any = { ...purchaseRequestData, items: sanitizedItems };
+      Object.keys(clean).forEach((key) => {
+        if (key === 'items' || key === 'Termscondition') return;
+        const val = clean[key];
+        if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+          clean[key] = typeof val.message === 'string' ? val.message : '';
+        }
+      });
+      return clean;
+    })();
+
+    if (setDivCode && typeof setDivCode === 'function') {
+      setDivCode(typeof safeData.div_code === 'string' ? safeData.div_code : '');
     }
-  };
+    setTermsConditions(Array.isArray(safeData.Termscondition) ? safeData.Termscondition : []);
+    setPurchaseRequest(safeData);
+
+    const nonQARItem = safeData.items.find(
+      (item: any) => item.curr_code && item.curr_code !== 'QAR'
+    );
+    if (nonQARItem && nonQARItem.currency_rate && nonQARItem.currency_rate !== 1) {
+      setPurchaseRequest((prev) => ({ ...prev, exchange_rate: nonQARItem.currency_rate }));
+    }
+  } catch (error) {
+    console.error('Error loading purchase request:', error);
+    setPurchaseRequest(initialPurchaseRequest());
+  }
+};
 
   useEffect(() => {
     prevTabIndexRef.current = tabIndex;
@@ -511,15 +377,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
   }, [request_number]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    // const startTime = performance.now();
     setPurchaseRequest((prevState) => {
       const updatedTermsConditions = [...prevState.Termscondition];
       Object.keys(tempChanges).forEach((key) => {
         const { field, value, index } = tempChanges[key];
-        updatedTermsConditions[index] = {
-          ...updatedTermsConditions[index],
-          [field]: value
-        };
+        updatedTermsConditions[index] = { ...updatedTermsConditions[index], [field]: value };
       });
       return { ...prevState, Termscondition: updatedTermsConditions };
     });
@@ -536,20 +398,16 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     setPurchaseRequest((prevRequest) => {
       const newItems = [...prevRequest.items];
       const item = { ...newItems[index] };
-
       if (name === 'item_p_qty' || name === 'item_l_qty' || name === 'upp') {
         if (name === 'item_p_qty') item.item_p_qty = value as number;
         if (name === 'item_l_qty') item.item_l_qty = value as number;
         if (name === 'upp') item.upp = value === 0 || value === null ? 1 : (value as number);
-
         const item_p_qty = Number(item.item_p_qty) || 0;
         const item_l_qty = Number(item.item_l_qty) || 0;
         const upp = Number(item.upp) || 1;
-
         item.allocated_approved_quantity = item_p_qty * upp + item_l_qty;
         item.amount = item.item_rate * item.allocated_approved_quantity;
       }
-
       if (name === 'item_rate' && typeof value === 'string') {
         const sanitizedValue = value.replace(/[^0-9.]/g, '');
         const [integerPart, decimalPart] = sanitizedValue.split('.');
@@ -557,22 +415,16 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
         const formattedValue = `${integerPart}.${validDecimalPart}`;
         item.amount = item.item_rate * item.allocated_approved_quantity;
         const numericValue = parseFloat(formattedValue);
-        if (numericValue <= 9999.99) {
-          item.item_rate = numericValue;
-        } else {
-          item.item_rate = 9999.99;
-        }
+        if (numericValue <= 9999.99) item.item_rate = numericValue;
+        else item.item_rate = 9999.99;
       } else {
         (item as any)[name] = value;
       }
-
       if (name !== 'cost_code' || item.service_rm_flag !== 'Addl Desc') {
         for (let i = index + 1; i < newItems.length; i++) {
           if (newItems[i].service_rm_flag === 'Addl Desc') {
             newItems[i] = { ...newItems[i], cost_code: item.cost_code };
-          } else {
-            break;
-          }
+          } else break;
         }
       }
       newItems[index] = item;
@@ -582,6 +434,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
   const validatePurchaseRequest = (data: TPurchaserequestPf, termsConditions?: TPrTermCondition[]) => {
     const errors: string[] = [];
+    if (data.items && !Array.isArray(data.items)) {
+      console.error('data.items is not an array:', data.items);
+      errors.push('Invalid purchase request data received from server.');
+      return errors;
+    }
     if (data.flow_level_running === 3) {
       const termsToValidate = termsConditions || [];
       if (termsToValidate.length === 0 && data.last_action === 'SUBMITTED') {
@@ -589,19 +446,12 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
       } else {
         termsToValidate.forEach((term, index) => {
           const termPrefix = `Terms & Conditions (Item ${index + 1}):`;
-          if (data.last_action === 'SUBMITTED' && (!term.dlvr_term || term.dlvr_term.trim() === '')) {
-            errors.push(`${termPrefix} Delivery terms are required`);
-          }
-          if (data.last_action === 'SUBMITTED' && (!term.payment_terms || term.payment_terms.trim() === '')) {
-            errors.push(`${termPrefix} Payment terms are required`);
-          }
-          if (data.last_action === 'SUBMITTED' && (!term.quatation_reference || term.quatation_reference.trim() === '')) {
-            errors.push(`${termPrefix} Quotation reference is required`);
-          }
+          if (data.last_action === 'SUBMITTED' && (!term.dlvr_term || term.dlvr_term.trim() === '')) errors.push(`${termPrefix} Delivery terms are required`);
+          if (data.last_action === 'SUBMITTED' && (!term.payment_terms || term.payment_terms.trim() === '')) errors.push(`${termPrefix} Payment terms are required`);
+          if (data.last_action === 'SUBMITTED' && (!term.quatation_reference || term.quatation_reference.trim() === '')) errors.push(`${termPrefix} Quotation reference is required`);
         });
       }
     }
-
     if (!data.project_code || data.project_code.trim() === '') errors.push('Project Code is required.');
     if (data.type_of_pr === 'Charge to Customer') {
       if (!data.wo_number || data.wo_number.trim() === '') errors.push('Work Order is required.');
@@ -612,17 +462,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     if (data.type_of_contract === 'AMC' && !data.amc_from) errors.push('Please select AMC Data From');
     if (data.type_of_contract === 'AMC' && !data.amc_to) errors.push('Please select AMC Data To');
     if (!data.type_of_pr || data.type_of_pr.trim() === '') errors.push('Please select Type of PR');
-
     if (!data.items || data.items.length === 0) {
       errors.push('At least one item is required.');
     } else {
       data.items.forEach((item, index) => {
-        if (
-          (item.service_rm_flag === 'Service' ||
-            item.service_rm_flag === 'Addl Desc' ||
-            (item.service_rm_flag === 'RM' && item.item_code === 'NEWITEM')) &&
-          (!item.addl_item_desc || item.addl_item_desc.trim() === '')
-        ) {
+        if ((item.service_rm_flag === 'Service' || item.service_rm_flag === 'Addl Desc' || (item.service_rm_flag === 'RM' && item.item_code === 'NEWITEM')) && (!item.addl_item_desc || item.addl_item_desc.trim() === '')) {
           errors.push(`Item ${index + 1}: Enter Item description.`);
         }
         if (item.service_rm_flag === 'RM') {
@@ -630,9 +474,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           if (!item.p_uom || item.p_uom.trim() === '') errors.push(`Item ${index + 1}: Please Select Primary Unit of Measurement(PUOM).`);
         }
         if (item.service_rm_flag !== 'Addl Desc' && data.last_action === 'SUBMITTED') {
-          if (!item.allocated_approved_quantity || item.allocated_approved_quantity <= 0) {
-            errors.push(`Item ${index + 1}: Quantity must be greater than 0.`);
-          }
+          if (!item.allocated_approved_quantity || item.allocated_approved_quantity <= 0) errors.push(`Item ${index + 1}: Quantity must be greater than 0.`);
         }
         if (item.service_rm_flag !== 'Addl Desc') {
           if (!item.l_uom || item.l_uom.trim() === '') errors.push(`Item ${index + 1}: Please select Lowest Unit of Measurement (LUOM).`);
@@ -641,27 +483,17 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           if (!item.cost_code || item.cost_code.trim() === '') errors.push(`Item ${index + 1}: Please Select Cost Code`);
         }
         if (data.flow_level_running === 3 && item.service_rm_flag !== 'Addl Desc') {
-          if (data.last_action === 'SUBMITTED' && (!item.supplier || item.supplier.trim() === '')) {
-            errors.push(`Item ${index + 1}: Please Select Supplier`);
-          }
-          if (data.last_action === 'SUBMITTED' && (!item.item_rate || item.item_rate <= 0 || item.item_rate === 0.0)) {
-            errors.push(`Item ${index + 1}: Please enter Item rate`);
-          }
-          if (data.last_action === 'SUBMITTED' && (!item.amount || item.amount <= 0 || item.amount === 0.0)) {
-            errors.push(`Item ${index + 1}:  Amount cannot be 0`);
-          }
+          if (data.last_action === 'SUBMITTED' && (!item.supplier || item.supplier.trim() === '')) errors.push(`Item ${index + 1}: Please Select Supplier`);
+          if (data.last_action === 'SUBMITTED' && (!item.item_rate || item.item_rate <= 0 || item.item_rate === 0.0)) errors.push(`Item ${index + 1}: Please enter Item rate`);
+          if (data.last_action === 'SUBMITTED' && (!item.amount || item.amount <= 0 || item.amount === 0.0)) errors.push(`Item ${index + 1}:  Amount cannot be 0`);
         }
       });
     }
-
     if (gs_userlevel === 4) {
       const hasNonQARCurrency = data.items.some(item => item.curr_code && item.curr_code !== 'QAR');
       if (hasNonQARCurrency) {
-        if (!data.exchange_rate || data.exchange_rate <= 0) {
-          errors.push('Exchange Rate is required when currency is not QAR.');
-        } else if (data.exchange_rate === 1) {
-          errors.push('Exchange Rate cannot be 1. Please enter the actual exchange rate.');
-        }
+        if (!data.exchange_rate || data.exchange_rate <= 0) errors.push('Exchange Rate is required when currency is not QAR.');
+        else if (data.exchange_rate === 1) errors.push('Exchange Rate cannot be 1. Please enter the actual exchange rate.');
       }
     }
     return errors;
@@ -669,13 +501,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
   const data = purchaseRequest?.items;
 
-  // const groupData = (data: any[]) => {
-  //   return data.reduce((acc, item) => {
-  //     if (!acc[item.cost_name]) acc[item.cost_name] = { items: [] };
-  //     acc[item.cost_name].items.push(item);
-  //     return acc;
-  //   }, {});
-  // };
+  const displayRequestNumber =
+  typeof purchaseRequest?.request_number === 'string'
+    ? purchaseRequest.request_number.replace(/\$/g, '/')
+    : 'N/A';
+
 
   const ServiceTypeCellRenderer = (props: any) => {
     const { value, data, node, api, colDef } = props;
@@ -687,14 +517,9 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
       if (colDef.cellRendererParams?.onChange) colDef.cellRendererParams.onChange(node.rowIndex, newValue);
     };
     return (
-      <AntSelect
-        size="small" showSearch style={{ width: '100%', fontSize: '11px' }} placeholder="Select Service"
+      <AntSelect size="small" showSearch style={{ width: '100%', fontSize: '11px' }} placeholder="Select Service"
         filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-        options={[
-          { value: 'Service', label: 'Service' },
-          { value: 'RM', label: 'Raw Material' },
-          { value: 'Addl Desc', label: 'Sub Service' }
-        ]}
+        options={[{ value: 'Service', label: 'Service' }, { value: 'RM', label: 'Raw Material' }, { value: 'Addl Desc', label: 'Sub Service' }]}
         value={value} onChange={handleChange} dropdownStyle={{ zIndex: 9999 }} variant="borderless"
         disabled={isViewMode || gs_userlevel === 5}
       />
@@ -717,25 +542,15 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     };
     const displayValue = getDisplayValue();
     if (isViewMode || gs_userlevel === 5) return <div>{displayValue}</div>;
-
     const handleChange = (newValue: string) => {
       const newData = { ...data, cost_code: newValue };
       api.applyTransaction({ update: [newData] });
       if (colDef.cellRendererParams?.onChange) colDef.cellRendererParams.onChange(node.rowIndex, newValue);
     };
-
-    if (data.service_rm_flag === 'Addl Desc') {
-      return <div style={{ padding: '5px ', color: '#666' }}>{displayValue}</div>;
-    }
-
-    const costCodeOptions = costListTableData.map((item: any) => ({
-      value: item.cost_code,
-      label: `${item.cost_code} - ${item.cost_name}`
-    }));
-
+    if (data.service_rm_flag === 'Addl Desc') return <div style={{ padding: '5px ', color: '#666' }}>{displayValue}</div>;
+    const costCodeOptions = costListTableData.map((item: any) => ({ value: item.cost_code, label: `${item.cost_code} - ${item.cost_name}` }));
     return (
-      <AntSelect
-        disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
+      <AntSelect disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
         placeholder="Select Cost Code"
         filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
         options={costCodeOptions} value={value} onChange={handleChange} dropdownStyle={{ zIndex: 9999 }} variant="borderless"
@@ -754,13 +569,9 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
         if (onChange) onChange(node.rowIndex, selectedValue);
       }
     };
-    const productOptions = productData.map((item: ProdOption) => ({
-      value: item.prod_code,
-      label: `${item.prod_code} - ${item.prod_name}`
-    }));
+    const productOptions = productData.map((item: ProdOption) => ({ value: item.prod_code, label: `${item.prod_code} - ${item.prod_name}` }));
     return (
-      <AntSelect
-        size="small" showSearch style={{ width: '100%' }} placeholder="Select Product" value={value}
+      <AntSelect size="small" showSearch style={{ width: '100%' }} placeholder="Select Product" value={value}
         onChange={handleChange}
         filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
         dropdownStyle={{ zIndex: 9999, minWidth: 'fit-content', maxHeight: 'fit-content', overflow: 'auto' }}
@@ -782,8 +593,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     if (data.service_rm_flag === 'Addl Desc') return null;
     const uomOptions = uomData.map((item: any) => ({ value: item.uom_code, label: item.uom_name }));
     return (
-      <AntSelect
-        disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
+      <AntSelect disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
         placeholder="Select LUOM"
         filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
         options={uomOptions} value={value} onChange={handleChange} dropdownStyle={{ zIndex: 9999 }} variant="borderless"
@@ -801,8 +611,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     };
     const supplierOptions = SupplierData.map((item: SupplierOption) => ({ value: item.supp_code, label: `${item.supp_name}` }));
     return (
-      <AntSelect
-        disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
+      <AntSelect disabled={isViewMode || gs_userlevel === 5} size="small" showSearch style={{ width: '100%' }}
         placeholder="Select Supplier"
         filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
         options={supplierOptions} value={value} onChange={handleChange} dropdownStyle={{ zIndex: 9999 }} variant="borderless"
@@ -811,13 +620,9 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
   };
 
   const CostColumns: ColDef[] = [
-    {
-      field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-start', width: 210,
+    { field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-start', width: 210,
       cellRenderer: CostCodeCellRenderer,
-      cellRendererParams: {
-        costListTableData: costList?.tableData || [],
-        onChange: (index: number, value: string) => handleItemChange(index, 'cost_code', value)
-      },
+      cellRendererParams: { costListTableData: costList?.tableData || [], onChange: (index: number, value: string) => handleItemChange(index, 'cost_code', value) },
       valueGetter: (params) => {
         if (params.data.service_rm_flag === 'Addl Desc') {
           const rowIndex = params.node?.rowIndex ?? 0;
@@ -831,31 +636,34 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
       cellStyle: (params) => ({ backgroundColor: params.data.service_rm_flag === 'Addl Desc' ? 'lightGrey' : 'transparent' }),
       suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
     },
-    { headerName: 'Description', field: 'item_desp', width: 210, valueGetter: (params) => params.data.addl_item_desc || params.data.item_desp },
-    { headerName: 'Primary Qty', field: 'item_p_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    { headerName: 'Primary UOM', field: 'p_uom', width: 230 },
-    { headerName: 'Lowest Qty', field: 'item_l_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    {
-      headerName: 'Lowest UOM', field: 'l_uom', width: 210,
+{ 
+  headerName: 'Description', 
+  field: 'item_desp', 
+  width: 210, 
+  valueGetter: (params) => toSafeString(params.data?.addl_item_desc || params.data?.item_desp)
+},
+{ headerName: 'Primary Qty', field: 'item_p_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_p_qty) },
+{ headerName: 'Primary UOM', field: 'p_uom', width: 230, valueGetter: (params) => toSafeString(params.data?.p_uom) },
+    { headerName: 'Lowest Qty', field: 'item_l_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_l_qty) },
+    { headerName: 'Lowest UOM', field: 'l_uom', width: 210,
       valueGetter: (params) => {
         const uom = uomList?.tableData?.find((uomItem) => uomItem.uom_code === params.data.l_uom);
-        return uom?.uom_name || params.data.l_uom || '';
+        return toSafeString(uom?.uom_name || params.data.l_uom);
       },
       suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
     },
-    { headerName: 'Quantity', field: 'allocated_approved_quantity', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    { headerName: 'Rate', field: 'item_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    { headerName: 'Discount Amount', field: 'discount_amount', width: 290, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    { headerName: 'Final Rate', field: 'final_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-    { headerName: 'Amount', field: 'amount', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } }
+    { headerName: 'Quantity', field: 'allocated_approved_quantity', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.allocated_approved_quantity) },
+    { headerName: 'Rate', field: 'item_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_rate) },
+    { headerName: 'Discount Amount', field: 'discount_amount', width: 290, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.discount_amount) },
+    { headerName: 'Final Rate', field: 'final_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.final_rate) },
+    { headerName: 'Amount', field: 'amount', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.amount) }
   ];
 
   const CostDetailBeforeSave = () => {
     const gridRef = React.useRef<AgGridReact>(null);
     return (
       <div className="ag-theme-alpine ag-theme-alpine-mytable" style={{ width: 'auto', fontSize: '11px' }}>
-        <AgGridReact
-          ref={gridRef} columnDefs={CostColumns} rowData={purchaseRequest?.items || []}
+        <AgGridReact ref={gridRef} columnDefs={CostColumns} rowData={purchaseRequest?.items || []}
           defaultColDef={{ resizable: true, sortable: true, filter: true }}
           animateRows={true} suppressCellFocus={true} domLayout="autoHeight"
         />
@@ -882,34 +690,33 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     };
 
     const childColumnDefs: ColDef[] = [
-      {
-        field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-start', width: 210,
+      { field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-start', width: 210,
         cellRenderer: CostCodeCellRenderer,
-        cellRendererParams: {
-          costListTableData: costList?.tableData || [],
-          onChange: (index: number, value: string) => handleItemChange(index, 'cost_code', value)
-        },
-        valueGetter: (params) => params.data.cost_code || '',
+        cellRendererParams: { costListTableData: costList?.tableData || [], onChange: (index: number, value: string) => handleItemChange(index, 'cost_code', value) },
+        valueGetter: (params) => toSafeString(params.data.cost_code),
         cellStyle: (params) => ({ backgroundColor: params.data.service_rm_flag === 'Addl Desc' ? 'lightGrey' : 'transparent' }),
         suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
       },
-      { headerName: 'Description', field: 'item_desp', width: 210, valueGetter: (params) => params.data.addl_item_desc || params.data.item_desp },
-      { headerName: 'Primary Qty', field: 'item_p_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      {
-        headerName: 'Primary UOM', field: 'p_uom', width: 230,
+{ 
+  headerName: 'Description', 
+  field: 'item_desp', 
+  width: 210, 
+  valueGetter: (params) => toSafeString(params.data?.addl_item_desc || params.data?.item_desp)
+},      { headerName: 'Primary Qty', field: 'item_p_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_p_qty) },
+      { headerName: 'Primary UOM', field: 'p_uom', width: 230,
         valueGetter: (params) => {
           const uom = uomList?.tableData?.find((uomItem) => uomItem.uom_code === params.data.p_uom);
-          return uom?.uom_name || params.data.p_uom || '';
+          return toSafeString(uom?.uom_name || params.data.p_uom);
         },
         suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
       },
-      { headerName: 'Lower Qty', field: 'item_l_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      { headerName: 'Lower UOM', field: 'l_uom', width: 210 },
-      { headerName: 'Quantity', field: 'allocated_approved_quantity', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      { headerName: 'Rate', field: 'item_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      { headerName: 'Discount Amount', field: 'discount_amount', width: 290, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      { headerName: 'Final Rate', field: 'final_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } },
-      { headerName: 'Amount', field: 'amount', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' } }
+      { headerName: 'Lower Qty', field: 'item_l_qty', width: 210, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_l_qty) },
+      { headerName: 'Lower UOM', field: 'l_uom', width: 210, valueGetter: (params) => toSafeString(params.data?.l_uom) },
+      { headerName: 'Quantity', field: 'allocated_approved_quantity', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.allocated_approved_quantity) },
+      { headerName: 'Rate', field: 'item_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.item_rate) },
+      { headerName: 'Discount Amount', field: 'discount_amount', width: 290, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.discount_amount) },
+      { headerName: 'Final Rate', field: 'final_rate', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.final_rate) },
+      { headerName: 'Amount', field: 'amount', width: 180, type: 'numericColumn', cellStyle: { textAlign: 'right' }, valueGetter: (params) => toSafeNumber(params.data?.amount) }
     ];
 
     const parentColumns: ColumnsType<ParentRowData> = [
@@ -922,15 +729,13 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     const parentData: ParentRowData[] = Object.keys(groupedData).map((key) => ({ key, ...groupedData[key] }));
 
     return (
-      <AntTable
-        size="small" bordered={true} columns={parentColumns} dataSource={parentData} pagination={false}
+      <AntTable size="small" bordered={true} columns={parentColumns} dataSource={parentData} pagination={false}
         className="bg-gray-200 [&_.ant-table]:bg-gray-200 [&_.ant-table-thead_.ant-table-cell]:bg-gray-200 [&_.ant-table-tbody_.ant-table-cell]:bg-gray-200"
         expandable={{
           expandedRowKeys, onExpand: handleExpand,
           expandedRowRender: (record) => (
             <div className="ag-theme-alpine ag-theme-alpine-mytable ml-4" style={{ width: 'auto', fontSize: '11px' }}>
-              <AgGridReact
-                ref={gridRef} rowData={record.items} columnDefs={childColumnDefs}
+              <AgGridReact ref={gridRef} rowData={record.items} columnDefs={childColumnDefs}
                 defaultColDef={{ resizable: true, sortable: true }} domLayout="autoHeight"
                 animateRows={true} rowHeight={25} headerHeight={25} suppressScrollOnNewData={true}
                 onGridReady={({ api }) => api.sizeColumnsToFit()} onFirstDataRendered={({ api }) => api.sizeColumnsToFit()}
@@ -989,8 +794,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
     const columnDefs = React.useMemo<ColDef<any>[]>(
       () => [
-        {
-          field: 'action', headerName: 'Action', width: 80, pinned: true,
+        { field: 'action', headerName: 'Action', width: 80, pinned: true,
           cellRenderer: (params: any) => (
             <div className="flex justify-center items-center gap-2">
               <EditOutlined style={{ cursor: 'pointer', fontSize: '16px' }} onClick={(e) => { e.stopPropagation(); handleEditItem(params.node.rowIndex); }} />
@@ -999,123 +803,103 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           ),
           headerClass: 'flex justify-center'
         },
-        { field: 'item_sequence_no', headerName: 'Sr. No', width: 80, headerClass: 'flex justify-center' },
-        {
-          field: 'service_rm_flag', headerName: 'Service Type', width: 130, headerClass: 'flex justify-center',
+        { field: 'item_sequence_no', headerName: 'Sr. No', width: 80, headerClass: 'flex justify-center', valueGetter: (params) => toSafeNumber(params.data?.item_sequence_no) },
+        { field: 'service_rm_flag', headerName: 'Service Type', width: 130, headerClass: 'flex justify-center',
           valueFormatter: (params) => {
             switch (params.value) {
               case 'Service': return 'Service';
               case 'RM': return 'Raw Material';
               case 'Addl Desc': return 'Sub Service';
-              default: return params.value || '';
+              default: return toSafeString(params.value);
             }
           }
         },
-        {
-          field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-center', width: 130,
+        { field: 'cost_code', headerName: 'Cost Code', headerClass: 'flex justify-center', width: 130,
           valueGetter: (params) => {
             const costItem = costList?.tableData?.find((cost) => cost.cost_code === params.data.cost_code);
-            return costItem ? `${costItem.cost_code}${costItem.cost_name ? ` - ${costItem.cost_name}` : ''}` : params.data.cost_code || '';
+            return costItem ? `${costItem.cost_code}${costItem.cost_name ? ` - ${costItem.cost_name}` : ''}` : toSafeString(params.data.cost_code);
           },
           suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
         },
-        { field: 'addl_item_desc', headerName: 'Description', cellEditorPopup: true, width: 130, cellEditor: 'agLargeTextCellEditor', headerClass: 'flex justify-center' },
-        {
-          field: 'item_code', headerName: 'Product', headerClass: 'flex justify-center',
-          valueGetter: (params) => {
-            const product = prodList?.tableData?.find((prod) => prod.prod_code === params.data.item_code);
-            return product ? `${product.prod_code}${product.prod_name ? ` - ${product.prod_name}` : ''}` : params.data.item_code || '';
-          },
-          suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
-        },
-        {
-          field: 'item_p_qty', headerName: 'Primary Qty', width: 130, type: 'numericColumn',
-          valueFormatter: (params) => { const value = Number(params.value); return isNaN(value) ? '0' : value.toString(); },
+{
+  field: 'addl_item_desc',
+  headerName: 'Description',
+  cellEditorPopup: true,
+  width: 130,
+  cellEditor: 'agLargeTextCellEditor',
+  headerClass: 'flex justify-center',
+  valueGetter: (params) => toSafeString(params.data?.addl_item_desc || params.data?.item_desp)
+},
+{
+  field: 'item_code',
+  headerName: 'Product',
+  headerClass: 'flex justify-center',
+  valueGetter: (params) => {
+    const code = toSafeString(params.data?.item_code);
+    const product = prodList?.tableData?.find((prod) => prod.prod_code === code);
+    return product ? `${product.prod_code}${product.prod_name ? ` - ${product.prod_name}` : ''}` : code;
+  },
+  suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
+},
+        { field: 'item_p_qty', headerName: 'Primary Qty', width: 130, type: 'numericColumn',
+          valueGetter: (params) => toSafeNumber(params.data?.item_p_qty),
+          valueFormatter: (params) => { const value = toSafeNumber(params.value); return value.toString(); },
           valueParser: (params) => { const parsed = parseFloat(params.newValue); return isNaN(parsed) ? 0 : parsed; },
-          cellRenderer: (params: { value: any }) => { const value = Number(params.value); return isNaN(value) ? '0' : value.toString(); }
+          cellRenderer: (params: { value: any }) => { const value = toSafeNumber(params.value); return value.toString(); }
         },
-        {
-          field: 'p_uom', headerName: 'Primary UOM', width: 130,
+        { field: 'p_uom', headerName: 'Primary UOM', width: 130,
           valueGetter: (params) => {
             const uom = uomList?.tableData?.find((uomItem) => uomItem.uom_code === params.data.p_uom);
-            return uom?.uom_name || params.data.p_uom || '';
+            return toSafeString(uom?.uom_name || params.data.p_uom);
           },
           suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
         },
-        {
-          field: 'item_l_qty', headerName: 'Lowest Qty', width: 130, type: 'numericColumn',
-          valueFormatter: (params) => { const value = Number(params.value); return isNaN(value) ? '0' : value.toString(); },
+        { field: 'item_l_qty', headerName: 'Lowest Qty', width: 130, type: 'numericColumn',
+          valueGetter: (params) => toSafeNumber(params.data?.item_l_qty),
+          valueFormatter: (params) => { const value = toSafeNumber(params.value); return value.toString(); },
           valueParser: (params) => { const parsed = parseFloat(params.newValue); return isNaN(parsed) ? 0 : parsed; },
-          cellRenderer: (params: { value: any }) => { const value = Number(params.value); return isNaN(value) ? '0' : value.toString(); }
+          cellRenderer: (params: { value: any }) => { const value = toSafeNumber(params.value); return value.toString(); }
         },
-        {
-          field: 'l_uom', headerName: 'Lowest UOM', width: 130,
+        { field: 'l_uom', headerName: 'Lowest UOM', width: 130,
           valueGetter: (params) => {
             const uom = uomList?.tableData?.find((uomItem) => uomItem.uom_code === params.data.l_uom);
-            return uom?.uom_name || params.data.l_uom || '';
+            return toSafeString(uom?.uom_name || params.data.l_uom);
           },
           suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
         },
-        { field: 'allocated_approved_quantity', headerName: 'Quantity', type: 'numericColumn', width: 130, headerClass: 'flex justify-center' },
-        { field: 'upp', headerName: 'UPPP', type: 'numericColumn', width: 90, headerClass: 'flex justify-center' },
-        ...(Number(purchaseRequest?.flow_level_running) > 1
-          ? [{
-              field: 'item_rate', headerName: 'Rate', width: 130, type: 'numericColumn', headerClass: 'flex justify-center',
-              valueFormatter: (params: { value: any }) => {
-                const num = Number(params.value);
-                return isNaN(num) ? '0.00000' : new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num);
-              }
-            }] : []),
-        ...(Number(purchaseRequest?.flow_level_running) > 1
-          ? [{
-              field: 'discount_amount', headerName: 'Discount', width: 130, type: 'numericColumn', headerClass: 'flex justify-center',
-              valueFormatter: (params: { value: any }) => {
-                const num = Number(params.value);
-                return isNaN(num) ? '0.00000' : new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num);
-              }
-            }] : []),
-        ...(Number(purchaseRequest?.flow_level_running) > 1
-          ? [{
-              field: 'final_rate', headerName: 'Final Rate', type: 'numericColumn', width: 130, headerClass: 'flex justify-center',
-              valueFormatter: (params: { value: any }) => {
-                const num = Number(params.value);
-                return isNaN(num) ? '0.00000' : new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num);
-              }
-            }] : []),
-        ...(Number(purchaseRequest?.flow_level_running) > 1
-          ? [{
-              field: 'amount', headerName: 'Amount', type: 'numericColumn', width: 130, headerClass: 'flex justify-center',
-              valueFormatter: (params: { value: any }) => {
-                const num = Number(params.value);
-                return isNaN(num) ? '0.00' : new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
-              }
-            }] : []),
-        ...(Number(purchaseRequest?.flow_level_running) > 1 && currentItem?.service_rm_flag !== 'Addl Desc'
-          ? [{
-              field: 'supplier', headerName: 'Supplier', headerClass: 'flex justify-center', width: 130,
-              valueGetter: (params: { data: { supplier: string } }) => {
-                const supp = supplierList?.tableData?.find((supplierItem) => supplierItem.supp_code === params.data.supplier);
-                return supp?.supp_name || params.data.supplier || '';
-              },
-              suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
-            }] : []),
-        ...(Number(purchaseRequest?.flow_level_running) > 1 && currentItem?.service_rm_flag !== 'Addl Desc'
-          ? [{
-              field: 'curr_name', headerName: 'Currency', headerClass: 'flex justify-center', width: 130,
-              valueGetter: (params: { data: { curr_code: any } }) => {
-                const curr = currency?.tableData?.find((c: { curr_code: any }) => c.curr_code === params.data.curr_code);
-                return curr ? curr.curr_name : params.data.curr_code || 'QAR';
-              },
-              suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true
-            }] : [])
+        { field: 'allocated_approved_quantity', headerName: 'Quantity', type: 'numericColumn', width: 130, headerClass: 'flex justify-center', valueGetter: (params) => toSafeNumber(params.data?.allocated_approved_quantity) },
+        { field: 'upp', headerName: 'UPPP', type: 'numericColumn', width: 90, headerClass: 'flex justify-center', valueGetter: (params) => toSafeNumber(params.data?.upp, 1) },
+        ...(Number(purchaseRequest?.flow_level_running) > 1 ? [{ field: 'item_rate', headerName: 'Rate', width: 130, type: 'numericColumn', headerClass: 'flex justify-center',
+          valueGetter: (params: any) => toSafeNumber(params.data?.item_rate),
+          valueFormatter: (params: { value: any }) => { const num = toSafeNumber(params.value); return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num); } }] : []),
+        ...(Number(purchaseRequest?.flow_level_running) > 1 ? [{ field: 'discount_amount', headerName: 'Discount', width: 130, type: 'numericColumn', headerClass: 'flex justify-center',
+          valueGetter: (params: any) => toSafeNumber(params.data?.discount_amount),
+          valueFormatter: (params: { value: any }) => { const num = toSafeNumber(params.value); return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num); } }] : []),
+        ...(Number(purchaseRequest?.flow_level_running) > 1 ? [{ field: 'final_rate', headerName: 'Final Rate', type: 'numericColumn', width: 130, headerClass: 'flex justify-center',
+          valueGetter: (params: any) => toSafeNumber(params.data?.final_rate),
+          valueFormatter: (params: { value: any }) => { const num = toSafeNumber(params.value); return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(num); } }] : []),
+        ...(Number(purchaseRequest?.flow_level_running) > 1 ? [{ field: 'amount', headerName: 'Amount', type: 'numericColumn', width: 130, headerClass: 'flex justify-center',
+          valueGetter: (params: any) => toSafeNumber(params.data?.amount),
+          valueFormatter: (params: { value: any }) => { const num = toSafeNumber(params.value); return new Intl.NumberFormat('en-US', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num); } }] : []),
+        ...(Number(purchaseRequest?.flow_level_running) > 1 && currentItem?.service_rm_flag !== 'Addl Desc' ? [{ field: 'supplier', headerName: 'Supplier', headerClass: 'flex justify-center', width: 130,
+          valueGetter: (params: { data: { supplier: string } }) => {
+            const supp = supplierList?.tableData?.find((supplierItem) => supplierItem.supp_code === params.data.supplier);
+            return toSafeString(supp?.supp_name || params.data.supplier);
+          },
+          suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true }] : []),
+        ...(Number(purchaseRequest?.flow_level_running) > 1 && currentItem?.service_rm_flag !== 'Addl Desc' ? [{ field: 'curr_name', headerName: 'Currency', headerClass: 'flex justify-center', width: 130,
+          valueGetter: (params: { data: { curr_code: any } }) => {
+            const curr = currency?.tableData?.find((c: { curr_code: any }) => c.curr_code === params.data.curr_code);
+            return curr ? curr.curr_name : toSafeString(params.data.curr_code, 'QAR');
+          },
+          suppressCellFlash: true, suppressMovable: true, suppressAutoSize: true }] : [])
       ],
       [costList?.tableData, uomList?.tableData, supplierList?.tableData]
     );
 
     return (
       <div ref={gridWrapperRef} className="ag-theme-alpine ag-theme-alpine-mytable" style={{ maxHeight: 400, overflow: 'auto' }}>
-        <AgGridReact
-          rowData={rowData} onCellValueChanged={onCellValueChanged} columnDefs={columnDefs}
+        <AgGridReact rowData={rowData} onCellValueChanged={onCellValueChanged} columnDefs={columnDefs}
           components={{ CostCodeCellRenderer, ServiceTypeCellRenderer, LUOMCellRenderer, ProductCellRenderer, SupplierSelectCellRenderer }}
           defaultColDef={{ resizable: true, sortable: true, filter: false }} domLayout="autoHeight"
           animateRows={true} rowHeight={20} headerHeight={25} suppressClickEdit={isViewMode || gs_userlevel === 5}
@@ -1129,9 +913,10 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     if (editingIndex === null) {
       const errors = validatePurchaseRequest({ ...purchaseRequest, items: [...purchaseRequest.items, currentItem] }, termsConditions);
       if (errors.length > 0) {
-        setSubmitStatus(errors.join(' '));
-        const formattedErrors = errors.map((error) => `${error}`).join('\n');
-        dispatch(showAlert({ severity: 'error', message: formattedErrors, open: true }));
+        const formattedErrors = errors.map((error: any) =>
+          typeof error === 'string' ? error : (error?.message || JSON.stringify(error))
+        ).join('\n');
+        safeShowAlert('error', formattedErrors);
         setLoading(false);
         return;
       }
@@ -1148,7 +933,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
         curr_name: currentItem.curr_name || 'Qatari Riyal',
         upp: currentItem.upp === undefined || currentItem.upp === null || currentItem.upp === 0 ? 1 : currentItem.upp
       };
-
       if (editingIndex !== null) {
         newItems[editingIndex] = { ...newItems[editingIndex], ...itemToAdd };
         if (itemToAdd.name !== 'supplier' || itemToAdd.service_rm_flag !== 'Addl Desc') {
@@ -1202,11 +986,12 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
       purchaseRequest.last_action = 'SAVEASDRAFT';
       const errors = validatePurchaseRequest(purchaseRequest, termsConditions);
       if (errors.length > 0) {
-        setSubmitStatus(`Error test: ${errors.join(' ')}`);
         setLoading(false);
         dispatch(closeBackdrop());
-        const formattedErrors = errors.map((error) => `${error}`).join('\n');
-        dispatch(showAlert({ severity: 'error', message: formattedErrors, open: true }));
+        const formattedErrors = errors.map((error: any) =>
+          typeof error === 'string' ? error : (error?.message || JSON.stringify(error))
+        ).join('\n');
+        safeShowAlert('error', formattedErrors);
         return;
       }
 
@@ -1224,7 +1009,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
         files: filesData
       };
       if (request_number) purchaseRequestData.request_number = request_number;
-      
       purchaseRequestData.last_action = 'SAVEASDRAFT';
       purchaseRequestData.company_code = user?.company_code ?? '';
 
@@ -1302,7 +1086,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     if (loading) return;
     setLoading(true);
     setSubmitStatus(null);
-
     try {
       const purchaseRequestData: TPurchaserequestPf = {
         ...purchaseRequest,
@@ -1312,17 +1095,13 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
         last_action: 'SUBMITTED',
         files: filesData
       };
-
       if (request_number) purchaseRequestData.request_number = request_number;
       purchaseRequestData.last_action = 'SUBMITTED';
       purchaseRequestData.company_code = user?.company_code ?? '';
-
       const currencyRate = 1.2;
       purchaseRequestData.items = purchaseRequestData.items.map((item) => ({ ...item, currency_rate: currencyRate }));
-
       await GmPfServiceInstance.updatepurchaserequest({ ...purchaseRequestData, updated_by: user?.loginid });
       setSubmitStatus('Purchase request submitted successfully12!');
-
       if (!request_number) setPurchaseRequest(initialPurchaseRequest());
     } catch (error) {
       console.error('Error submitting purchase request:', error);
@@ -1332,19 +1111,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
       onClose(true);
     }
   };
-
-  // const grandTotals = Object.entries(groupItemsByCostName(purchaseRequest.items)).map(([cost_name, group], idx) => {
-  //   const grandTotalForGroup = group.items.reduce((sum, item) => sum + item.amount, 0);
-  //   return { grandTotal: grandTotalForGroup };
-  // });
-
-  // const overallGrandTotal = grandTotals.reduce((sum, group) => sum + group.grandTotal, 0);
-
-  // Object.entries(groupItemsByCostName(purchaseRequest.items)).forEach(([cost_name, group], idx) => {
-  //   group.items.forEach((item, index) => {
-  //     const supp = item.supplier || '';
-  //   });
-  // });
 
   const [filesData, setFilesData] = useState<TFile[]>([]);
   const [uploadFilesPopup, setUploadFilesPopup] = useState<TUniversalDialogProps>({
@@ -1358,9 +1124,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     enabled: !!isEditMode && !!request_number
   });
 
-  useEffect(() => {
-    if (files) setFilesData(files);
-  }, [files]);
+  useEffect(() => { if (files) setFilesData(files); }, [files]);
 
   const handleUploadPopup = async () => {
     if (!request_number) {
@@ -1381,7 +1145,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
   const calculateTotalAmount = (items: any[]) => {
     const total = items.reduce((sum: number, item: any) => {
-      const amount = calculateAmount(item.final_rate, item.allocated_approved_quantity);
+      const amount = calculateAmount(toSafeNumber(item.final_rate), toSafeNumber(item.allocated_approved_quantity));
       return sum + amount;
     }, 0);
     return Math.round((total + Number.EPSILON) * 100) / 100;
@@ -1405,33 +1169,33 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
   const handleUpdateRequest = async (action: string, l_flow_level: number, actionFunction: (data: TPurchaserequestPf) => void) => {
     if (window.opener) window.opener.postMessage({ type: 'SET_LAST_ACTION', action }, '*');
-    
+
     const purchaseRequestData = purchaseRequest;
     purchaseRequestData.last_action = action;
 
     try {
       if (purchaseRequest?.wo_number?.trim() !== '' && !isUploaded && gs_userlevel === 1 && action === 'SUBMITTED') {
-        dispatch(showAlert({ severity: 'error', message: 'Please Select the Work Order Document uploaded status', open: true }));
+        safeShowAlert('error', 'Please Select the Work Order Document uploaded status');
         return;
       } else if (!isUploaded && gs_userlevel === 3 && action === 'SUBMITTED') {
-        dispatch(showAlert({ severity: 'error', message: 'Please Select the Comparison Excel Sheet uploaded status', open: true }));
+        safeShowAlert('error', 'Please Select the Comparison Excel Sheet uploaded status');
         return;
       }
       const errors = validatePurchaseRequest(purchaseRequest, termsConditions);
       if (errors.length > 0) {
-        setSubmitStatus(`Error test: ${errors.join(' ')}`);
+        const formattedErrors = errors.map((error: any) =>
+          typeof error === 'string' ? error : (error?.message || JSON.stringify(error))
+        ).join('\n');
+        setSubmitStatus(`Error: ${formattedErrors}`);
         setLoading(false);
-        const formattedErrors = errors.map((errors) => `${errors}`).join('\n');
-        dispatch(showAlert({ severity: 'error', message: formattedErrors, open: true }));
+        safeShowAlert('error', formattedErrors);
         return;
       }
 
       dispatch(openBackdrop());
       purchaseRequestData.last_action = action;
       if (l_flow_level > 0) purchaseRequestData.flow_level_running = l_flow_level;
-
       purchaseRequestData.company_code = user?.company_code ?? '';
-
       const allQAR = purchaseRequestData.items.every(item => !item.curr_code || item.curr_code === 'QAR');
       const currencyRate = allQAR ? 1 : (purchaseRequest.exchange_rate || 1);
       purchaseRequestData.items = purchaseRequestData.items.map((item) => ({ ...item, currency_rate: currencyRate }));
@@ -1542,7 +1306,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
     setCurrentItem((prev: any) => {
       const updatedItem = { ...prev, [fieldName]: value };
       if (fieldName === 'upp') updatedItem.upp = Number(value) || 1;
-
       if (fieldName === 'curr_code') {
         const selectedCurrency = currency?.tableData?.find((c) => c.curr_code === value);
         if (selectedCurrency) updatedItem.curr_name = selectedCurrency.curr_name;
@@ -1553,7 +1316,6 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           return { ...prevRequest, items: updatedItems };
         });
       }
-
       if (fieldName === 'service_rm_flag') {
         if (value === 'Service') {
           updatedItem.item_code = ''; updatedItem.p_uom = ''; updatedItem.l_uom = ''; updatedItem.upp = 1;
@@ -1561,27 +1323,22 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           updatedItem.item_code = ''; updatedItem.p_uom = ''; updatedItem.upp = 0;
         }
       }
-
       const item_p_qty = Number(updatedItem.item_p_qty) || 0;
       const upp = Number(updatedItem.upp) || 1;
       const item_l_qty = Number(updatedItem.item_l_qty) || 0;
       const item_rate = Number(updatedItem.item_rate) || 0;
       let discount_amount = Number(updatedItem.discount_amount) || 0;
-
       if (fieldName === 'discount_amount' || fieldName === 'item_rate') {
         if (discount_amount >= item_rate && item_rate !== 0) {
           discount_amount = item_rate - 0.01;
           updatedItem.discount_amount = discount_amount;
         }
       }
-
       if (updatedItem.service_rm_flag === 'RM') updatedItem.allocated_approved_quantity = item_p_qty * upp + item_l_qty;
       else if (updatedItem.service_rm_flag === 'Service') updatedItem.allocated_approved_quantity = item_l_qty;
       else updatedItem.allocated_approved_quantity = item_l_qty;
-
       updatedItem.final_rate = item_rate - discount_amount;
       updatedItem.amount = updatedItem.allocated_approved_quantity * updatedItem.final_rate;
-
       return updatedItem;
     });
   };
@@ -1589,7 +1346,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
   return (
     <div className="flex flex-col h-auto font-segoe">
       <div className="sticky top-0 z-10 bg-white font-segoe">
-        <CustomAlert />
+        {/* <CustomAlert /> */}
         <Tabs
           value={tabIndex} onChange={handleTabChange}
           TabIndicatorProps={{ style: { display: 'none' } }}
@@ -1622,7 +1379,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                 />
               </Box>
             )}
-            
+
             {tabIndex === 0 && (isSendBackModalOpen ? null : (
               <>
                 <div className="mt-1 flex flex-col">
@@ -1630,8 +1387,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                   <div className="flex justify-between">
                     <div className="flex flex-col">
                       <Typography variant="h5" className="font-bold text-xs">Purchase Request Number</Typography>
-                      <Typography variant="h5" className="font-bold text-xs">{purchaseRequest.request_number || 'N/A'}</Typography>
-                    </div>
+                     <Typography variant="h5" className="font-bold text-xs">{displayRequestNumber}</Typography>
+                 </div>
                     <div className="flex flex-col items-end">
                       <Typography variant="h5" className="font-bold text-xs">Amount</Typography>
                       <Typography variant="h5" className="font-bold text-xs">
@@ -1698,7 +1455,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                               shouldDisableDate={(date) => date.isBefore(purchaseRequest.request_date ? dayjs(purchaseRequest.request_date) : dayjs(), 'day') && !isViewMode}
                             />
                           </LocalizationProvider>
-                          
+
                           {gs_userlevel === 4 && purchaseRequest.items.some(i => i.curr_code && i.curr_code !== 'QAR') && (
                             <TextField
                               label="Exchange Rate *" size="small"
@@ -1755,12 +1512,10 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
                       <div className="flex gap-4 flex-col mt-1 ">
                         <div className="flex gap-2 flex-col md:flex-row">
-                          <TextField
-                            select size="small" name="type_of_contract" value={purchaseRequest.type_of_contract || ''}
+                          <TextField select size="small" name="type_of_contract" value={purchaseRequest.type_of_contract || ''}
                             label="Type of Contract *" onChange={(e) => handleChange('type_of_contract', e.target.value)}
                             fullWidth InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
-                            SelectProps={{
-                              native: false, displayEmpty: false,
+                            SelectProps={{ native: false, displayEmpty: false,
                               renderValue: (selected) => { if (!selected) return <em>Select Type of Contract</em>; return selected === 'AMC' ? 'AMC' : 'One Time'; },
                               IconComponent: isViewMode ? () => null : undefined
                             }}
@@ -1768,8 +1523,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             {!isViewMode && [<MenuItem key="amc" value="AMC">AMC</MenuItem>, <MenuItem key="onetime" value="One Time">One Time</MenuItem>]}
                           </TextField>
                           <LocalizationProvider dateAdapter={AdapterDayjs}>
-                            <DatePicker
-                              className="w-full" name="amc_from" format="DD/MM/YYYY"
+                            <DatePicker className="w-full" name="amc_from" format="DD/MM/YYYY"
                               value={purchaseRequest.amc_from ? dayjs(purchaseRequest.amc_from) : null}
                               onChange={(newValue) => {
                                 handleChange('amc_from', newValue ? newValue.toISOString() : new Date().toISOString());
@@ -1782,8 +1536,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             />
                           </LocalizationProvider>
                           <LocalizationProvider dateAdapter={AdapterDayjs}>
-                            <DatePicker
-                              className="w-full" name="amc_to" format="DD/MM/YYYY"
+                            <DatePicker className="w-full" name="amc_to" format="DD/MM/YYYY"
                               value={purchaseRequest.amc_to ? dayjs(purchaseRequest.amc_to) : null}
                               onChange={(newValue) => handleChange('amc_to', newValue ? newValue.toISOString() : new Date().toISOString())}
                               readOnly={isViewMode || gs_userlevel === 3 || gs_userlevel === 5}
@@ -1794,8 +1547,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             />
                           </LocalizationProvider>
 
-                          <TextField
-                            select size="small" name="type_of_pr" value={purchaseRequest.type_of_pr || ''} label="Type of PR *"
+                          <TextField select size="small" name="type_of_pr" value={purchaseRequest.type_of_pr || ''} label="Type of PR *"
                             onChange={(e) => !isViewMode && handleChange('type_of_pr', e.target.value)}
                             fullWidth InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ displayEmpty: false, renderValue: (selected) => String(selected), IconComponent: isViewMode ? () => null : undefined }}
@@ -1806,8 +1558,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Charge to Supplier" disabled={isViewMode}>Charge to Supplier</MenuItem>
                           </TextField>
 
-                          <TextField
-                            select size="small" name="contract_soft_hard" value={purchaseRequest.contract_soft_hard || ''} label="Contract Type"
+                          <TextField select size="small" name="contract_soft_hard" value={purchaseRequest.contract_soft_hard || ''} label="Contract Type"
                             onChange={(e) => !isViewMode && handleChange('contract_soft_hard', e.target.value)}
                             fullWidth InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1818,8 +1569,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Special" disabled={isViewMode}>Special</MenuItem>
                           </TextField>
 
-                          <TextField
-                            select size="small" name="amc_service_status" value={purchaseRequest.amc_service_status || ''} label="AMC Service Status"
+                          <TextField select size="small" name="amc_service_status" value={purchaseRequest.amc_service_status || ''} label="AMC Service Status"
                             onChange={(e) => !isViewMode && handleChange('amc_service_status', e.target.value)}
                             fullWidth InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1830,8 +1580,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Flag raised" disabled={isViewMode}>Flag raised</MenuItem>
                           </TextField>
 
-                          <TextField
-                            select size="small" name="service_type" value={purchaseRequest.service_type || ''} label="Service Type"
+                          <TextField select size="small" name="service_type" value={purchaseRequest.service_type || ''} label="Service Type"
                             onChange={(e) => !isViewMode && handleChange('service_type', e.target.value)}
                             fullWidth InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1848,8 +1597,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                         </div>
 
                         <div className="flex gap-2 flex-col md:flex-row">
-                          <TextField
-                            select size="small" name="type_of_material_supply" value={purchaseRequest.type_of_material_supply || ''} label="Type of Material Supply"
+                          <TextField select size="small" name="type_of_material_supply" value={purchaseRequest.type_of_material_supply || ''} label="Type of Material Supply"
                             onChange={(e) => !isViewMode && handleChange('type_of_material_supply', e.target.value)}
                             fullWidth InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1860,8 +1608,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Supply Installation" disabled={isViewMode}>Supply Installation</MenuItem>
                           </TextField>
 
-                          <TextField
-                            select size="small" name="covered_by_contract_yes" value={purchaseRequest.covered_by_contract_yes || ''} label="Covered by Contract"
+                          <TextField select size="small" name="covered_by_contract_yes" value={purchaseRequest.covered_by_contract_yes || ''} label="Covered by Contract"
                             onChange={(e) => !isViewMode && handleChange('covered_by_contract_yes', e.target.value)}
                             fullWidth variant="outlined" InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1871,8 +1618,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="No" disabled={isViewMode}>No</MenuItem>
                           </TextField>
 
-                          <TextField
-                            select size="small" name="flag_sharing_cost" value={purchaseRequest.flag_sharing_cost || ''} label="Flag Sharing Cost"
+                          <TextField select size="small" name="flag_sharing_cost" value={purchaseRequest.flag_sharing_cost || ''} label="Flag Sharing Cost"
                             onChange={(e) => !isViewMode && handleChange('flag_sharing_cost', e.target.value)}
                             fullWidth variant="outlined" InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1881,9 +1627,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Yes" disabled={isViewMode}>Yes</MenuItem>
                             <MenuItem value="No" disabled={isViewMode}>No</MenuItem>
                           </TextField>
-                          
-                          <TextField
-                            select size="small" name="budgeted_yes" value={purchaseRequest.budgeted_yes || ''} label="Budgeted"
+
+                          <TextField select size="small" name="budgeted_yes" value={purchaseRequest.budgeted_yes || ''} label="Budgeted"
                             onChange={(e) => !isViewMode && handleChange('budgeted_yes', e.target.value)}
                             fullWidth variant="outlined" InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1892,9 +1637,8 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                             <MenuItem value="Yes" disabled={isViewMode}>Yes</MenuItem>
                             <MenuItem value="No" disabled={isViewMode}>No</MenuItem>
                           </TextField>
-                          
-                          <TextField
-                            select size="small" name="checked_store_yes" value={purchaseRequest.checked_store_yes || ''} label="Checked Store"
+
+                          <TextField select size="small" name="checked_store_yes" value={purchaseRequest.checked_store_yes || ''} label="Checked Store"
                             onChange={(e) => !isViewMode && handleChange('checked_store_yes', e.target.value)}
                             fullWidth variant="outlined" InputLabelProps={{ shrink: true }} InputProps={{ readOnly: isViewMode || gs_userlevel !== 1 }}
                             SelectProps={{ native: false, displayEmpty: false, renderValue: (selected) => selected ? String(selected) : 'N/A', IconComponent: isViewMode ? () => null : undefined }}
@@ -1954,7 +1698,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                 </div>
               </>
             ))}
-            
+
             {tabIndex === 1 && [1, 3, 5].includes(Number(gs_userlevel)) && (
               <div className="flex flex-col h-full">
                 <div className="w-full overflow-x-auto flex-grow">
@@ -1964,7 +1708,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                 {isOpenDetail && (
                   <Modal open={isOpenDetail} onClose={handleCloseDetail} aria-labelledby="add-item-modal" aria-describedby="add-item-modal-description">
                     <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 1390, bgcolor: 'background.paper', boxShadow: 24, p: 2, borderRadius: 1 }}>
-                      <CustomAlert />
+                      {/* <CustomAlert /> */}
                       <div className="w-full flex gap-2 justify-center items-center">
                         <FormControl sx={{ width: '300px' }}>
                           <InputLabel id="demo-simple-select-label">Service Type *</InputLabel>
@@ -2199,16 +1943,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                 <>
                   <Tooltip title="React Report">
                     <Button onClick={() => {
-                      // 1. Get the PO Number if it exists, otherwise fallback to the PR Number
-                      const rawPoNumber = purchaseRequest.items?.find((item: any) => item.ref_doc_no)?.ref_doc_no 
+                      const rawPoNumber = purchaseRequest.items?.find((item: any) => item.ref_doc_no)?.ref_doc_no
                         || (purchaseRequest as any).reference_doc_no;
-                        
                       const docNumber = rawPoNumber || purchaseRequest.request_number || '';
                       const formattedDocNumber = docNumber.replace(/\$/g, '/');
-
-                      // 2. Check if the number is a PO or PR based on the string
                       const isPo = formattedDocNumber.includes('PO');
-
                       setPrReportValues({
                         open: true,
                         companyCode: purchaseRequest.company_code || 'BSG',
@@ -2217,11 +1956,11 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
                         isPo: isPo
                       });
                     }}>
-                      <IoPrintSharp /> 
+                      <IoPrintSharp />
                     </Button>
                   </Tooltip>
                   <Tooltip title="Print & View">
-                    <Button disabled={!purchaseRequest.request_number} color="primary" onClick={handleOpenRequestForm}>
+                    <Button disabled color="primary" onClick={handleOpenRequestForm}>
                       <IoPrintSharp />
                     </Button>
                   </Tooltip>
@@ -2302,7 +2041,7 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
           />
         </div>
       </Modal>
-      
+
       {openRequestForm && (
         <Dialog open={openRequestForm} onClose={handleCloseRequestForm} fullWidth maxWidth="lg">
           <DialogContent>
@@ -2335,24 +2074,22 @@ const AddPurchaserequestPfForm: React.FC<AddPurchaserequestPfFormProps> = ({
 
       {prReportValues.open && (
         prReportValues.isPo ? (
-          // 🛑 IF IT'S A PO NUMBER, OPEN PO REPORT
           <ReportDialogPage
             Report={PurchaseReportDesign}
             required_values={{
               companyCode: prReportValues.companyCode,
-              refDocNo: prReportValues.documentNumber, // PO Report uses refDocNo
+              refDocNo: prReportValues.documentNumber,
               divCode: prReportValues.divCode
             }}
             title="Purchase Order Report"
             onClose={() => setPrReportValues(prev => ({ ...prev, open: false }))}
           />
         ) : (
-          // 🛑 IF IT'S A PR NUMBER, OPEN PR REPORT
           <ReportDialogPage
             Report={PurchaseRequestReportDesign}
             required_values={{
               companyCode: prReportValues.companyCode,
-              requestNumber: prReportValues.documentNumber, // PR Report uses requestNumber
+              requestNumber: prReportValues.documentNumber,
               divCode: prReportValues.divCode
             }}
             title="Purchase Request Report"

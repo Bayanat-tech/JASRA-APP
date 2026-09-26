@@ -1,12 +1,12 @@
-import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, Typography } from '@mui/material';
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from './dynamicData';
 import { cancel, draft, POsignatureImg } from './img';
 import { spellNumber, formatAmount } from './functions';
-import { FiDownload } from 'react-icons/fi';
-import { exportPurchaseOrderToExcel } from './purchaseOrderExcelExport';
+// import { FiDownload } from 'react-icons/fi';
+// import { exportPurchaseOrderToExcel } from './purchaseOrderExcelExport'; // 🛑 COMMENTED OUT — Excel export not working (merge cells error)
 
 export interface PurchaseOrderData {
   WO_NUMBER: string;
@@ -106,17 +106,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     console.log('Rendering PurchaseReportDesign with:', { divCode, refDocNo });
     const [suppCode, setSuppCode] = useState<string>('');
 
-    // Helper to convert to Title Case and clean up extra 'S' characters
-    // const toTitleCase = (str: string) => {
-    //   if (!str) return '';
-    //   const cleaned = str.replace(/s{2,}$/i, 's');
-    //   return cleaned
-    //     .toLowerCase()
-    //     .split(' ')
-    //     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    //     .join(' ');
-    // };
-
     const div_code_sql = useMemo(() => `
       SELECT DISTINCT div_code FROM PURCHASE_REQUEST_DETAILS WHERE ref_doc_no = REPLACE('${refDocNo}', '/', '$')
     `, []);
@@ -204,7 +193,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
 `, [suppCode, poData?.COMPANY_CODE]);
 
-    const { data: supplierInfo, isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
+    const {  isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
       queryKey: ['purchase_report_supplier_info', suppCode, poData?.COMPANY_CODE],
       staleTime: 1000 * 60 * 5,
       queryFn: async () => {
@@ -268,7 +257,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       return undefined;
     }, [poData]);
 
-    // WO No Logic from SSRS Expression
     const formattedWoNo = useMemo(() => {
       if (!poData) return '-';
       const type = poData.TYPE_OF_PR;
@@ -291,17 +279,18 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         : parsed.toLocaleDateString('en-GB');
     }, [poData?.DOC_DATE]);
 
-    const handleExportExcel = useCallback(async () => {
-      if (!poData) return;
-      await exportPurchaseOrderToExcel({
-        poData,
-        poItems,
-        supplierInfo,
-        buyerInfo,
-        deliveryInfo,
-        termsInfo,
-      });
-    }, [poData, poItems, supplierInfo, buyerInfo, deliveryInfo, termsInfo]);
+    // 🛑 COMMENTED OUT — Excel export crashing with "Cannot merge already merged cells"
+    // const handleExportExcel = useCallback(async () => {
+    //   if (!poData) return;
+    //   await exportPurchaseOrderToExcel({
+    //     poData,
+    //     poItems,
+    //     supplierInfo,
+    //     buyerInfo,
+    //     deliveryInfo,
+    //     termsInfo,
+    //   });
+    // }, [poData, poItems, supplierInfo, buyerInfo, deliveryInfo, termsInfo]);
 
     const totalAmount = useMemo(() => {
       return poItems.reduce((sum, item) => {
@@ -606,7 +595,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             padding: '3px 6px',
             fontWeight: 700,
             fontSize: 10.5,
-            // backgroundColor: CYAN_BG, // User's custom change to remove cyan from total row
           }}
         >
           Total: {spellNumber(totalAmount, poData.CURR_CODE)}
@@ -629,7 +617,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
 
     const renderTermsAndSignature = (elRef?: React.Ref<HTMLDivElement>) => (
       <Box ref={elRef} sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-        {/* Text Block (Outside the border) */}
         <Box className="print-avoid" sx={{ px: 1, py: 0.75 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 10 }}>
             Above is as per attached quotation Ref: {poData.QUATATION_REFERENCE}
@@ -651,18 +638,15 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           <Typography sx={{ fontSize: 9.5 }}>Phone: 8974 4404 0800 Fax: +974 4404 0801</Typography>
         </Box>
 
-        {/* THE SINGLE CONTINUOUS BORDER CONTAINER */}
         <Box
           sx={{
-            flex: 1, // Stretches to fill remaining page height
+            flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            border: `1px solid ${BORDER_DARK}`, // One single border around everything
+            border: `1px solid ${BORDER_DARK}`,
           }}
         >
-          {/* Signature Row */}
           <Box sx={{ display: 'flex', flex: 1, minHeight: '130px' }}>
-            {/* Left Column (Supplier) */}
             <Box
               sx={{
                 width: '50%',
@@ -682,7 +666,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               </Box>
             </Box>
 
-            {/* Right Column (The Maintainers) */}
             <Box sx={{ width: '50%', p: '8px 10px', display: 'flex', flexDirection: 'column' }}>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: 10.5, mb: 1.5, textAlign: 'center' }}>
@@ -703,16 +686,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             </Box>
           </Box>
 
-          {/* Footer Section (Inside the same border) - Uses your EXACT working logo code */}
           <Box className="print-avoid" sx={{ borderTop: `1px solid ${BORDER_DARK}`, display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1, py: 0.75, backgroundColor: CYAN_BG, borderBottom: `1px solid ${BORDER_DARK}` }}>
               
-              {/* LEFT SIDE: Revision */}
               <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '80px' }}>
                 {poData?.REF_DOC_NO?.startsWith('AND') ? 'F502 REV 00' : 'FS05 REV 01'}
               </Typography>
 
-              {/* CENTER: Toll Free + Website */}
               <Box sx={{ textAlign: 'center', flex: 1 }}>
                 {poData?.REF_DOC_NO?.startsWith('AJSS') ? (
                   <>
@@ -744,7 +724,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                 )}
               </Box>
 
-              {/* RIGHT SIDE: Form Issued Date */}
               <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '80px', textAlign: 'right' }}>
               {poData?.REF_DOC_NO?.startsWith('AJSS') 
                   ? 'Form Issued Date: 26-02-2020' 
@@ -774,7 +753,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
 
     const renderPageFooter = (elRef?: React.Ref<HTMLDivElement>) => (
       <Box ref={elRef} className="print-avoid" sx={{ mt: 0 }}>
-        {/* This borderTop will perfectly meet the signature box's bottom edge */}
         <Box sx={{ 
           borderTop: `1px solid ${BORDER_DARK}`, 
           borderBottom: `1px solid ${BORDER_DARK}`, 
@@ -846,6 +824,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           },
         }}
       >
+        {/* 🛑 COMMENTED OUT — Export to Excel button removed because exportPurchaseOrderToExcel crashes with "Cannot merge already merged cells" */}
+        {/*
         <Box
           sx={{
             display: 'flex',
@@ -868,6 +848,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             Export to Excel
           </Button>
         </Box>
+        */}
 
         <Box
           aria-hidden
@@ -894,7 +875,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             </tbody>
           </table>
           {renderTermsAndSignature(termsSignRef)}
-          {/* {renderPageFooter(footerRef)} */}
         </Box>
 
         {pagesToRender.map((chunk, pageIdx) => {
@@ -913,8 +893,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   breakAfter: isLastPage ? 'auto' : 'page',
                   pageBreakAfter: isLastPage ? 'auto' : 'always',
                 },
-                border: '1px solid #000', // MOVED HERE
-                p: 2, // MOVED HERE
+                border: '1px solid #000',
+                p: 2,
                 display: 'flex',
                 flexDirection: 'column',
               }}
@@ -948,8 +928,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                 {isLastPage && renderTermsAndSignature()}
               </Box>
               {!isLastPage && renderPageFooter()}
-
-              {/* {renderPageFooter()} */}
             </Box>
           );
         })}
@@ -965,8 +943,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               breakBefore: 'page',
               pageBreakBefore: 'always',
             },
-            border: '1px solid #000', // ADDED HERE
-            p: 2, // ADDED HERE
+            border: '1px solid #000',
+            p: 2,
             display: 'flex',
             flexDirection: 'column',
           }}

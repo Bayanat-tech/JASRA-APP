@@ -115,6 +115,21 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
 }) => {
   const dispatch = useDispatch();
 
+  // 🛑 SAFE ALERT HELPER — prevents { message: ... } / non-string payloads
+  // from ever being handed to the alert UI, which is what was crashing React
+  // with "Objects are not valid as a React child (found: object with keys {message})".
+  const safeShowAlert = (severity: 'success' | 'info' | 'warning' | 'error', message: any) => {
+    const safeMessage =
+      typeof message === 'string'
+        ? message
+        : message?.message
+          ? String(message.message)
+          : message
+            ? JSON.stringify(message)
+            : 'An error occurred';
+    dispatch(showAlert({ severity, message: safeMessage, open: true }));
+  };
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [tabIndex, setTabIndex] = useState<number>(0);
@@ -251,8 +266,22 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
 
       if (messageBoxData && messageBoxData.length > 0) {
         const box = messageBoxData[0] as any;
-        popupMessage = box.MESSAGE_BOX ?? 'Records saved successfully!';
-        severity = (box.MESSAGE_TYPE?.toLowerCase() as typeof severity) ?? 'success';
+
+        // 🛑 SAFE: MESSAGE_BOX can come back as a plain string, or (on error)
+        // as an object like { message: "..." }. Never let the raw object through.
+        const rawMessage = box?.MESSAGE_BOX;
+        popupMessage =
+          typeof rawMessage === 'string'
+            ? rawMessage
+            : rawMessage?.message
+              ? String(rawMessage.message)
+              : rawMessage
+                ? JSON.stringify(rawMessage)
+                : 'Records saved successfully!';
+
+        const rawType = box?.MESSAGE_TYPE;
+        const typeStr = typeof rawType === 'string' ? rawType.toLowerCase() : 'success';
+        severity = (['success', 'info', 'warning', 'error'].includes(typeStr) ? typeStr : 'success') as typeof severity;
       } else {
         popupMessage = 'Contact Help desk for checking Message!';
       }
@@ -260,23 +289,11 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
       console.log('popupMessage', popupMessage);
       console.log('severity', severity);
 
-      dispatch(
-        showAlert({
-          severity,
-          message: popupMessage ?? '',
-          open: true
-        })
-      );
+      safeShowAlert(severity, popupMessage ?? '');
       return severity;
     } catch (error) {
       console.error('Error fetching alert message:', error);
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message: 'An error occurred while fetching the alert message.',
-          open: false
-        })
-      );
+      safeShowAlert('error', 'An error occurred while fetching the alert message.');
     }
   };
   const handleConfirm = async () => {
@@ -437,7 +454,44 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
       if (request_number) {
         const response = await GmPfServiceInstance.getBudgetRequestNumber(request_number);
         console.log('🔍 RAW API RESPONSE:', JSON.stringify(response, null, 2));
-        
+
+        // 🛑 HARD GUARD: if the API returned an error object like { message: "..." }
+        // instead of the expected shape, bail out safely rather than letting it
+        // flow into state and eventually get rendered as a React child.
+        if (
+          response &&
+          typeof response === 'object' &&
+          !Array.isArray(response) &&
+          'message' in response &&
+          !('budgetRequests' in response)
+        ) {
+          console.error('getBudgetRequestNumber returned error object:', response);
+          setHeaderData({
+            request_number: '',
+            company_code: '',
+            request_date: new Date(),
+            description: '',
+            remarks: '',
+            last_action: '',
+            project_code: '',
+            updated_by: user?.loginid || '',
+            created_by: '',
+            total_project_cost: 0,
+            proj_budget_alloc: 0,
+            tot_proj_po: 0,
+            tot_proj_pr: 0,
+            tot_proj_cost_po: 0,
+            total_proj_cost_pr: 0,
+            flow_level_running: 1
+          });
+          setItemData([]);
+          setAdditionalData([]);
+          setTMonthCostWiseInfodata([]);
+          setTMonthProjectWiseInfodata([]);
+          setDetailedBudgetData([]);
+          return;
+        }
+
         if (response) {
           if ('budgetRequests' in response) {
             const { budgetRequests, itemBudgets, additionalBudgets, TMonthCostWiseInfodata, TMonthProjectWiseInfodata } = response;
@@ -483,15 +537,15 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
             try {
               console.log('🔍 Attempting to fetch detailed budget data...');
               console.log('🔍 Request number:', request_number);
-              
+
               // Try the API call
               const detailedResponse: any = await GmPfServiceInstance.getBudgetReqCostdetails(request_number, '');
               console.log('🔍 RAW Detailed Budget Response:', JSON.stringify(detailedResponse, null, 2));
               console.log('🔍 Type of response:', typeof detailedResponse);
               console.log('🔍 Is Array:', Array.isArray(detailedResponse));
-              
+
               let processedData: any[] = [];
-              
+
               // Handle different response structures
               if (detailedResponse && typeof detailedResponse === 'object') {
                 if (Array.isArray(detailedResponse)) {
@@ -505,10 +559,10 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
                   processedData = detailedResponse.itemsData;
                 }
               }
-              
+
               console.log('🔍 Processed data length:', processedData.length);
               console.log('🔍 First item:', processedData[0]);
-              
+
               if (processedData.length > 0) {
                 const formattedDetailedData = processedData.map((item: any) => {
                   console.log('🔍 Mapping item:', item);
@@ -526,7 +580,7 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
                     prev_appr_amt: Number(item.prev_appr_amt || item.prevApprAmt || item.PREV_APPR_AMT) || 0
                   };
                 });
-                
+
                 console.log('✅ Formatted detailed data:', JSON.stringify(formattedDetailedData, null, 2));
                 setDetailedBudgetData(formattedDetailedData);
               } else {
@@ -547,7 +601,7 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
                     pr_amount: Number(item.prAmount || item.pr_amount) || 0,
                     prev_appr_amt: Number(item.prevApprAmt || item.prev_appr_amt) || 0
                   }));
-                
+
                 if (fallbackData.length > 0) {
                   console.log('✅ Using fallback data from itemBudgets:', fallbackData);
                   setDetailedBudgetData(fallbackData);
@@ -767,29 +821,29 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
 
       const response = await GmPfServiceInstance.updatebudgetrequest(payload);
       console.log('requestNumberRef.current', requestNumberRef.current);
-      
+
       if (!headerData.request_number) {
         const rawCode = (await GmPfServiceInstance.fetchRequestNoFromGTSession()) || '';
         const formattedCode = rawCode.replace(/\$/g, '/');
         console.log('formattedCode', formattedCode);
         setFormattedRequestNumber(formattedCode);
-        
+
         if (formattedCode) {
           console.log('Checking 1');
           setSuccess(true);
-          
+
           // ✅ FIX: Properly update headerData with new object reference
           setHeaderData((prev) => ({
             ...prev,
             request_number: formattedCode
           }));
-          
+
           // ✅ Also update the ref
           requestNumberRef.current = formattedCode;
-          
+
           // ✅ Enable tabs after getting request number
           setIsTabDisabled(false);
-          
+
           console.log('Checking 2');
           console.log('Checking 3');
         } else {
@@ -1161,13 +1215,7 @@ const AddBudgetRequestForm: React.FC<AddBudgetrequestPfFormProps> = ({
   // Replace the handleReport function
   const handleOpenReport = () => {
     if (!headerData?.request_number) {
-      dispatch(
-        showAlert({
-          severity: 'error',
-          message: 'Please generate a request number first.',
-          open: true
-        })
-      );
+      safeShowAlert('error', 'Please generate a request number first.');
       return;
     }
     setOpenReportDialog(true);

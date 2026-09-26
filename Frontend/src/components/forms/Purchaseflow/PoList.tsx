@@ -25,13 +25,13 @@ const PoList = ({ PoOpen, setPoOpen, POdata, requestNumber, div_code }: PoListPr
     divCode: ''
   });
 
-  const handlePDF = (poNumber?: string) => {
-    if (poNumber) {
-      setSelectedPO(poNumber);
-      setPoOpen(false);
-      setShowReport(true);
-    }
-  };
+  // const handlePDF = (poNumber?: string) => {
+  //   if (poNumber) {
+  //     setSelectedPO(poNumber);
+  //     setPoOpen(false);
+  //     setShowReport(true);
+  //   }
+  // };
 
   const handleReportClose = () => {
     setShowReport(false);
@@ -73,9 +73,9 @@ const PoList = ({ PoOpen, setPoOpen, POdata, requestNumber, div_code }: PoListPr
         render: (_: any, record: any) => (
           <>
           {/* disable this bold report button for now, as it is not going to continue the service. we will fix it later. */}
-          <Button size="small" onClick={() => handlePDF(record.po_number)}>
+          {/* <Button size="small" onClick={() => handlePDF(record.po_number)}>
             <EyeOutlined />
-          </Button>
+          </Button> */}
           <Button size="small" onClick={() => setHandleReportOpen({ open: true, poNumber: record.po_number, divCode: div_code || '' })}>
             <EyeOutlined />  2
           </Button>  

@@ -12,15 +12,19 @@ import { useSelector } from 'store';
 import { TUniversalDialogProps } from 'types/types.UniversalDialog';
 import { getPathNameList } from 'utils/functions';
 import AddPurchaserequestPfForm from 'components/forms/Purchaseflow/AddPurchaserequestPfForm';
-import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
+// import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
-import { TVPurchaserequestheader } from './type/purchaserequestheader_pf-types';
+// import { TVPurchaserequestheader } from './type/purchaserequestheader_pf-types';
 import AddBudgetrequestPfForm from 'components/forms/Purchaseflow/AddBudgetrequestPfForm';
 import PurchaseOrderReport from 'components/reports/purchase/PurchaseOrderReport';
 import { FC, useCallback, useMemo, useState } from 'react';
 // import StatusChip from 'types/StatusChip';
 import { ColDef } from 'ag-grid-community';
 import CustomAgGrid from 'components/grid/CustomAgGrid';
+import useAuth from 'hooks/useAuth';
+// Added for PO Report dialog
+import ReportDialogPage from 'pages/Report/ReportDialogPage';
+import PurchaseReportDesign from 'pages/Report/components/PurchaseReportDesign';
 
 const filter: ISearch = {
   sort: { field_name: 'last_updated', desc: true },
@@ -33,6 +37,7 @@ interface RejectedTab3Props {
 
 const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
   // const { permissions } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const pathNameList = getPathNameList(location.pathname);
   console.log('Current pathname:', location.pathname);
@@ -42,6 +47,15 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
   const [searchData, setSearchData] = useState<ISearch>(filter);
   const [globalFilter, setGlobalFilter] = useState<string>('');
   const [gridApi, setGridApi] = useState<any>(null);
+
+  // PO Report dialog state (same as MyitemPOConfirm)
+  const [handleReportOpen, setHandleReportOpen] = useState({
+    open: false,
+    poNumber: '',
+    divCode: '',
+    companyCode: ''
+  });
+
   const [PurchaserequestheaderFormPopup, setPurchaserequestheaderFormPopup] = useState<TUniversalDialogProps>({
     action: {
       open: false,
@@ -51,6 +65,15 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
     title: 'Create Purchase Request',
     data: { existingData: {}, isEditMode: false, isViewMode: false, request_number: '' }
   });
+
+  // Helper: robust PR/PO detection off the (possibly $-delimited) doc number
+  const getDocFlags = (rawDocNumber: unknown) => {
+    const safeRaw = typeof rawDocNumber === 'string' ? rawDocNumber : '';
+    const formattedDocNumber = safeRaw.replace(/\$/g, '/');
+    const isPR = /\/PR\//i.test(formattedDocNumber);
+    const isPO = /\/PO\//i.test(formattedDocNumber);
+    return { formattedDocNumber, isPR, isPO };
+  };
 
   const columnDefs: ColDef[] = useMemo(
     () => [
@@ -84,16 +107,38 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
         },
         cellClass: 'text-right'
       },
+      // ── Replaced Actions column with PO Report column (from MyitemPOConfirm) ──
       {
-        headerName: 'Actions',
+        headerName: 'PO Report',
         field: 'actions',
+        colId: 'poReportActions',
         cellRenderer: (params: any) => {
-          const actionButtons: TAvailableActionButtons[] = ['view'];
-          return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
+          const { formattedDocNumber, isPR } = getDocFlags(params.data?.document_number);
+
+          // Only PO rows get the report view button, PR rows hide it.
+          if (isPR) return null;
+
+          const divisionCode = params.data?.div_code || params.data?.division_code || '';
+
+          return (
+            <div className="flex flex-col gap-1">
+              <ActionButtonsGroup
+                handleActions={() => {
+                  setHandleReportOpen({
+                    open: true,
+                    poNumber: formattedDocNumber,
+                    divCode: divisionCode,
+                    companyCode: params.data?.company_code || user?.company_code || ''
+                  });
+                }}
+                buttons={['view']}
+              />
+            </div>
+          );
         }
       }
     ],
-    []
+    [user]
   );
 
   const { data: PurchaserequestheaderData, refetch: refetchPurchaserequestheaderData } = useQuery({
@@ -139,22 +184,22 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
     setPaginationData({ page: currentPage, rowsPerPage: pageSize });
   }, []);
 
-  const handleViewPurchaserequestheader = (existingData: TVPurchaserequestheader) => {
-    // Normalize request_number by replacing delimiters with plain TEXTS
-    const normalizedRequestNumber = existingData.request_number.replace(/\$/g, '/');
-    const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
-    const title = isBudgetRequest ? 'Budget Request' : 'View Purchase Request';
+  // const handleViewPurchaserequestheader = (existingData: TVPurchaserequestheader) => {
+  //   // Normalize request_number by replacing delimiters with plain TEXTS
+  //   const normalizedRequestNumber = existingData.request_number.replace(/\$/g, '/');
+  //   const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
+  //   const title = isBudgetRequest ? 'Budget Request' : 'View Purchase Request';
 
-    setPurchaserequestheaderFormPopup((prev) => ({
-      action: { ...prev.action, open: !prev.action.open },
-      title,
-      data: {
-        isEditMode: true,
-        isViewMode: true,
-        request_number: existingData.request_number
-      }
-    }));
-  };
+  //   setPurchaserequestheaderFormPopup((prev) => ({
+  //     action: { ...prev.action, open: !prev.action.open },
+  //     title,
+  //     data: {
+  //       isEditMode: true,
+  //       isViewMode: true,
+  //       request_number: existingData.request_number
+  //     }
+  //   }));
+  // };
 
   const togglePurchaserequestheaderPopup = () => {
     setPurchaserequestheaderFormPopup((prev) => ({
@@ -168,9 +213,9 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
     }
   };
 
-  const handleActions = (actionType: string, rowOriginal: TVPurchaserequestheader) => {
-    if (actionType === 'view') handleViewPurchaserequestheader(rowOriginal);
-  };
+  // const handleActions = (actionType: string, rowOriginal: TVPurchaserequestheader) => {
+  //   if (actionType === 'view') handleViewPurchaserequestheader(rowOriginal);
+  // };
 
   const handleDeletePurchaserequestheader = async () => {
     await PfSerivceInstance.deleteMasters(
@@ -251,7 +296,7 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
         paginationPageSize={6000}
         paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000]}
       />
-      
+
       {PurchaserequestheaderFormPopup.action.open &&
         (costUser === 'YES' &&
         (PurchaserequestheaderFormPopup.data.request_number?.replace(/\//g, '$')?.startsWith('BUDGET') ||
@@ -287,6 +332,20 @@ const RejectedTab3: FC<RejectedTab3Props> = ({ costUser }) => {
             />
           </UniversalDialog>
         ))}
+
+      {/* PO Report Dialog — same as MyitemPOConfirm */}
+      {handleReportOpen.open && (
+        <ReportDialogPage
+          Report={PurchaseReportDesign}
+          required_values={{
+            divCode: handleReportOpen.divCode,
+            refDocNo: handleReportOpen.poNumber,
+            companyCode: handleReportOpen.companyCode
+          }}
+          title="Purchase Order"
+          onClose={() => setHandleReportOpen({ open: false, poNumber: '', divCode: '', companyCode: '' })}
+        />
+      )}
     </div>
   );
 };
