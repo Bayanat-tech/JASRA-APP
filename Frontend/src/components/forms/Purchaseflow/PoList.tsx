@@ -77,7 +77,7 @@ const PoList = ({ PoOpen, setPoOpen, POdata, requestNumber, div_code }: PoListPr
             <EyeOutlined />
           </Button> */}
           <Button size="small" onClick={() => setHandleReportOpen({ open: true, poNumber: record.po_number, divCode: div_code || '' })}>
-            <EyeOutlined />  2
+            <EyeOutlined />  
           </Button>  
           </>
         )

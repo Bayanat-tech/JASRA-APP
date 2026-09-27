@@ -1,12 +1,12 @@
-import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Box, Button, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from './dynamicData';
 import { cancel, draft, POsignatureImg } from './img';
 import { spellNumber, formatAmount } from './functions';
-// import { FiDownload } from 'react-icons/fi';
-// import { exportPurchaseOrderToExcel } from './purchaseOrderExcelExport'; // 🛑 COMMENTED OUT — Excel export not working (merge cells error)
+import { FiDownload } from 'react-icons/fi';
+import { exportPurchaseOrderToExcel } from './purchaseOrderExcelExport';
 
 export interface PurchaseOrderData {
   WO_NUMBER: string;
@@ -105,6 +105,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     let { divCode, refDocNo } = required_values;
     console.log('Rendering PurchaseReportDesign with:', { divCode, refDocNo });
     const [suppCode, setSuppCode] = useState<string>('');
+    const [isExportingExcel, setIsExportingExcel] = useState(false);
 
     const div_code_sql = useMemo(() => `
       SELECT DISTINCT div_code FROM PURCHASE_REQUEST_DETAILS WHERE ref_doc_no = REPLACE('${refDocNo}', '/', '$')
@@ -193,7 +194,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
 `, [suppCode, poData?.COMPANY_CODE]);
 
-    const {  isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
+    // NOTE: previously this destructured only `isFetching`, so `supplierInfo` was
+    // never actually captured — that's why the Excel export had nothing to send.
+    const { isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
       queryKey: ['purchase_report_supplier_info', suppCode, poData?.COMPANY_CODE],
       staleTime: 1000 * 60 * 5,
       queryFn: async () => {
@@ -279,19 +282,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         : parsed.toLocaleDateString('en-GB');
     }, [poData?.DOC_DATE]);
 
-    // 🛑 COMMENTED OUT — Excel export crashing with "Cannot merge already merged cells"
-    // const handleExportExcel = useCallback(async () => {
-    //   if (!poData) return;
-    //   await exportPurchaseOrderToExcel({
-    //     poData,
-    //     poItems,
-    //     supplierInfo,
-    //     buyerInfo,
-    //     deliveryInfo,
-    //     termsInfo,
-    //   });
-    // }, [poData, poItems, supplierInfo, buyerInfo, deliveryInfo, termsInfo]);
-
     const totalAmount = useMemo(() => {
       return poItems.reduce((sum, item) => {
         const qty = item.ALLOCATED_APPROVED_QUANTITY
@@ -303,6 +293,33 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         return sum + Number(qty) * Number(unitPrice);
       }, 0);
     }, [poItems]);
+
+    const div = dynamicData[poData?.DIV_CODE ?? divCode];
+
+    const handleExportExcel = useCallback(async () => {
+      if (!poData || !div) return;
+      setIsExportingExcel(true);
+      try {
+        await exportPurchaseOrderToExcel({
+          poData,
+          poItems,
+          buyerInfo,
+          deliveryInfo,
+          termsInfo,
+          totalAmount,
+          orderDate,
+          formattedWoNo,
+          status,
+          signature,
+          signatureImg: POsignatureImg,
+          div,
+        });
+      } catch (err) {
+        console.error('Excel export failed:', err);
+      } finally {
+        setIsExportingExcel(false);
+      }
+    }, [poData, poItems, buyerInfo, deliveryInfo, termsInfo, totalAmount, orderDate, formattedWoNo, status, signature, div]);
 
     const pageHeaderRef = useRef<HTMLDivElement>(null);
     const poHeaderBlockRef = useRef<HTMLDivElement>(null);
@@ -416,8 +433,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         </Box>
       );
     }
-
-    const div = dynamicData[poData.DIV_CODE];
 
     const thBase: React.CSSProperties = {
       border: `1px solid ${BORDER_BLUE}`,
@@ -824,8 +839,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           },
         }}
       >
-        {/* 🛑 COMMENTED OUT — Export to Excel button removed because exportPurchaseOrderToExcel crashes with "Cannot merge already merged cells" */}
-        {/*
         <Box
           sx={{
             display: 'flex',
@@ -839,16 +852,16 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             size="small"
             startIcon={<FiDownload />}
             onClick={handleExportExcel}
+            disabled={isExportingExcel}
             sx={{
               textTransform: 'none',
               backgroundColor: '#1f7a3a',
               '&:hover': { backgroundColor: '#26a34a' },
             }}
           >
-            Export to Excel
+            {isExportingExcel ? 'Exporting…' : 'Export to Excel'}
           </Button>
         </Box>
-        */}
 
         <Box
           aria-hidden
