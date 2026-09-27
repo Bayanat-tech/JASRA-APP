@@ -213,7 +213,7 @@ const PurchaseRequestTab1: FC<PurchaseRequestTab1Props> = ({ costUser, userlevel
           const isPORecord = params.data.request_number?.replace(/\//g, '$')?.includes('PO$');
 
           if (Number(userlevel) === 5) {
-            actionButtons = isPORecord ? ['view', 'add_action', 'cancel'] : ['edit']; // Added 'cancel' for PO records
+            actionButtons = isPORecord ? [ 'add_action', 'cancel'] : ['edit']; // Added 'cancel' for PO records
           } else {
             actionButtons = isPORecord ? ['view'] : ['edit'];
             if ([1, 5].includes(Number(userlevel) ?? 0) && !isPORecord) {
