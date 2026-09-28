@@ -1,5 +1,5 @@
 import { oracleDb } from "../../database/connection";
-import { Request, Response } from 'express'
+import { Request, Response } from 'express';
 
 function buildFilterWhere(
   query: Request['query'],
@@ -60,168 +60,214 @@ function buildFilterWhere(
 }
 
 const getPoDetailRegister = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
-
-        // No `exclude` passed here -> every selected filter is included.
-        // If the user picked nothing, whereSql collapses to just `company_code = :company_code`.
-        const { whereSql, binds } = buildFilterWhere(req.query);
-
-        const sql = `
-SELECT
-    r.ref_doc_no AS PO_NO,
-    r.doc_date AS PO_DATE,
-    r.supplier,
-    r.service_rm_flag,
-    r.supp_name,
-    r.status,
-    r.item_code,
-    r.addl_item_desc,
-    r.item_desp,
-    r.p_uom,
-    r.appr_item_p_qty,
-    r.l_uom,
-    r.appr_item_l_qty,
-    r.item_rate,
-    r.currency_rate,
-    r.amount,
-    r.project_name,
-    r.div_code,
-    r.project_code,
-    r.description,
-    r.type_of_pr,
-    r.request_number AS PR_REF_NO,
-    r.payment_terms,
-    r.wo_number
-FROM VW_BO_PO_REGISTER_JASRA r
-        WHERE ${whereSql}
-        `;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+  try {
+    const { company_code } = req.query;
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-}
+
+    const { whereSql, binds } = buildFilterWhere(req.query);
+
+    const sql = `
+      SELECT
+          r.ref_doc_no AS PO_NO,
+          r.doc_date AS PO_DATE,
+          r.supplier,
+          r.service_rm_flag,
+          r.supp_name,
+          r.status,
+          r.item_code,
+          r.addl_item_desc,
+          r.item_desp,
+          r.p_uom,
+          r.appr_item_p_qty,
+          r.l_uom,
+          r.appr_item_l_qty,
+          r.item_rate,
+          r.currency_rate,
+          r.amount,
+          r.project_name,
+          r.div_code,
+          r.project_code,
+          r.description,
+          r.type_of_pr,
+          r.request_number AS PR_REF_NO,
+          r.payment_terms,
+          r.wo_number
+      FROM VW_BO_PO_REGISTER_JASRA r
+      WHERE ${whereSql}
+    `;
+
+    console.log("Executing SQL Query:", sql, "with binds:", binds);
+    const result = await oracleDb.query(sql, binds);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const getDivCodes = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
-        const { whereSql, binds } = buildFilterWhere(req.query, 'div_code');
-
-        const sql = `SELECT DISTINCT div_code FROM VW_BO_PO_REGISTER_JASRA WHERE ${whereSql}`;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+  try {
+    const { company_code } = req.query;
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-}
 
+    const { whereSql, binds } = buildFilterWhere(req.query, 'div_code');
+
+    const sql = `SELECT DISTINCT div_code, div_name FROM MS_HR_DIVISION_JASRA WHERE ${whereSql}`;
+
+    console.log("Executing SQL Query:", sql, "with binds:", binds);
+    const result = await oracleDb.query(sql, binds);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const getPoNo = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
-
-        const { whereSql, binds } = buildFilterWhere(req.query, 'ref_doc_no');
-
-        const sql = `
-            SELECT DISTINCT ref_doc_no as PO_NO
-            FROM VW_BO_PO_REGISTER_JASRA
-            WHERE ${whereSql}
-        `;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+  try {
+    const { company_code } = req.query;
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-}
+
+    const { whereSql, binds } = buildFilterWhere(req.query, 'ref_doc_no');
+
+    const sql = `
+      SELECT DISTINCT ref_doc_no as PO_NO
+      FROM VW_BO_PO_REGISTER_JASRA
+      WHERE ${whereSql}
+    `;
+
+    console.log("Executing SQL Query:", sql, "with binds:", binds);
+    const result = await oracleDb.query(sql, binds);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const getProjectNames = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
+  try {
+    const { company_code, div_code } = req.query as { company_code?: string; div_code?: string };
 
-        const { whereSql, binds } = buildFilterWhere(req.query, 'project_name');
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
+    }
 
-        const sql = `
-            SELECT DISTINCT project_name
-            FROM VW_BO_PO_REGISTER_JASRA
-            WHERE ${whereSql}
-        `;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+    if (!div_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: div_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
+
+    let sql: string;
+    const binds: Record<string, any> = { div_code };
+
+    if (div_code === 'NA') {
+      // When DIV_CODE = 'NA'
+      sql = `
+        SELECT P.PROJECT_CODE, P.PROJECT_NAME
+        FROM MS_PS_PROJECT_MASTER P
+        WHERE P.PROJECT_CODE LIKE 'OH-%'
+          AND P.PROJECT_CODE NOT LIKE '%TST%'
+          AND EXISTS (
+            SELECT 1
+            FROM PURCHASE_REQUEST_DETAILS D
+            WHERE D.PROJECT_CODE = P.PROJECT_CODE
+          )
+          AND P.DIV_CODE = :div_code
+      `;
+    } else {
+      // When DIV_CODE NOT EQUAL TO 'NA'
+      sql = `
+        SELECT P.PROJECT_CODE, P.PROJECT_NAME
+        FROM MS_PS_PROJECT_MASTER P
+        WHERE P.PROJECT_CODE NOT LIKE '%TST%'
+          AND EXISTS (
+            SELECT 1
+            FROM PURCHASE_REQUEST_DETAILS D
+            WHERE D.PROJECT_CODE = P.PROJECT_CODE
+          )
+          AND P.DIV_CODE = :div_code
+      `;
     }
-}
+
+    console.log("Executing SQL Query:", sql, "with binds:", binds);
+    const result = await oracleDb.query(sql, binds);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const getSupplierNames = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
-        const { whereSql, binds } = buildFilterWhere(req.query, 'supp_name');
+  try {
+    const { company_code } = req.query;
 
-        const sql = `SELECT DISTINCT supp_name FROM VW_BO_PO_REGISTER_JASRA WHERE ${whereSql}`;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-}
+
+    const sql = `
+      SELECT S.SUPP_CODE, S.SUPP_NAME
+      FROM MS_SUPPLIER_JASRA S
+      WHERE EXISTS (
+        SELECT 1
+        FROM PURCHASE_REQUEST_DETAILS P
+        WHERE P.SUPPLIER = S.SUPP_CODE
+      )
+    `;
+
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const getStatusOptions = async (req: Request, res: Response) => {
-    try {
-        const { company_code } = req.query;
-        if (!company_code) {
-            res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
-            return;
-        }
-        const { whereSql, binds } = buildFilterWhere(req.query, 'status');
-
-        const sql = `SELECT DISTINCT status FROM VW_BO_PO_REGISTER_JASRA WHERE ${whereSql}`;
-        console.log("Executing SQL Query:", sql, "with binds:", binds);
-        const result = await oracleDb.query(sql, binds);
-        console.log("Query Result:", result.rows);
-        res.status(200).json(result.rows);
+  try {
+    const { company_code } = req.query;
+    if (!company_code) {
+      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      return;
     }
-    catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-}
 
-export { getPoDetailRegister, getPoNo, getProjectNames, getSupplierNames, getStatusOptions, getDivCodes };
+    const { whereSql, binds } = buildFilterWhere(req.query, 'status');
 
+    const sql = `
+      SELECT DISTINCT LAST_ACTION AS STATUS
+      FROM PURCHASE_REQUEST_HEADER
+      WHERE LAST_ACTION <> 'SAVEASDRAFT'
+        AND ${whereSql}
+    `;
 
+    console.log("Executing SQL Query:", sql, "with binds:", binds);
+    const result = await oracleDb.query(sql, binds);
+    console.log("Query Result:", result.rows);
+    res.status(200).json(result.rows);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export {
+  getPoDetailRegister,
+  getPoNo,
+  getProjectNames,
+  getSupplierNames,
+  getStatusOptions,
+  getDivCodes,
+};

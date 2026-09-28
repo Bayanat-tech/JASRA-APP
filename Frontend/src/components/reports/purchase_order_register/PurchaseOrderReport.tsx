@@ -21,7 +21,7 @@ type PORow = {
   PROJECT_NAME: string; CONTACT_NUMBER: string; COMPANY_LOGO_AWSURL: string;
   MAIL_EMAIL: string; COMPANY_NAME: string; DIV_CODE: string;
   // added so this single endpoint can also power the Summary view
-PROJECT_CODE: string; DESCRIPTION: string; TYPE_OF_PR: string; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
+  PROJECT_CODE: string; DESCRIPTION: string; TYPE_OF_PR: string; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
 };
 
 // ── Detail grouping (PO > Supplier > Item) ──────────────────
@@ -56,54 +56,12 @@ function groupRows(rows: PORow[]): POGroup[] {
   }));
 }
 
-// ── Summary grouping (Division > Project > Status), derived from
-//    the SAME rows used for Detail — one row per PO, item amounts summed. ──
+// ── Summary grouping — one row per PO, item amounts summed ──
 type SummaryPoRow = {
   poNo: string; poDate: string; divCode: string; projectName: string; projectCode: string;
   status: string; supplier: string; suppName: string; description: string; typeOfPr: string;
   total: number; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
 };
-// type StatusGroup = { status: string; rows: SummaryPoRow[]; total: number };
-// type ProjectGroup = { projectName: string; projectCode: string; statuses: StatusGroup[]; total: number };
-// type DivisionGroup = { divCode: string; projects: ProjectGroup[]; total: number };
-
-// function buildSummaryFromDetail(rows: PORow[]): DivisionGroup[] {
-//   // Step 1: collapse item-level rows down to one row per PO (sum amount)
-//   const poMap: Record<string, SummaryPoRow> = {};
-//   for (const r of rows) {
-//     const amount = parseFloat(String(r.AMOUNT)) || 0;
-//     if (!poMap[r.PO_NO]) {
-//       poMap[r.PO_NO] = {
-//         poNo: r.PO_NO,PR_REF_NO: r.PR_REF_NO, poDate: r.PO_DATE, divCode: r.DIV_CODE || 'Unassigned',
-//         projectName: r.PROJECT_NAME || 'N/A', projectCode: r.PROJECT_CODE || '',
-//         status: r.STATUS || 'N/A', supplier: r.SUPPLIER, suppName: r.SUPP_NAME,
-//         description: r.DESCRIPTION || '', typeOfPr: r.TYPE_OF_PR || '',
-//         total: 0, PAYMENT_TERMS: r.PAYMENT_TERMS || '', WO_NUMBER: r.WO_NUMBER || '',
-//       };
-//     }
-//     poMap[r.PO_NO].total += amount;
-//   }
-
-//   // Step 2: fold those PO-level rows into Division > Project > Status
-//   const divMap: Record<string, any> = {};
-//   Object.values(poMap).forEach(po => {
-//     if (!divMap[po.divCode]) divMap[po.divCode] = { divCode: po.divCode, projects: {}, total: 0 };
-//     const div = divMap[po.divCode];
-//     if (!div.projects[po.projectName])
-//       div.projects[po.projectName] = { projectName: po.projectName, projectCode: po.projectCode, statuses: {}, total: 0 };
-//     const proj = div.projects[po.projectName];
-//     if (!proj.statuses[po.status]) proj.statuses[po.status] = { status: po.status, rows: [], total: 0 };
-//     const st = proj.statuses[po.status];
-
-//     st.rows.push(po); st.total += po.total;
-//     proj.total += po.total; div.total += po.total;
-//   });
-
-//   return Object.values(divMap).map((div: any) => ({
-//     ...div,
-//     projects: Object.values(div.projects).map((p: any) => ({ ...p, statuses: Object.values(p.statuses) })),
-//   }));
-// }
 
 function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
   const poMap: Record<string, SummaryPoRow> = {};
@@ -111,7 +69,7 @@ function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
     const amount = parseFloat(String(r.AMOUNT)) || 0;
     if (!poMap[r.PO_NO]) {
       poMap[r.PO_NO] = {
-        poNo: r.PO_NO,PR_REF_NO: r.PR_REF_NO, poDate: r.PO_DATE, divCode: r.DIV_CODE || 'Unassigned',
+        poNo: r.PO_NO, PR_REF_NO: r.PR_REF_NO, poDate: r.PO_DATE, divCode: r.DIV_CODE || 'Unassigned',
         projectName: r.PROJECT_NAME || 'N/A', projectCode: r.PROJECT_CODE || '',
         status: r.STATUS || 'N/A', supplier: r.SUPPLIER, suppName: r.SUPP_NAME,
         description: r.DESCRIPTION || '', typeOfPr: r.TYPE_OF_PR || '',
@@ -122,18 +80,146 @@ function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
   }
   return Object.values(poMap);
 }
-// ── Param options (unchanged endpoints) ─────────────────────
+
+// ── Helpers: strip "10 – Name" → "10" so API & filter always get pure codes ──
+function extractDivCode(labelOrCode: string): string {
+  // Matches leading token before space / en-dash / hyphen
+  const m = String(labelOrCode).match(/^([^\s–-]+)/);
+  return m ? m[1] : String(labelOrCode);
+}
+
+/** Strip "CODE – NAME" → "NAME" for project_name filter values */
+function extractProjectName(labelOrName: string): string {
+  const s = String(labelOrName);
+  // If it looks like "CODE – NAME", take everything after the first en-dash/hyphen
+  const m = s.match(/^[^\s–-]+\s*[–-]\s*(.+)$/);
+  return m ? m[1].trim() : s;
+}
+
+function stripDivCodeLabels(filters: ReportFilters): ReportFilters {
+  const raw = filters.div_code as string[] | undefined;
+  if (!raw?.length) return filters;
+  return {
+    ...filters,
+    div_code: raw.map(extractDivCode),
+  };
+}
+
+/** Also strip project labels back to pure names before sending to API / client filter */
+function stripProjectNameLabels(filters: ReportFilters): ReportFilters {
+  const raw = filters.project_name as string[] | undefined;
+  if (!raw?.length) return filters;
+  return {
+    ...filters,
+    project_name: raw.map(extractProjectName),
+  };
+}
+
+// ── Param options ─────────────────────────────────────────
 const getOptions = (endpoint: string, responseKeys: string[]) =>
   (filters: ReportFilters, companyCode?: string) =>
     axiosServices
-      .get(`${endpoint}?${buildFilterParams(companyCode, filters)}`)
+      .get(`${endpoint}?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
       .then(res => normalizeStringList(res.data, responseKeys));
+
+/** Div Code options: show "CODE – NAME" in the dropdown, store that string in the filter.
+ *  API calls always strip back to pure CODE via stripDivCodeLabels. */
+const getDivCodeOptions = (filters: ReportFilters, companyCode?: string) =>
+  axiosServices
+    .get(`/api/report/div-codes?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
+    .then(res => {
+      const raw = Array.isArray(res.data) ? res.data : [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        const code = String(item.DIV_CODE ?? item.div_code ?? '').trim();
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        const name = String(item.DIV_NAME ?? item.div_name ?? '').trim();
+        out.push(name ? `${code} – ${name}` : code);
+      }
+      return out;
+    });
+
+/** Project Name options – depends on selected Div Code(s).
+ *  Backend requires a single div_code. We use the first selected one.
+ *  Displays "CODE – NAME", stores that string; we strip back to pure name when needed. */
+const getProjectNameOptions = (filters: ReportFilters, companyCode?: string) => {
+  const divCodes = (filters.div_code as string[] | undefined) || [];
+  if (!divCodes.length) {
+    // No division selected → return empty list (dropdown will be empty)
+    return Promise.resolve([]);
+  }
+
+  // Backend currently accepts a single div_code
+  const pureDivCode = extractDivCode(divCodes[0]);
+
+  const params = buildFilterParams(companyCode, {
+    ...stripDivCodeLabels(filters),
+    div_code: [pureDivCode],          // force single value
+  });
+
+  return axiosServices
+    .get(`/api/report/project-names?${params}`)
+    .then(res => {
+      const raw = Array.isArray(res.data) ? res.data : [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        const code = String(item.PROJECT_CODE ?? item.project_code ?? '').trim();
+        const name = String(item.PROJECT_NAME ?? item.project_name ?? '').trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        out.push(code ? `${code} – ${name}` : name);
+      }
+      return out;
+    });
+};
+
+/** Supplier options – new shape { SUPP_CODE, SUPP_NAME } */
+const getSupplierNameOptions = (filters: ReportFilters, companyCode?: string) =>
+  axiosServices
+    .get(`/api/report/supplier-names?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
+    .then(res => {
+      const raw = Array.isArray(res.data) ? res.data : [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        // Prefer name (existing filter key is supp_name)
+        const name = String(item.SUPP_NAME ?? item.supp_name ?? '').trim();
+        if (!name || seen.has(name)) continue;
+        seen.add(name);
+        out.push(name);
+      }
+      return out;
+    });
 
 const poReportFields: ParamFieldConfig[][] = [
   [
-    { type: 'multiselect', key: 'div_code', label: 'Div Code', fetchOptions: getOptions('/api/report/div-codes', ['DIV_CODE', 'div_code', 'value', 'label']), placeholder: 'Div Code' },
-    { type: 'multiselect', key: 'ref_doc_no', label: 'PO Number', fetchOptions: getOptions('/api/report/po-no', ['PO_NO', 'po_no', 'poNo', 'value', 'label']), placeholder: 'PO NO' },
-    { type: 'multiselect', key: 'project_name', label: 'Project Name', fetchOptions: getOptions('/api/report/project-names', ['PROJECT_NAME', 'project_name', 'value', 'label']), placeholder: 'All Projects' },
+    {
+      type: 'multiselect',
+      key: 'div_code',
+      label: 'Div Code',
+      fetchOptions: getDivCodeOptions,
+      placeholder: 'Div Code',
+    },
+    {
+      type: 'multiselect',
+      key: 'ref_doc_no',
+      label: 'PO Number',
+      fetchOptions: getOptions('/api/report/po-no', ['PO_NO', 'po_no', 'poNo', 'value', 'label']),
+      placeholder: 'PO NO',
+    },
+    {
+      type: 'multiselect',
+      key: 'project_name',
+      label: 'Project Name',
+      fetchOptions: getProjectNameOptions,
+      placeholder: 'All Projects',
+    },
   ],
   [
     { type: 'date', key: 'date_from', label: 'PO Date From' },
@@ -144,8 +230,20 @@ const poReportFields: ParamFieldConfig[][] = [
     { type: 'number', key: 'amount_to', label: 'Amount To', placeholder: 'No limit' },
   ],
   [
-    { type: 'multiselect', key: 'supp_name', label: 'Supplier', fetchOptions: getOptions('/api/report/supplier-names', ['SUPP_NAME', 'supp_name', 'value', 'label']), placeholder: 'All Suppliers' },
-    { type: 'multiselect', key: 'status', label: 'Status', fetchOptions: getOptions('/api/report/status-options', ['STATUS', 'status', 'value', 'label']), placeholder: 'All Statuses' },
+    {
+      type: 'multiselect',
+      key: 'supp_name',
+      label: 'Supplier',
+      fetchOptions: getSupplierNameOptions,
+      placeholder: 'All Suppliers',
+    },
+    {
+      type: 'multiselect',
+      key: 'status',
+      label: 'Status',
+      fetchOptions: getOptions('/api/report/status-options', ['STATUS', 'status', 'value', 'label']),
+      placeholder: 'All Statuses',
+    },
   ],
 ];
 
@@ -238,6 +336,7 @@ const PurchaseOrderReport: React.FC = () => {
   const { data: allRows = [], isLoading, isFetching, refetch } = useQuery<PORow[]>({
     queryKey: ['po_detail_register'],
     queryFn: async () => {
+      // appliedFiltersRef already holds stripped codes / names
       const params = buildFilterParams(user?.company_code, appliedFiltersRef.current);
       const response: { data: PORow[] } = await axiosServices.get(`/api/report/po-detail-register?${params}`);
       return response.data || [];
@@ -250,14 +349,23 @@ const PurchaseOrderReport: React.FC = () => {
 
   const filteredRows = useMemo(() => {
     return allRows.filter(r => {
-      const div = applied.div_code as string[];
-      const supp = applied.supp_name as string[];
-      const proj = applied.project_name as string[];
-      const stat = applied.status as string[];
-      const po = applied.ref_doc_no as string[];
-      if (div.length && !div.includes(r.DIV_CODE)) return false;
+      const div = (applied.div_code as string[]) || [];
+      const supp = (applied.supp_name as string[]) || [];
+      const proj = (applied.project_name as string[]) || [];
+      const stat = (applied.status as string[]) || [];
+      const po = (applied.ref_doc_no as string[]) || [];
+
+      // Match pure DIV_CODE even when filter holds "10 – Name"
+      if (div.length) {
+        const selectedCodes = div.map(extractDivCode);
+        if (!selectedCodes.includes(r.DIV_CODE)) return false;
+      }
       if (supp.length && !supp.includes(r.SUPP_NAME)) return false;
-      if (proj.length && !proj.includes(r.PROJECT_NAME)) return false;
+      // Match pure project name even when filter holds "CODE – Name"
+      if (proj.length) {
+        const selectedNames = proj.map(extractProjectName);
+        if (!selectedNames.includes(r.PROJECT_NAME)) return false;
+      }
       if (stat.length && !stat.includes(r.STATUS)) return false;
       if (po.length && !po.includes(r.PO_NO)) return false;
       if (applied.amount_from && (parseFloat(String(r.AMOUNT)) || 0) < parseFloat(applied.amount_from as string)) return false;
@@ -310,7 +418,6 @@ const PurchaseOrderReport: React.FC = () => {
   }, [sort]);
 
   const poGroups = useMemo(() => groupRows(filteredRows), [filteredRows]);
-  // const divisionGroups = useMemo(() => buildSummaryFromDetail(filteredRows), [filteredRows]);
   const grandTotal = filteredRows.reduce((s, r) => s + (parseFloat(String(r.AMOUNT)) || 0), 0);
   const filtersActive = isFiltersActive(applied, search);
 
@@ -323,14 +430,19 @@ const PurchaseOrderReport: React.FC = () => {
   const handlePrint = () => window.print();
 
   const handleGenerateReport = async () => {
+    // Keep the pretty labels in React state (so the dropdown still shows them)
+    // but send pure codes / pure names to the API via the ref.
     setApplied({ ...pending });
-    appliedFiltersRef.current = { ...pending };
+    appliedFiltersRef.current = stripProjectNameLabels(
+      stripDivCodeLabels({ ...pending })
+    );
     try { await refetch(); } finally { setHasGeneratedReport(true); setActiveTab('report'); }
   };
 
   const handleReset = () => {
     setPending(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
+    appliedFiltersRef.current = EMPTY_FILTERS;
     setHasGeneratedReport(false);
     setActiveTab('parameters');
   };
@@ -372,26 +484,26 @@ const PurchaseOrderReport: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'PO Detail');
       XLSX.writeFile(wb, 'PO_Detail_Register.xlsx');
     } else {
-  const summaryData: any[][] = [
-    ['PO Summary Register'],
-    [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
-    [],
-    ['PO Number', 'PO Date', 'Supplier Code', 'Supplier Name', 'Amount (QAR)', 'PR Ref No', 'Scope Of Work', 'Payment Term', 'W/O Number', 'Type Of PR', 'Status'],
-  ];
-  summaryRows.forEach(row => {
-    summaryData.push([
-      row.poNo, formatDate(row.poDate), row.supplier, row.suppName,
-      row.total, row.PR_REF_NO, row.description, row.PAYMENT_TERMS,
-      row.WO_NUMBER, row.typeOfPr, row.status,
-    ]);
-  });
-  summaryData.push([]);
-  summaryData.push(['', '', '', 'Total:', grandTotal]);
-  const ws = XLSX.utils.aoa_to_sheet(summaryData);
-  ws['!cols'] = [{ wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'PO Summary');
-  XLSX.writeFile(wb, 'PO_Summary_Register.xlsx');
-}
+      const summaryData: any[][] = [
+        ['PO Summary Register'],
+        [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
+        [],
+        ['PO Number', 'PO Date', 'Supplier Code', 'Supplier Name', 'Amount (QAR)', 'PR Ref No', 'Scope Of Work', 'Payment Term', 'W/O Number', 'Type Of PR', 'Status'],
+      ];
+      summaryRows.forEach(row => {
+        summaryData.push([
+          row.poNo, formatDate(row.poDate), row.supplier, row.suppName,
+          row.total, row.PR_REF_NO, row.description, row.PAYMENT_TERMS,
+          row.WO_NUMBER, row.typeOfPr, row.status,
+        ]);
+      });
+      summaryData.push([]);
+      summaryData.push(['', '', '', 'Total:', grandTotal]);
+      const ws = XLSX.utils.aoa_to_sheet(summaryData);
+      ws['!cols'] = [{ wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'PO Summary');
+      XLSX.writeFile(wb, 'PO_Summary_Register.xlsx');
+    }
   };
 
   const getBase64FromUrl = (url: string): Promise<string> =>
@@ -489,7 +601,6 @@ const PurchaseOrderReport: React.FC = () => {
         { content: '', styles: { fillColor: NAVY } },
         { content: '', styles: { fillColor: NAVY } },
       ]);
-
       autoTable(pdf, {
         startY: TABLE_TOP,
         margin: { left: margin, right: margin, top: HEADER_H + 4 },
@@ -518,65 +629,65 @@ const PurchaseOrderReport: React.FC = () => {
         },
       });
       pdf.save('PO_Detail_Register.pdf');
-} else {
-  const body: any[] = [];
-  summaryRows.forEach(row => {
-    body.push([
-      { content: row.poNo || '', styles: { fontSize: 9, halign: 'left' } },
-      { content: formatDate(row.poDate), styles: { fontSize: 9 } },
-      { content: row.supplier || '', styles: { fontSize: 9 } },
-      { content: row.suppName || '', styles: { fontSize: 9 } },
-      { content: formatAmount(row.total), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
-      { content: row.PR_REF_NO || '', styles: { fontSize: 9 } },
-      { content: row.description || '', styles: { fontSize: 9 } },
-      { content: row.PAYMENT_TERMS || '', styles: { fontSize: 9 } },
-      { content: row.WO_NUMBER || '', styles: { fontSize: 9 } },
-      { content: row.typeOfPr || '', styles: { fontSize: 9 } },
-      { content: row.status || '', styles: { fontSize: 9 } },
-    ]);
-  });
-  body.push([{ content: '', colSpan: 11, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
-  body.push([
-    { content: 'Total :', colSpan: 4, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-    { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-    { content: '', colSpan: 6, styles: { fillColor: NAVY } },
-  ]);
+    } else {
+      const body: any[] = [];
+      summaryRows.forEach(row => {
+        body.push([
+          { content: row.poNo || '', styles: { fontSize: 9, halign: 'left' } },
+          { content: formatDate(row.poDate), styles: { fontSize: 9 } },
+          { content: row.supplier || '', styles: { fontSize: 9 } },
+          { content: row.suppName || '', styles: { fontSize: 9 } },
+          { content: formatAmount(row.total), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
+          { content: row.PR_REF_NO || '', styles: { fontSize: 9 } },
+          { content: row.description || '', styles: { fontSize: 9 } },
+          { content: row.PAYMENT_TERMS || '', styles: { fontSize: 9 } },
+          { content: row.WO_NUMBER || '', styles: { fontSize: 9 } },
+          { content: row.typeOfPr || '', styles: { fontSize: 9 } },
+          { content: row.status || '', styles: { fontSize: 9 } },
+        ]);
+      });
+      body.push([{ content: '', colSpan: 11, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
+      body.push([
+        { content: 'Total :', colSpan: 4, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+        { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
+        { content: '', colSpan: 6, styles: { fillColor: NAVY } },
+      ]);
 
-  autoTable(pdf, {
-    startY: TABLE_TOP,
-    margin: { left: margin, right: margin, top: HEADER_H + 4 },
-    columnStyles: {
-      0: { cellWidth: 22 }, 1: { cellWidth: 16 }, 2: { cellWidth: 16 }, 3: { cellWidth: 24 },
-      4: { cellWidth: 18 }, 5: { cellWidth: 22 }, 6: { cellWidth: 'auto' as any }, 7: { cellWidth: 18 },
-      8: { cellWidth: 16 }, 9: { cellWidth: 16 }, 10: { cellWidth: 16 },
-    },
-    head: [[
-      { content: 'PO Number', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'PO Date', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Supplier Code', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Supplier Name', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
-      { content: 'PR Ref No', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Scope Of Work', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Payment Term', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'W/O Number', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Type Of PR', styles: { halign: 'left', fontSize: 9 } },
-      { content: 'Status', styles: { halign: 'left', fontSize: 9 } },
-    ]],
-    body,
-    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
-    bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
-    tableLineColor: BORDER, tableLineWidth: 0.25,
-    didDrawPage: drawPageHeader,
-    didDrawCell: (data) => {
-      const { cell, doc } = data;
-      doc.setDrawColor(...BORDER); doc.setLineWidth(0.2);
-      doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
-      doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
-    },
-  });
-  pdf.save('PO_Summary_Register.pdf');
-}
+      autoTable(pdf, {
+        startY: TABLE_TOP,
+        margin: { left: margin, right: margin, top: HEADER_H + 4 },
+        columnStyles: {
+          0: { cellWidth: 22 }, 1: { cellWidth: 16 }, 2: { cellWidth: 16 }, 3: { cellWidth: 24 },
+          4: { cellWidth: 18 }, 5: { cellWidth: 22 }, 6: { cellWidth: 'auto' as any }, 7: { cellWidth: 18 },
+          8: { cellWidth: 16 }, 9: { cellWidth: 16 }, 10: { cellWidth: 16 },
+        },
+        head: [[
+          { content: 'PO Number', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'PO Date', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Supplier Code', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Supplier Name', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
+          { content: 'PR Ref No', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'Scope Of Work', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Payment Term', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'W/O Number', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Type Of PR', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Status', styles: {halign: 'left', fontSize: 9 } },
+        ]],
+        body,
+        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
+        bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
+        tableLineColor: BORDER, tableLineWidth: 0.25,
+        didDrawPage: drawPageHeader,
+        didDrawCell: (data) => {
+          const { cell, doc } = data;
+          doc.setDrawColor(...BORDER); doc.setLineWidth(0.2);
+          doc.line(cell.x, cell.y + cell.height, cell.x + cell.width, cell.y + cell.height);
+          doc.line(cell.x + cell.width, cell.y, cell.x + cell.width, cell.y + cell.height);
+        },
+      });
+      pdf.save('PO_Summary_Register.pdf');
+    }
   };
 
   const filterMetaRow = (colSpan: number, className: string) => filtersActive && (
@@ -673,68 +784,69 @@ const PurchaseOrderReport: React.FC = () => {
   );
 
   const summaryRows = useMemo(() => buildSummaryRows(filteredRows), [filteredRows]);
+
   // ── Summary table markup ──
-const summaryTable = summaryRows.length === 0 ? (
-  <div className="rp-empty">No records found.</div>
-) : (
-  <table className="pos-table">
-    <colgroup>
-      <col className="c0" /><col className="c1" /><col className="c2" />
-      <col className="c3" /><col className="c4" /><col className="c5" /><col className="c6" />
-      <col className="c7" /><col className="c8" /><col className="c9" /><col className="c10" /><col className="c11" />
-    </colgroup>
-    <thead>
-      <tr className="pos-print-logo-row">
-        <td colSpan={12}>
-          <div className="pos-print-logo-flex">
-            <img src={companyLogo} alt="Logo" />
-            <div className="pos-print-meta-text">
-              <div><b>Print Date:</b> {printDate}</div>
-              <div><b>Print User:</b> {printUser}</div>
+  const summaryTable = summaryRows.length === 0 ? (
+    <div className="rp-empty">No records found.</div>
+  ) : (
+    <table className="pos-table">
+      <colgroup>
+        <col className="c0" /><col className="c1" /><col className="c2" />
+        <col className="c3" /><col className="c4" /><col className="c5" /><col className="c6" />
+        <col className="c7" /><col className="c8" /><col className="c9" /><col className="c10" /><col className="c11" />
+      </colgroup>
+      <thead>
+        <tr className="pos-print-logo-row">
+          <td colSpan={12}>
+            <div className="pos-print-logo-flex">
+              <img src={companyLogo} alt="Logo" />
+              <div className="pos-print-meta-text">
+                <div><b>Print Date:</b> {printDate}</div>
+                <div><b>Print User:</b> {printUser}</div>
+              </div>
             </div>
-          </div>
-        </td>
-      </tr>
-      <tr className="pos-title-bar"><td colSpan={12}>PO Summary Register</td></tr>
-      {filterMetaRow(12, 'pos-meta-row')}
-      <tr>
-        <th className="left">PO Number</th>
-        <th className="left">PO Date</th>
-        <th className="left">Supplier <br /> Code</th>
-        <th className="left">Supplier Name</th>
-        <th className="num">Amount</th>
-        <th className="left">PR Ref No</th>
-        <th className="left">Scope Of Work</th>
-        <th className="left">Payment Term</th>
-        <th className="left">W/O <br /> Number</th>
-        <th className="left">Type Of PR</th>
-        <th className="left">Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {summaryRows.map((row, ri) => (
-        <tr key={`${row.poNo}-${ri}`} className="data-row">
-          <td>{row.poNo}</td>
-          <td>{formatDate(row.poDate)}</td>
-          <td>{row.supplier}</td>
-          <td>{row.suppName}</td>
-          <td className="num">{formatAmount(row.total)}</td>
-          <td>{row.PR_REF_NO}</td>
-          <td>{row.description}</td>
-          <td>{row.PAYMENT_TERMS}</td>
-          <td>{row.WO_NUMBER}</td>
-          <td>{row.typeOfPr}</td>
-          <td>{row.status}</td>
+          </td>
         </tr>
-      ))}
-      <tr className="division-total">
-        <td colSpan={4}>Total:</td>
-        <td className="num">{formatAmount(grandTotal)}</td>
-        <td colSpan={7}></td>
-      </tr>
-    </tbody>
-  </table>
-);
+        <tr className="pos-title-bar"><td colSpan={12}>PO Summary Register</td></tr>
+        {filterMetaRow(12, 'pos-meta-row')}
+        <tr>
+          <th className="left">PO Number</th>
+          <th className="left">PO Date</th>
+          <th className="left">Supplier <br /> Code</th>
+          <th className="left">Supplier Name</th>
+          <th className="num">Amount</th>
+          <th className="left">PR Ref No</th>
+          <th className="left">Scope Of Work</th>
+          <th className="left">Payment Term</th>
+          <th className="left">W/O <br /> Number</th>
+          <th className="left">Type Of PR</th>
+          <th className="left">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {summaryRows.map((row, ri) => (
+          <tr key={`${row.poNo}-${ri}`} className="data-row">
+            <td>{row.poNo}</td>
+            <td>{formatDate(row.poDate)}</td>
+            <td>{row.supplier}</td>
+            <td>{row.suppName}</td>
+            <td className="num">{formatAmount(row.total)}</td>
+            <td>{row.PR_REF_NO}</td>
+            <td>{row.description}</td>
+            <td>{row.PAYMENT_TERMS}</td>
+            <td>{row.WO_NUMBER}</td>
+            <td>{row.typeOfPr}</td>
+            <td>{row.status}</td>
+          </tr>
+        ))}
+        <tr className="division-total">
+          <td colSpan={4}>Total:</td>
+          <td className="num">{formatAmount(grandTotal)}</td>
+          <td colSpan={7}></td>
+        </tr>
+      </tbody>
+    </table>
+  );
 
   const tableContent = viewType === 'detail' ? detailTable : summaryTable;
 
@@ -782,7 +894,8 @@ const summaryTable = summaryRows.length === 0 ? (
       onExcel={handleExcel}
       onPdf={handleDownloadPDF}
       reportContent={tableContent}
-showGrandTotal={(viewType === 'detail' ? poGroups.length : summaryRows.length) > 0}      grandTotalValue={formatAmount(grandTotal)}
+      showGrandTotal={(viewType === 'detail' ? poGroups.length : summaryRows.length) > 0}
+      grandTotalValue={formatAmount(grandTotal)}
       css={TABLE_CSS}
     />
   );
