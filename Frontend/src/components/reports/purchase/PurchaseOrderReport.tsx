@@ -8,7 +8,7 @@ import reporttheme from 'themes/theme/reporttheme';
 import {
   exportPurchaseOrderToExcel,
   fetchPurchaseOrderExportData,
-} from '../../../pages/Report/components/purchaseOrderExcelExport'; 
+} from '../../../pages/Report/components/purchaseOrderExcelExport';
 
 interface PurchaseOrderReportProps {
   poNumber: string;
@@ -30,7 +30,9 @@ const PurchaseOrderReport: React.FC<PurchaseOrderReportProps> = ({
 
   const formattedPoNumber = poNumber.replace(/\$/g, '/');
 
-  const resolvedDivCode = poNumber.startsWith('AND') ? '16' : '';
+  // div_code prop wins if the caller already knows it; otherwise fall back to
+  // the same prefix-based guess used to pick reportPath below.
+  const resolvedDivCode = div_code || (poNumber.startsWith('AND') ? '16' : '');
 
   const reportPath =
     resolvedDivCode === '16'
@@ -46,13 +48,15 @@ const PurchaseOrderReport: React.FC<PurchaseOrderReportProps> = ({
   const handleExportExcel = async () => {
     try {
       setIsExporting(true);
-      const data = await fetchPurchaseOrderExportData(formattedPoNumber);
+      // Pass resolvedDivCode as a hint so fetchPurchaseOrderExportData can
+      // skip its own div_code lookup SQL when we already have it.
+      const data = await fetchPurchaseOrderExportData(formattedPoNumber, resolvedDivCode);
       if (!data) {
         // eslint-disable-next-line no-alert
         alert('No data found for this Purchase Order.');
         return;
       }
-      exportPurchaseOrderToExcel(data);
+      await exportPurchaseOrderToExcel(data);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to export PO to Excel:', err);
