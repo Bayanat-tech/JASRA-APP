@@ -260,3 +260,67 @@ export const insUpdEmployeeSupervisourBulk = async (
   }
 };
 
+// ------------------------------------------------------------
+// UPDATE BULK SUPERVISOR
+// Calls: PROC_UPDATE_BULK_SUPERVISOR
+// ------------------------------------------------------------
+export const updateBulkSupervisor = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  let connection: oracledb.Connection | undefined;
+
+  console.log("Reached Controller: updateBulkSupervisor");
+
+  try {
+    // --------------------------------------------------------
+    // Get Oracle Connection
+    // --------------------------------------------------------
+    connection = await oracleDb.getConnection();
+
+    // --------------------------------------------------------
+    // Call Oracle Procedure (no parameters)
+    // --------------------------------------------------------
+    await connection.execute(
+      `
+      BEGIN
+        PROC_UPDATE_BULK_SUPERVISOR;
+      END;
+      `
+    );
+
+    // --------------------------------------------------------
+    // Commit
+    // --------------------------------------------------------
+    await connection.commit();
+
+    // --------------------------------------------------------
+    // Response
+    // --------------------------------------------------------
+    res.json({
+      success: true,
+      message:
+        "HR employee supervisor hierarchy updated successfully from EMPLOYEE_SUPERVISOUR"
+    });
+  } catch (err: any) {
+    console.error("Oracle error in updateBulkSupervisor:", err);
+
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        console.error("Rollback error:", rollbackErr);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Bulk supervisor update failed",
+      details: err?.message || "Unknown error"
+    });
+  } finally {
+    if (connection) {
+      await connection.close().catch(() => {});
+    }
+  }
+};

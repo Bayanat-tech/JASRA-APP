@@ -23,42 +23,6 @@ type TEmployeeSupervisor = {
 };
 
 // =====================================================================================
-// MAIN PAGE – temporary data (replace later with real main-page API)
-// =====================================================================================
-const MAIN_PAGE_TEMP_DATA: TEmployeeSupervisor[] = [
-  {
-    EMPLOYEE_NO: '10001',
-    EMPLOYEE_NAME: 'SULTAN KHALIFA SALIM',
-    POSITION: 'Supervisor',
-    IMMEDIATE_SUPERVISOR: '10002',
-    LEVEL_1: '10002',
-    LEVEL_2: '10002',
-    SENIOR_PAYROLL: '10024',
-    HR_MANAGER: '10024'
-  },
-  {
-    EMPLOYEE_NO: '10002',
-    EMPLOYEE_NAME: 'THANSEEM MOHAMED',
-    POSITION: 'Manager',
-    IMMEDIATE_SUPERVISOR: '10012',
-    LEVEL_1: '10012',
-    LEVEL_2: '10012',
-    SENIOR_PAYROLL: '10024',
-    HR_MANAGER: '10024'
-  },
-  {
-    EMPLOYEE_NO: '10003',
-    EMPLOYEE_NAME: 'HANAN ABDULLAH SALIM AL ANQOUDI',
-    POSITION: 'Executive',
-    IMMEDIATE_SUPERVISOR: '10031',
-    LEVEL_1: '10031',
-    LEVEL_2: '10031',
-    SENIOR_PAYROLL: '10024',
-    HR_MANAGER: '10024'
-  }
-];
-
-// =====================================================================================
 // Map Excel row → table columns
 // =====================================================================================
 const mapExcelRowToApi = (row: any): TEmployeeSupervisor => {
@@ -121,31 +85,9 @@ const BulkTransferService = {
   },
 
   // Update MS_HR_EMPLOYEE hierarchy from EMPLOYEE_SUPERVISOUR
-  updateHrEmployeeFromSupervisor: async () => {
-    const sql = `
-UPDATE MS_HR_EMPLOYEE H
-   SET H.DEPT_HEAD_EMP_ID =
-           (SELECT E.LEVEL_2
-              FROM EMPLOYEE_SUPERVISOUR E
-             WHERE E.EMPLOYEE_NO = H.ALTERNATE_ID),
-       H.SUPERVISOR_EMPID =
-           (SELECT E.IMMEDIATE_SUPERVISOR
-              FROM EMPLOYEE_SUPERVISOUR E
-             WHERE E.EMPLOYEE_NO = H.ALTERNATE_ID),
-       H.MANGR_EMPID =
-           (SELECT E.SENIOR_PAYROLL
-              FROM EMPLOYEE_SUPERVISOUR E
-             WHERE E.EMPLOYEE_NO = H.ALTERNATE_ID),
-       H.ENGNR_EMPID =
-           (SELECT E.LEVEL_1
-              FROM EMPLOYEE_SUPERVISOUR E
-             WHERE E.EMPLOYEE_NO = H.ALTERNATE_ID)
- WHERE EXISTS
-       (SELECT 1
-          FROM EMPLOYEE_SUPERVISOUR E
-         WHERE E.EMPLOYEE_NO = H.ALTERNATE_ID)
-`;
-    return BulkTransferService.executeRawSql(sql);
+  updateBulkSupervisor: async () => {
+    const response = await axiosServices.post('/api/hr/update_bulk_supervisor');
+    return response.data;
   }
 };
 
@@ -154,9 +96,6 @@ UPDATE MS_HR_EMPLOYEE H
 // =====================================================================================
 const BulkTransferUtilityMaster = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Main page grid – different / temp data
-  const [mainRowData] = useState<TEmployeeSupervisor[]>(MAIN_PAGE_TEMP_DATA);
 
   // Dialog state
   const [dialog, setDialog] = useState<TUniversalDialogProps>({
@@ -330,7 +269,7 @@ const BulkTransferUtilityMaster = () => {
   };
 
   // -----------------------------------------------------------------
-  // Update → run raw SQL to sync MS_HR_EMPLOYEE from EMPLOYEE_SUPERVISOUR
+  // Update → PROC_UPDATE_BULK_SUPERVISOR via controller
   // -----------------------------------------------------------------
   const handleUpdate = async () => {
     if (!uploadedTempData.length) {
@@ -345,22 +284,23 @@ const BulkTransferUtilityMaster = () => {
     setDialogMessage(null);
 
     try {
-      const result = await BulkTransferService.updateHrEmployeeFromSupervisor();
+      const result = await BulkTransferService.updateBulkSupervisor();
 
       if (result?.success) {
         setDialogMessage({
           type: 'success',
           text:
-            'Update successful. HR employee supervisor hierarchy has been refreshed from the uploaded data.'
+            result.message ||
+            'Update successful. HR employee supervisor hierarchy has been refreshed.'
         });
       } else {
         setDialogMessage({
           type: 'error',
-          text: result?.error || result?.message || 'Update failed. Please try again.'
+          text: result?.message || 'Update failed. Please try again.'
         });
       }
     } catch (err: any) {
-      console.error('Update SQL error:', err);
+      console.error('Update API error:', err);
       setDialogMessage({
         type: 'error',
         text:
@@ -415,20 +355,7 @@ const BulkTransferUtilityMaster = () => {
           Download Excel Template
         </Button>
       </Box>
-
-      {/* MAIN PAGE GRID – different / temp data */}
-      <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-        Current records (preview)
-      </Typography>
-      <CustomAgGrid
-        rowData={mainRowData}
-        columnDefs={columnDefs}
-        paginationPageSize={15}
-        paginationPageSizeSelector={[10, 15, 25, 50]}
-        height="420px"
-        getRowId={(params) => params.data?.EMPLOYEE_NO || `main-${Math.random()}`}
-      />
-
+      
       {/* ===================== DIALOG ===================== */}
       {dialog.action.open && (
         <UniversalDialog

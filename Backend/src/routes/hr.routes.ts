@@ -5,7 +5,7 @@ import { deleteHrMaster, getHrMaster } from "../../src/jasra/controllers/JS_hr.c
 import hrGmRoutes from "./HR/gmHr.routes";
 import employeeHrRoutes from "./HR/employeHr.routes";
 import { checkUserAuthorization } from "../middleware/checkUserAthorization";
-import { insUpdEmployeeSupervisourBulk, upsertTransferReqFlow } from "../controllers/HR/controller_transfer_requests";
+import { insUpdEmployeeSupervisourBulk, updateBulkSupervisor, upsertTransferReqFlow } from "../controllers/HR/controller_transfer_requests";
 
 // Initialize the Express router
 const router = express.Router();
@@ -49,7 +49,12 @@ router.post(
   checkUserAuthorization,
   insUpdEmployeeSupervisourBulk
 );
-
+router.post(
+  "/update_bulk_supervisor",
+  passport.authenticate("jwt", { session: false }),
+  checkUserAuthorization,
+  updateBulkSupervisor
+)
 // Define a DELETE API endpoint to delete HR master data
 router.delete(
   "/leavetype/delete",
