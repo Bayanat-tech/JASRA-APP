@@ -96,9 +96,16 @@ const MM_TO_PX = 96 / 25.4;
 const PAGE_HEIGHT_PX = 267 * MM_TO_PX;
 const SAFETY_BUFFER_PX = 64;
 
+// Standard (fixed) height of the "For Supplier / For <Company>" signature box.
+// Previously this box used `flex: 1` and stretched to fill the page.
+const SIGNATURE_BOX_HEIGHT_PX = 120;
+
+// Gap between the 3 terms columns (px). Also used to offset continuation pages.
+const TERMS_GAP_PX = 10;
+
 const CYAN_BG = '#e3f2fd';
 const BORDER_BLUE = '#9bb1cc';
-const BORDER_DARK = '#a0a0a0';
+// const BORDER_DARK = '#a0a0a0';
 
 const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProps>(
   ({ required_values }, ref) => {
@@ -321,14 +328,14 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       }
     }, [poData, poItems, buyerInfo, deliveryInfo, termsInfo, totalAmount, orderDate, formattedWoNo, status, signature, div]);
 
+    const measureBoxRef = useRef<HTMLDivElement>(null);
     const pageHeaderRef = useRef<HTMLDivElement>(null);
     const poHeaderBlockRef = useRef<HTMLDivElement>(null);
     const paymentTableRef = useRef<HTMLTableElement>(null);
     const tableHeadRef = useRef<HTMLTableSectionElement>(null);
     const scopeRowRef = useRef<HTMLTableRowElement>(null);
-    const termsSignRef = useRef<HTMLDivElement>(null);
+    const termsTextRef = useRef<HTMLDivElement>(null);
     const totalRowRef = useRef<HTMLTableRowElement>(null);
-    const footerRef = useRef<HTMLDivElement>(null);
     const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
     const [chunks, setChunks] = useState<PurchaseOrderData[][] | null>(null);
@@ -336,6 +343,92 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     useLayoutEffect(() => {
       setChunks(null);
     }, [poItems]);
+
+    // Logo / header / footer images have no intrinsic height until they load, so a
+    // measurement taken before that under-counts the header/footer/signature heights
+    // and lets the footer overflow onto its own (almost blank) page. Once every image
+    // inside the hidden measuring box has finished loading, re-run the pagination.
+    useEffect(() => {
+      const box = measureBoxRef.current;
+      if (!box) return undefined;
+
+      const pending = Array.from(box.querySelectorAll('img')).filter((img) => !img.complete);
+      if (pending.length === 0) return undefined;
+
+      let cancelled = false;
+      Promise.all(
+        pending.map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              img.addEventListener('load', () => resolve(), { once: true });
+              img.addEventListener('error', () => resolve(), { once: true });
+            })
+        )
+      ).then(() => {
+        if (!cancelled) setChunks(null);
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [poItems, poData, div]);
+
+    // ── Standard Purchase Terms: Bold-style page fill ─────────────────────────
+    // The columns get a FIXED height (= the space left on the first closing page) and
+    // `column-fill: auto`, so text fills column 1, 2, 3 to the bottom of the page and the
+    // rest overflows into further columns. Each closing page then shows its own set of 3
+    // columns by shifting the same column box left by one page-width per page.
+    const termsViewportRef = useRef<HTMLDivElement>(null);
+    const termsColsRef = useRef<HTMLDivElement>(null);
+    const [termsColH, setTermsColH] = useState<number | null>(null);
+    const [closingPageCount, setClosingPageCount] = useState(1);
+    const [lastPageUsedH, setLastPageUsedH] = useState<number | null>(null);
+    const isReportLoading = isDeptdataLoading || isSignatureLoading || isSuppCodeLoading || isSupplierLoading;
+
+    // Height available for terms on the first closing page (re-measured when images load).
+    useEffect(() => {
+      const vp = termsViewportRef.current;
+      if (!vp) return undefined;
+      const measure = () => {
+        const h = vp.offsetHeight;
+        if (h > 0) setTermsColH((prev) => (prev !== null && Math.abs(prev - h) < 1 ? prev : h));
+      };
+      measure();
+      if (typeof ResizeObserver === 'undefined') return undefined;
+      const ro = new ResizeObserver(measure);
+      ro.observe(vp);
+      return () => ro.disconnect();
+    }, [poData, isReportLoading]);
+
+    // How many closing pages are needed = ceil(total columns / 3).
+    useLayoutEffect(() => {
+      const cols = termsColsRef.current;
+      if (!cols || !termsColH) return;
+      const last = cols.lastElementChild as HTMLElement | null;
+      if (!last) return;
+      const width = cols.clientWidth;
+      const colW = (width - 2 * TERMS_GAP_PX) / 3;
+      const left = cols.getBoundingClientRect().left;
+      const maxRight = Math.max(...Array.from(last.getClientRects()).map((r) => r.right - left));
+      const totalCols = Math.max(1, Math.ceil((maxRight + TERMS_GAP_PX - 0.5) / (colW + TERMS_GAP_PX)));
+      const pages = Math.max(1, Math.ceil(totalCols / 3));
+      setClosingPageCount((prev) => (prev === pages ? prev : pages));
+
+      // Height actually used by text on the LAST page → its frame is only that tall (Bold page 3).
+      if (pages > 1) {
+        const top = cols.getBoundingClientRect().top;
+        const pageStart = (pages - 1) * (width + TERMS_GAP_PX);
+        let used = 0;
+        Array.from(cols.children).forEach((ch) => {
+          Array.from((ch as HTMLElement).getClientRects()).forEach((r) => {
+            if (r.left - left >= pageStart - 1) used = Math.max(used, r.bottom - top);
+          });
+        });
+        setLastPageUsedH(used > 0 ? Math.ceil(used) : null);
+      } else {
+        setLastPageUsedH(null);
+      }
+    }, [termsColH, poData, div, isReportLoading]);
 
     useLayoutEffect(() => {
       if (chunks !== null || poItems.length === 0 || !poData) return;
@@ -346,8 +439,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         (poHeaderBlockRef.current?.offsetHeight ?? 0) + (paymentTableRef.current?.offsetHeight ?? 0);
       const tableHeadH = tableHeadRef.current?.offsetHeight ?? 0;
       const scopeRowH = scopeRowRef.current?.offsetHeight ?? 0;
-      const footerH = footerRef.current?.offsetHeight ?? 0;
-      const termsSignH = termsSignRef.current?.offsetHeight ?? 0;
+      const termsTextH = termsTextRef.current?.offsetHeight ?? 0;
       const totalRowH = totalRowRef.current?.offsetHeight ?? 24;
       const heightOf = (idxs: number[]) => idxs.reduce((sum, i) => sum + rowHeights[i], 0);
 
@@ -359,7 +451,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       poItems.forEach((_, i) => {
         const isFirstDocPage = pageIdx === 0;
         const reserved =
-          pageHeaderH + tableHeadH + footerH + SAFETY_BUFFER_PX +
+          pageHeaderH + tableHeadH + SAFETY_BUFFER_PX +
           (isFirstDocPage ? firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const h = rowHeights[i];
@@ -379,7 +471,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         const lastIdx = indexChunks.length - 1;
         const isOnlyPageSoFar = lastIdx === 0;
         const reserved =
-          pageHeaderH + tableHeadH + footerH + SAFETY_BUFFER_PX +
+          pageHeaderH + tableHeadH + SAFETY_BUFFER_PX +
           (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const chunk = indexChunks[lastIdx];
@@ -396,8 +488,11 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const lastPageIdx = indexChunks.length - 1;
       const last = indexChunks[lastPageIdx];
       const isOnlyPage = lastPageIdx === 0;
+      // Last items page carries the "Above is as per attached quotation…" terms text.
+      // The signature box, footer strip and Standard Purchase Terms live in the
+      // separate closing section (page 2 onwards), exactly like the Bold report.
       const reservedWithTerms =
-        pageHeaderH + tableHeadH + footerH + termsSignH + SAFETY_BUFFER_PX +
+        pageHeaderH + tableHeadH + termsTextH + totalRowH + SAFETY_BUFFER_PX +
         (isOnlyPage ? firstPageExtraH + scopeRowH : 0);
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
@@ -445,8 +540,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     };
     const tdBase: React.CSSProperties = {
       border: `1px solid ${BORDER_BLUE}`,
-      padding: '3px 6px',
-      fontSize: 10.5,
+      padding: '5px 6px',
+      fontSize: 10,
       verticalAlign: 'top',
     };
 
@@ -495,7 +590,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           )}
 
           <Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '130px 1fr', rowGap: 0.25 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '130px 1fr', rowGap: 0.25, '& > :nth-of-type(odd)': { textAlign: 'right', pr: 1 } }}>
               <Typography sx={{ fontWeight: 700, fontSize: 10.5 }}>Purchase Order No:</Typography>
               <Typography sx={{ fontWeight: 700, fontSize: 10.5 }}>{poData.REF_DOC_NO} Rev: 0</Typography>
               <Typography sx={{ fontWeight: 700, fontSize: 10.5 }}>DATE:</Typography>
@@ -537,19 +632,22 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       </table>
     );
 
-    const renderItemsTableHead = (elRef?: React.Ref<HTMLTableSectionElement>) => (
-      <thead ref={elRef}>
-        <tr>
-          <th style={{ ...thBase, width: '5%' }}>ITEM NO.</th>
-          <th style={{ ...thBase, width: '6%' }}>GL CODE</th>
-          <th style={{ ...thBase, width: '44%' }}>DESCRIPTION</th>
-          <th style={{ ...thBase, width: '12%', whiteSpace: 'nowrap' }}>Unit of Measure</th>
-          <th style={{ ...thBase, width: '7%' }}>QTY</th>
-          <th style={{ ...thBase, width: '12%' }}>UNIT PRICE</th>
-          <th style={{ ...thBase, width: '14%' }}>Amount</th>
-        </tr>
-      </thead>
-    );
+    const renderItemsTableHead = (elRef?: React.Ref<HTMLTableSectionElement>) => {
+      const thItems: React.CSSProperties = { ...thBase, padding: '5px 2px', fontSize: 10.5, whiteSpace: 'nowrap' };
+      return (
+        <thead ref={elRef}>
+          <tr>
+            <th style={{ ...thItems, width: '8%' }}>ITEM NO.</th>
+            <th style={{ ...thItems, width: '8%' }}>GL CODE</th>
+            <th style={{ ...thItems, width: '42%' }}>DESCRIPTION</th>
+            <th style={{ ...thItems, width: '12%' }}>Unit of Measure</th>
+            <th style={{ ...thItems, width: '6%' }}>QTY</th>
+            <th style={{ ...thItems, width: '11%' }}>UNIT PRICE</th>
+            <th style={{ ...thItems, width: '13%' }}>Amount</th>
+          </tr>
+        </thead>
+      );
+    };
 
     const renderScopeRow = (elRef?: React.Ref<HTMLTableRowElement>) => (
       <tr className="print-row-avoid" ref={elRef}>
@@ -596,7 +694,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{item.PRINT_UOM}</td>
           <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{qty === 0 ? '' : qty}</td>
           <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700 }}>{unitPrice === 0 ? '' : unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-          <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700 }}>{amount === 0 ? '' : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700, backgroundColor: CYAN_BG }}>{amount === 0 ? '' : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         </tr>
       );
     };
@@ -630,8 +728,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       </tr>
     );
 
-    const renderTermsAndSignature = (elRef?: React.Ref<HTMLDivElement>) => (
-      <Box ref={elRef} sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+    const renderTermsText = (elRef?: React.Ref<HTMLDivElement>) => (
+      <Box ref={elRef}>
         <Box className="print-avoid" sx={{ px: 1, py: 0.75 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 10 }}>
             Above is as per attached quotation Ref: {poData.QUATATION_REFERENCE}
@@ -652,150 +750,141 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           <Typography sx={{ fontSize: 9.5 }}>P.O. Box: 201325, 11th Floor Lusail Marina Tower No.50 Lusail-Qatar</Typography>
           <Typography sx={{ fontSize: 9.5 }}>Phone: 8974 4404 0800 Fax: +974 4404 0801</Typography>
         </Box>
+      </Box>
+    );
 
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            border: `1px solid ${BORDER_DARK}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', flex: 1, minHeight: '130px' }}>
+    const renderSignatureBlock = () => {
+      const refNo = poData?.REF_DOC_NO || '';
+      const isAJSS = refNo.startsWith('AJSS');
+      const isAND = refNo.startsWith('AND');
+      // Bold shows the print date here (e.g. 28-Sep-2026).
+      const now = new Date();
+      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const printDate = `${String(now.getDate()).padStart(2, '0')}-${MONTHS[now.getMonth()]}-${now.getFullYear()}`;
+      const formTag = isAND ? 'F502 REV 00' : 'FS05 REV 01';
+      const tollFreeLine = isAJSS
+        ? 'AL JASSRA SECURITY SERVICES: Toll Free Number: 800-8050.'
+        : isAND
+          ? 'AND MARKETING EVENTS AND ENTERTAINMENTS: Toll Free Number: 800-8050.'
+          : 'The Maintainers Toll Free Number: 800-8050';
+      const website = isAJSS
+        ? 'Website: aljassrasecurity.com'
+        : isAND
+          ? 'Website: andagencyqatar.com'
+          : 'Website: the-maintainers.com';
+      const issued = isAJSS ? 'Form Issued Date: 26-02-2020' : isAND ? '' : `Form Issued Date:${printDate}`;
+
+      const signRow = (
+        <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'space-between', px: 1 }}>
+          <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Signature</Box>
+          <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Date</Box>
+        </Box>
+      );
+
+      // One black-bordered box (like Bold): signature row | blue band | footer images,
+      // with black divider lines between the three parts.
+      return (
+        <Box className="print-avoid" sx={{ border: '1.5px solid #000', boxSizing: 'border-box' }}>
+          {/* Signature row — fixed standard height, black vertical divider */}
+          <Box sx={{ display: 'flex', height: `${SIGNATURE_BOX_HEIGHT_PX}px`, boxSizing: 'border-box' }}>
             <Box
               sx={{
                 width: '50%',
-                borderRight: `1px solid ${BORDER_DARK}`,
-                p: '8px 10px',
+                borderRight: '1.5px solid #000',
+                p: '4px 10px 6px 4px',
                 display: 'flex',
                 flexDirection: 'column',
+                boxSizing: 'border-box',
               }}
             >
               <Box>
-                <Typography sx={{ fontWeight: 700, fontSize: 10.5, mb: 1.5 }}>For Supplier:</Typography>
-                <Typography sx={{ fontWeight: 700, fontSize: 10.5 }}>I have read &amp; agreed to all terms and conditions.</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: 11.5, mb: 1.5 }}>For Supplier:</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: 11.5 }}>I have read &amp; agreed to all terms and conditions.</Typography>
               </Box>
-              <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'space-between', px: 1, pt: 4 }}>
-                <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 10 }}>Signature</Box>
-                <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 10 }}>Date</Box>
-              </Box>
+              {signRow}
             </Box>
 
-            <Box sx={{ width: '50%', p: '8px 10px', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ width: '50%', p: '4px 4px 6px 10px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
               <Box>
-                <Typography sx={{ fontWeight: 700, fontSize: 10.5, mb: 1.5, textAlign: 'center' }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 11.5, mb: 1.5, textAlign: 'center' }}>
                   For {div?.name || ''}:
                 </Typography>
-                <Box sx={{ fontSize: 10.5, textAlign: 'center', mt: 2, display: 'flex', justifyContent: 'center' }}>
+                <Box sx={{ fontSize: 11.5, textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                   {signature ? (
-                    <img src={POsignatureImg} alt="Signature" style={{ maxWidth: '100px', height: 'auto' }} />
+                    <img src={POsignatureImg} alt="Signature" style={{ maxWidth: '100px', maxHeight: '40px', height: 'auto' }} />
                   ) : (
                     'This Document Is Electronically Approved'
                   )}
                 </Box>
               </Box>
-              <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'space-between', px: 1, pt: 4 }}>
-                <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 10 }}>Signature</Box>
-                <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 10 }}>Date</Box>
-              </Box>
+              {signRow}
             </Box>
           </Box>
 
-          <Box className="print-avoid" sx={{ borderTop: `1px solid ${BORDER_DARK}`, display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1, py: 0.75, backgroundColor: CYAN_BG, borderBottom: `1px solid ${BORDER_DARK}` }}>
-              
-              <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '80px' }}>
-                {poData?.REF_DOC_NO?.startsWith('AND') ? 'F502 REV 00' : 'FS05 REV 01'}
-              </Typography>
-
-              <Box sx={{ textAlign: 'center', flex: 1 }}>
-                {poData?.REF_DOC_NO?.startsWith('AJSS') ? (
-                  <>
-                    <Typography align="center" sx={{ fontWeight: 700, fontSize: 10 }}>
-                      AL JASSRA SECURITY SERVICES: Toll Free Number: 800-8050.
-                    </Typography>
-                    <Typography align="center" sx={{ fontWeight: 800, fontSize: 10, lineHeight: 1.05, mt: 0.25 }}>
-                      Website: aljassrasecurity.com
-                    </Typography>
-                  </>
-                ) : poData?.REF_DOC_NO?.startsWith('AND') ? (
-                  <>
-                    <Typography align="center" sx={{ fontWeight: 700, fontSize: 10 }}>
-                      AND MARKETING EVENTS AND ENTERTAINMENTS: Toll Free Number: 800-8050.
-                    </Typography>
-                    <Typography align="center" sx={{ fontWeight: 800, fontSize: 10, lineHeight: 1.05, mt: 0.25 }}>
-                      Website: andagencyqatar.com
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Typography align="center" sx={{ fontWeight: 700, fontSize: 10 }}>
-                      THE MAINTAINERS: Toll Free Number: 800-8050.
-                    </Typography>
-                    <Typography align="center" sx={{ fontWeight: 800, fontSize: 10, lineHeight: 1.05, mt: 0.25 }}>
-                      Website: the-maintainers.com
-                    </Typography>
-                  </>
-                )}
-              </Box>
-
-              <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '80px', textAlign: 'right' }}>
-              {poData?.REF_DOC_NO?.startsWith('AJSS') 
-                  ? 'Form Issued Date: 26-02-2020' 
-                  : poData?.REF_DOC_NO?.startsWith('AND') 
-                    ? '' 
-                    : `Form Issued Date: ${orderDate}`}
-              </Typography>
-
+          {/* Light-blue band with black lines above and below */}
+          <Box
+            sx={{
+              backgroundColor: CYAN_BG,
+              borderTop: '1.5px solid #000',
+              borderBottom: '1.5px solid #000',
+              px: 1,
+              py: 0.75,
+            }}
+          >
+            <Typography align="center" sx={{ fontWeight: 700, fontSize: 11.5 }}>
+              {tollFreeLine}
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '110px' }}>{formTag}</Typography>
+              <Typography align="center" sx={{ fontSize: 11.5, fontWeight: 700, flex: 1 }}>{website}</Typography>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, minWidth: '170px', textAlign: 'right' }}>{issued}</Typography>
             </Box>
-            {div.footerYes && (
-              div.multipleFooters ? (
-                <Box sx={{ py: 0.6, pt: 0.6, display: 'flex', justifyContent: 'space-between', gap: 1, px: 1 }}>
-                  {div.multipleFooterImages?.map((footerImg: string, idx: number) => (
-                    <img key={idx} src={footerImg} alt={`Footer ${idx + 1}`} style={{ width: '25%', height: 'auto', objectFit: 'fill' }} />
-                  ))}
-                </Box>
-              ) : (
-                <Box sx={{ py: 0.6, px: 1 }}>
-                  <img src={div.footer} alt="Footer" style={{ width: '100%', height: 'auto', objectFit: 'cover' }} />
-                </Box>
-              )
-            )}
           </Box>
-        </Box>
-      </Box>
-    );
 
-    const renderPageFooter = (elRef?: React.Ref<HTMLDivElement>) => (
-      <Box ref={elRef} className="print-avoid" sx={{ mt: 0 }}>
-        <Box sx={{ 
-          borderTop: `1px solid ${BORDER_DARK}`, 
-          borderBottom: `1px solid ${BORDER_DARK}`, 
-          borderLeft: `1px solid ${BORDER_DARK}`, 
-          borderRight: `1px solid ${BORDER_DARK}`, 
-          py: 0.75, 
-          backgroundColor: CYAN_BG 
-        }}>
-          <Typography align="center" sx={{ fontWeight: 700, fontSize: 11 }}>
-            THE MAINTAINERS: Toll Free Number: 800-8050.
-          </Typography>
-          <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, lineHeight: 1.05, mt: 0.25 }}>
-            Website: the-maintainers.com
-          </Typography>
+          {/* Footer images */}
+          {div.footerYes && (
+            div.multipleFooters ? (
+              <Box sx={{ py: 0.6, px: 0.5, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                {div.multipleFooterImages?.map((footerImg: string, idx: number) => (
+                  <img key={idx} src={footerImg} alt={`Footer ${idx + 1}`} style={{ width: '25%', height: 'auto', objectFit: 'fill' }} />
+                ))}
+              </Box>
+            ) : (
+              <Box sx={{ py: 0.6, px: 0.5 }}>
+                <img src={div.footer} alt="Footer" style={{ width: '100%', height: 'auto', objectFit: 'cover' }} />
+              </Box>
+            )
+          )}
         </Box>
-        {div.footerYes && (
-          div.multipleFooters ? (
-            <Box sx={{ py: 0.6, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-              {div.multipleFooterImages?.map((footerImg: string, idx: number) => (
-                <img key={idx} src={footerImg} alt={`Footer ${idx + 1}`} style={{ width: '33%', height: 'auto', objectFit: 'contain' }} />
-              ))}
+      );
+    };
+
+    const renderTermsColumns = (pageIndex: number, elRef?: React.Ref<HTMLDivElement>) => (
+      <Box
+        ref={elRef}
+        sx={{
+          width: '100%',
+          height: termsColH ? `${termsColH}px` : '100%',
+          columnCount: 3,
+          columnGap: `${TERMS_GAP_PX}px`,
+          columnFill: 'auto',
+          fontSize: 5.6,
+          lineHeight: 1.05,
+          transform: pageIndex > 0 ? `translateX(calc(-${pageIndex} * (100% + ${TERMS_GAP_PX}px)))` : undefined,
+        }}
+      >
+        {div.clauses?.map((clause: { title: string; body: string }) => {
+          // Bold starts straight into the intro paragraph (no "… - Introduction" heading).
+          const isIntro = /^standard purchase terms/i.test(clause.title.trim());
+          return (
+            <Box key={clause.title} sx={{ mb: 0.6 }}>
+              {!isIntro && (
+                <Typography component="span" sx={{ fontWeight: 700, fontSize: 5.8, display: 'block' }}>{clause.title}</Typography>
+              )}
+              <Typography component="span" sx={{ fontSize: 5.6, lineHeight: 1.05, display: 'block' }}>{clause.body}</Typography>
             </Box>
-          ) : (
-            <Box sx={{ py: 0.6, px: 1 }}>
-              <img src={div.footer} alt="Footer" style={{ width: '100%', height: 'auto', objectFit: 'contain' }} />
-            </Box>
-          )
-        )}
+          );
+        })}
       </Box>
     );
 
@@ -824,7 +913,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             width: '190mm',
             margin: 0,
             boxSizing: 'border-box',
-            '@page': { size: 'A4 portrait', margin: '10mm', border: '1px solid #000000ff', padding: '1mm' },
             WebkitPrintColorAdjust: 'exact',
             printColorAdjust: 'exact',
             '& .print-avoid': { breakInside: 'avoid', pageBreakInside: 'avoid' },
@@ -839,6 +927,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           },
         }}
       >
+        <style>{`@page { size: A4 portrait; margin: 10mm 10mm 14mm 10mm; border: none; padding: 0; @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; } }`}</style>
         <Box
           sx={{
             display: 'flex',
@@ -864,6 +953,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         </Box>
 
         <Box
+          ref={measureBoxRef}
           aria-hidden
           sx={{
             position: 'absolute',
@@ -887,7 +977,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               {renderTotalRow(totalRowRef)}
             </tbody>
           </table>
-          {renderTermsAndSignature(termsSignRef)}
+          {renderTermsText(termsTextRef)}
         </Box>
 
         {pagesToRender.map((chunk, pageIdx) => {
@@ -899,22 +989,35 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               key={pageIdx}
               className="report-page"
               sx={{
+                // border-box so the 1px border + padding are INSIDE the 267mm, otherwise
+                // the page is taller than the printable area and spills a blank page.
+                boxSizing: 'border-box',
                 '@media print': {
                   display: 'flex',
                   flexDirection: 'column',
+                  boxSizing: 'border-box',
                   minHeight: '267mm',
                   breakAfter: isLastPage ? 'auto' : 'page',
                   pageBreakAfter: isLastPage ? 'auto' : 'always',
                 },
-                border: '1px solid #000',
-                p: 2,
                 display: 'flex',
                 flexDirection: 'column',
               }}
             >
               {renderPageHeader()}
 
-              <Box sx={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column' }}>
+              {/* Frame starts under the logo and runs to the bottom of the page, like Bold */}
+              <Box
+                sx={{
+                  flex: '1 0 auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: '2px solid #000',
+                  boxSizing: 'border-box',
+                  px: 1,
+                  py: 1,
+                }}
+              >
                 {isFirstPage && (
                   <>
                     {renderPoHeaderBlock()}
@@ -938,52 +1041,71 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   </table>
                 )}
 
-                {isLastPage && renderTermsAndSignature()}
+                {isLastPage && renderTermsText()}
               </Box>
-              {!isLastPage && renderPageFooter()}
             </Box>
           );
         })}
 
-        {/* ── TERMS & CONDITIONS (bordered page) ── */}
-        <Box
-          className="report-page"
-          sx={{
-            '@media print': {
+        {/* ── CLOSING PAGES (Bold page 2+): logo header on every page; page 1 of them has the
+            signature box + footer lines + "Standard Purchase Terms"; terms fill the columns
+            to the bottom of the page and continue on the next page ── */}
+        {Array.from({ length: closingPageCount }).map((_, k) => (
+          <Box
+            key={`closing-${k}`}
+            className="closing-page"
+            sx={{
+              boxSizing: 'border-box',
+              height: '267mm',
               display: 'flex',
               flexDirection: 'column',
-              minHeight: '267mm',
-              breakBefore: 'page',
-              pageBreakBefore: 'always',
-            },
-            border: '1px solid #000',
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <Box sx={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-              <tbody>
-                <tr>
-                  <td>
-                    <Typography align="center" sx={{ fontWeight: 800, fontSize: 10, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}>
-                      Standard Purchase Terms
-                    </Typography>
-                    <Box sx={{ columnCount: 3, columnGap: '4px', fontSize: 6, lineHeight: 1 }}>
-                      {div.clauses?.map((clause: { title: string; body: string }) => (
-                        <Box key={clause.title} sx={{ breakInside: 'avoid', mb: 0.6 }}>
-                          <Typography component="span" sx={{ fontWeight: 600, fontSize: 5, display: 'block' }}>{clause.title}</Typography>
-                          <Typography component="span" sx={{ fontSize: 6, lineHeight: 1, display: 'block' }}>{clause.body}</Typography>
-                        </Box>
-                      ))}
-                    </Box>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+              overflow: 'hidden',
+              '@media print': { breakBefore: 'page', pageBreakBefore: 'always' },
+            }}
+          >
+            {renderPageHeader()}
+            <Box
+              sx={{
+                border: '2px solid #000',
+                p: '6px 8px',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+                ...(k === 0 ? { flex: '1 1 0' } : {}),
+              }}
+            >
+              {k === 0 && (
+                <>
+                  {renderSignatureBlock()}
+                  <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mt: 1, mb: 0.75, textDecoration: 'underline' }}>
+                    Standard Purchase Terms
+                  </Typography>
+                </>
+              )}
+              <Box
+                ref={k === 0 ? termsViewportRef : undefined}
+                sx={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  minHeight: 0,
+                  ...(k === 0
+                    ? { flex: '1 1 0' }
+                    : {
+                        height:
+                          k === closingPageCount - 1 && lastPageUsedH
+                            ? `${lastPageUsedH + 2}px`
+                            : termsColH
+                              ? `${termsColH}px`
+                              : 'auto',
+                      }),
+                }}
+              >
+                {renderTermsColumns(k, k === 0 ? termsColsRef : undefined)}
+              </Box>
+            </Box>
           </Box>
-        </Box>
+        ))}
       </Box>
     );
   }
