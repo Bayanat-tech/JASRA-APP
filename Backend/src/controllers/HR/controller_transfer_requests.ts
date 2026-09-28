@@ -14,6 +14,16 @@ const toNumber = (val: any): number | null => {
 };
 
 // ------------------------------------------------------------
+// Safe String Converter
+// ------------------------------------------------------------
+const toStr = (val: any): string | null => {
+  if (val === undefined || val === null || val === "") {
+    return null;
+  }
+  return String(val).trim();
+};
+
+// ------------------------------------------------------------
 // Safe Date Converter
 // ------------------------------------------------------------
 const toDate = (val: any): Date | null => {
@@ -126,3 +136,127 @@ export const upsertTransferReqFlow = async (
     }
   }
 };
+
+// ------------------------------------------------------------
+// INSERT / UPDATE EMPLOYEE SUPERVISOR (BULK)
+// ------------------------------------------------------------
+export const insUpdEmployeeSupervisourBulk = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  let connection: oracledb.Connection | undefined;
+
+  console.log("Reached Controller: insUpdEmployeeSupervisourBulk");
+  console.log("insUpdEmployeeSupervisourBulk called with body:", req.body);
+
+  try {
+    const data = req.body?.data;
+
+    // --------------------------------------------------------
+    // Validate Request – expect array
+    // --------------------------------------------------------
+    if (!Array.isArray(data) || data.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "data array is required and cannot be empty"
+      });
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Get Oracle Connection
+    // --------------------------------------------------------
+    connection = await oracleDb.getConnection();
+
+    // --------------------------------------------------------
+    // Get Oracle Object Class (NO schema prefix)
+    // --------------------------------------------------------
+    const EmployeeSupervisourObjClass = await connection.getDbObjectClass(
+      "EMPLOYEE_SUPERVISOUR_OBJ"
+    );
+
+    // --------------------------------------------------------
+    // Build Oracle Object Array
+    // --------------------------------------------------------
+    const employeeObjects: any[] = [];
+
+    for (const row of data) {
+      const employeeNo = toStr(row.EMPLOYEE_NO ?? row.employee_no);
+
+      if (!employeeNo) {
+        res.status(400).json({
+          success: false,
+          message: "EMPLOYEE_NO is required for every row"
+        });
+        return;
+      }
+
+      const obj: any = new EmployeeSupervisourObjClass({
+        EMPLOYEE_NO: employeeNo,
+        EMPLOYEE_NAME: toStr(row.EMPLOYEE_NAME ?? row.employee_name),
+        POSITION: toStr(row.POSITION ?? row.position),
+        IMMEDIATE_SUPERVISOR: toStr(
+          row.IMMEDIATE_SUPERVISOR ?? row.immediate_supervisor
+        ),
+        LEVEL_1: toStr(row.LEVEL_1 ?? row.level_1),
+        LEVEL_2: toStr(row.LEVEL_2 ?? row.level_2),
+        SENIOR_PAYROLL: toStr(row.SENIOR_PAYROLL ?? row.senior_payroll),
+        HR_MANAGER: toStr(row.HR_MANAGER ?? row.hr_manager)
+      });
+
+      employeeObjects.push(obj);
+    }
+
+    // --------------------------------------------------------
+    // Call Oracle Procedure (collection type)
+    // --------------------------------------------------------
+    await connection.execute(
+      `
+      BEGIN
+        PROC_INS_UPD_EMPLOYEE_SUPERVISOUR(:p_data);
+      END;
+      `,
+      {
+        p_data: {
+          type: "EMPLOYEE_SUPERVISOUR_TAB",
+          val: employeeObjects
+        }
+      }
+    );
+
+    // --------------------------------------------------------
+    // Commit
+    // --------------------------------------------------------
+    await connection.commit();
+
+    // --------------------------------------------------------
+    // Response
+    // --------------------------------------------------------
+    res.json({
+      success: true,
+      message: "Employee supervisor records saved successfully",
+      recordCount: employeeObjects.length
+    });
+  } catch (err: any) {
+    console.error("Oracle error:", err);
+
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        console.error("Rollback error:", rollbackErr);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Employee supervisor bulk upsert failed",
+      details: err?.message || "Unknown error"
+    });
+  } finally {
+    if (connection) {
+      await connection.close().catch(() => {});
+    }
+  }
+};
+
