@@ -20,7 +20,6 @@ type PORow = {
   APPR_ITEM_L_QTY: number; ITEM_RATE: number; CURRENCY_RATE: number; AMOUNT: number;
   PROJECT_NAME: string; CONTACT_NUMBER: string; COMPANY_LOGO_AWSURL: string;
   MAIL_EMAIL: string; COMPANY_NAME: string; DIV_CODE: string;
-  // added so this single endpoint can also power the Summary view
   PROJECT_CODE: string; DESCRIPTION: string; TYPE_OF_PR: string; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
 };
 
@@ -83,17 +82,8 @@ function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
 
 // ── Helpers: strip "10 – Name" → "10" so API & filter always get pure codes ──
 function extractDivCode(labelOrCode: string): string {
-  // Matches leading token before space / en-dash / hyphen
   const m = String(labelOrCode).match(/^([^\s–-]+)/);
   return m ? m[1] : String(labelOrCode);
-}
-
-/** Strip "CODE – NAME" → "NAME" for project_name filter values */
-function extractProjectName(labelOrName: string): string {
-  const s = String(labelOrName);
-  // If it looks like "CODE – NAME", take everything after the first en-dash/hyphen
-  const m = s.match(/^[^\s–-]+\s*[–-]\s*(.+)$/);
-  return m ? m[1].trim() : s;
 }
 
 function stripDivCodeLabels(filters: ReportFilters): ReportFilters {
@@ -105,25 +95,60 @@ function stripDivCodeLabels(filters: ReportFilters): ReportFilters {
   };
 }
 
-/** Also strip project labels back to pure names before sending to API / client filter */
-function stripProjectNameLabels(filters: ReportFilters): ReportFilters {
-  const raw = filters.project_name as string[] | undefined;
-  if (!raw?.length) return filters;
-  return {
-    ...filters,
-    project_name: raw.map(extractProjectName),
-  };
+/** Convert YYYY-MM-DD (from date inputs) to MMDDYYYY for backend */
+function toMmDdYyyy(isoOrYmd: string): string {
+  if (!isoOrYmd) return '';
+  const m = String(isoOrYmd).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[2]}${m[3]}${m[1]}`; // MMDDYYYY
+  if (/^\d{8}$/.test(String(isoOrYmd))) return String(isoOrYmd);
+  return String(isoOrYmd);
 }
 
-// ── Param options ─────────────────────────────────────────
+/** Build POST body: filters as arrays, dates as MMDDYYYY */
+function buildFilterBody(companyCode?: string, filters: ReportFilters = {}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    company_code: companyCode || '',
+  };
+
+  const toArray = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.map(String).map(s => s.trim()).filter(Boolean);
+    if (v != null && String(v).trim()) return [String(v).trim()];
+    return [];
+  };
+
+  const divRaw = toArray(filters.div_code);
+  if (divRaw.length) body.div_code = divRaw.map(extractDivCode);
+
+  const po = toArray(filters.ref_doc_no);
+  if (po.length) body.ref_doc_no = po;
+
+  const proj = toArray(filters.project_name);
+  if (proj.length) body.project_name = proj;
+
+  const supp = toArray(filters.supp_name);
+  if (supp.length) body.supp_name = supp;
+
+  const stat = toArray(filters.status);
+  if (stat.length) body.status = stat;
+
+  if (filters.date_from) body.date_from = toMmDdYyyy(String(filters.date_from));
+  if (filters.date_to) body.date_to = toMmDdYyyy(String(filters.date_to));
+
+  if (filters.amount_from !== '' && filters.amount_from != null)
+    body.amount_from = Number(filters.amount_from);
+  if (filters.amount_to !== '' && filters.amount_to != null)
+    body.amount_to = Number(filters.amount_to);
+
+  return body;
+}
+
+// ── Param options (still GET for dropdowns) ─────────────────
 const getOptions = (endpoint: string, responseKeys: string[]) =>
   (filters: ReportFilters, companyCode?: string) =>
     axiosServices
       .get(`${endpoint}?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
       .then(res => normalizeStringList(res.data, responseKeys));
 
-/** Div Code options: show "CODE – NAME" in the dropdown, store that string in the filter.
- *  API calls always strip back to pure CODE via stripDivCodeLabels. */
 const getDivCodeOptions = (filters: ReportFilters, companyCode?: string) =>
   axiosServices
     .get(`/api/report/div-codes?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
@@ -142,22 +167,17 @@ const getDivCodeOptions = (filters: ReportFilters, companyCode?: string) =>
       return out;
     });
 
-/** Project Name options – depends on selected Div Code(s).
- *  Backend requires a single div_code. We use the first selected one.
- *  Displays "CODE – NAME", stores that string; we strip back to pure name when needed. */
 const getProjectNameOptions = (filters: ReportFilters, companyCode?: string) => {
   const divCodes = (filters.div_code as string[] | undefined) || [];
   if (!divCodes.length) {
-    // No division selected → return empty list (dropdown will be empty)
     return Promise.resolve([]);
   }
 
-  // Backend currently accepts a single div_code
   const pureDivCode = extractDivCode(divCodes[0]);
 
   const params = buildFilterParams(companyCode, {
     ...stripDivCodeLabels(filters),
-    div_code: [pureDivCode],          // force single value
+    div_code: [pureDivCode],
   });
 
   return axiosServices
@@ -168,17 +188,15 @@ const getProjectNameOptions = (filters: ReportFilters, companyCode?: string) => 
       const out: string[] = [];
       for (const item of raw) {
         if (!item || typeof item !== 'object') continue;
-        const code = String(item.PROJECT_CODE ?? item.project_code ?? '').trim();
         const name = String(item.PROJECT_NAME ?? item.project_name ?? '').trim();
         if (!name || seen.has(name)) continue;
         seen.add(name);
-        out.push(code ? `${code} – ${name}` : name);
+        out.push(name);
       }
       return out;
     });
 };
 
-/** Supplier options – new shape { SUPP_CODE, SUPP_NAME } */
 const getSupplierNameOptions = (filters: ReportFilters, companyCode?: string) =>
   axiosServices
     .get(`/api/report/supplier-names?${buildFilterParams(companyCode, stripDivCodeLabels(filters))}`)
@@ -188,7 +206,6 @@ const getSupplierNameOptions = (filters: ReportFilters, companyCode?: string) =>
       const out: string[] = [];
       for (const item of raw) {
         if (!item || typeof item !== 'object') continue;
-        // Prefer name (existing filter key is supp_name)
         const name = String(item.SUPP_NAME ?? item.supp_name ?? '').trim();
         if (!name || seen.has(name)) continue;
         seen.add(name);
@@ -252,17 +269,11 @@ const EMPTY_FILTERS: ReportFilters = {
   amount_from: '', amount_to: '', date_from: '', date_to: '', div_code: [],
 };
 
-// Deliberately NOT part of ReportFilters/EMPTY_FILTERS — it's a display
-// toggle, not a server filter, so it doesn't show up in the "Filter: …"
-// summary line, doesn't affect isFiltersActive, and switching it never
-// triggers a refetch.
 const paramLabelStyle: React.CSSProperties = {
   display: 'block', fontSize: 11, fontWeight: 700, color: '#6b7280',
   marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em',
 };
 
-// ── CSS: detail table (po-*) + summary table (pos-*) — only one renders
-//    at a time so the class names can coexist safely. ──────────────────
 const TABLE_CSS = `
   .po-print-logo-row td, .pos-print-logo-row td { padding: 10px 24px; }
   .po-print-logo-flex, .pos-print-logo-flex { display: flex; justify-content: space-between; align-items: center; }
@@ -275,17 +286,17 @@ const TABLE_CSS = `
   .po-table col.c0 { width: 15%; } .po-table col.c1 { width: 15%; } .po-table col.c2 { width: 7%; }
   .po-table col.c3 { width: 8%; } .po-table col.c4 { width: 7%; } .po-table col.c5 { width: 8%; }
   .po-table col.c6 { width: 10%; } .po-table col.c7 { width: 11%; } .po-table col.c8 { width: 8%; } .po-table col.c9 { width: 6%; }
-.pos-table col.c0  { width: 15%; }  /* PO No */
-.pos-table col.c1  { width: 7%; }   /* PO Date */
-.pos-table col.c2  { width: 6%; }   /* Supplier Code */
-.pos-table col.c3  { width: 11%; }  /* Supplier Name */
-.pos-table col.c4  { width: 7%; }   /* Amount */
-.pos-table col.c5  { width: 15%; }  /* PR REF.NO */
-.pos-table col.c6  { width: 16%; }  /* Scope of Work */
-.pos-table col.c7  { width: 10%; }  /* Payment Terms */
-.pos-table col.c8  { width: 8%; }   /* W/O Number */
-.pos-table col.c9  { width: 8%; }   /* Type of PR */
-.pos-table col.c10 { width: 6%; }   /* Status */
+.pos-table col.c0  { width: 15%; }
+.pos-table col.c1  { width: 7%; }
+.pos-table col.c2  { width: 6%; }
+.pos-table col.c3  { width: 11%; }
+.pos-table col.c4  { width: 7%; }
+.pos-table col.c5  { width: 15%; }
+.pos-table col.c6  { width: 16%; }
+.pos-table col.c7  { width: 10%; }
+.pos-table col.c8  { width: 8%; }
+.pos-table col.c9  { width: 8%; }
+.pos-table col.c10 { width: 6%; }
 
   .po-table th, .po-table td, .pos-table th, .pos-table td { overflow: anywhere; border: 1px solid #9d9db3; padding: 7px 10px; vertical-align: top; }
   .po-table thead th, .pos-table thead th { background: #d9d6e8; color: #1f1f2e; font-weight: 700; font-size: 12.5px; text-align: center; white-space: nowrap; }
@@ -332,13 +343,15 @@ const PurchaseOrderReport: React.FC = () => {
   const printUser = user?.username;
   const appliedFiltersRef = useRef<ReportFilters>(EMPTY_FILTERS);
 
-  // ── ONE endpoint powers both views now ──
+  // ── POST body with arrays; one endpoint powers both views ──
   const { data: allRows = [], isLoading, isFetching, refetch } = useQuery<PORow[]>({
     queryKey: ['po_detail_register'],
     queryFn: async () => {
-      // appliedFiltersRef already holds stripped codes / names
-      const params = buildFilterParams(user?.company_code, appliedFiltersRef.current);
-      const response: { data: PORow[] } = await axiosServices.get(`/api/report/po-detail-register?${params}`);
+      const body = buildFilterBody(user?.company_code, appliedFiltersRef.current);
+      const response: { data: PORow[] } = await axiosServices.post(
+        '/api/report/po-detail-register',
+        body
+      );
       return response.data || [];
     },
     enabled: false,
@@ -355,17 +368,12 @@ const PurchaseOrderReport: React.FC = () => {
       const stat = (applied.status as string[]) || [];
       const po = (applied.ref_doc_no as string[]) || [];
 
-      // Match pure DIV_CODE even when filter holds "10 – Name"
       if (div.length) {
         const selectedCodes = div.map(extractDivCode);
         if (!selectedCodes.includes(r.DIV_CODE)) return false;
       }
       if (supp.length && !supp.includes(r.SUPP_NAME)) return false;
-      // Match pure project name even when filter holds "CODE – Name"
-      if (proj.length) {
-        const selectedNames = proj.map(extractProjectName);
-        if (!selectedNames.includes(r.PROJECT_NAME)) return false;
-      }
+      if (proj.length && !proj.includes(r.PROJECT_NAME)) return false;
       if (stat.length && !stat.includes(r.STATUS)) return false;
       if (po.length && !po.includes(r.PO_NO)) return false;
       if (applied.amount_from && (parseFloat(String(r.AMOUNT)) || 0) < parseFloat(applied.amount_from as string)) return false;
@@ -430,12 +438,8 @@ const PurchaseOrderReport: React.FC = () => {
   const handlePrint = () => window.print();
 
   const handleGenerateReport = async () => {
-    // Keep the pretty labels in React state (so the dropdown still shows them)
-    // but send pure codes / pure names to the API via the ref.
     setApplied({ ...pending });
-    appliedFiltersRef.current = stripProjectNameLabels(
-      stripDivCodeLabels({ ...pending })
-    );
+    appliedFiltersRef.current = stripDivCodeLabels({ ...pending });
     try { await refetch(); } finally { setHasGeneratedReport(true); setActiveTab('report'); }
   };
 
@@ -447,7 +451,6 @@ const PurchaseOrderReport: React.FC = () => {
     setActiveTab('parameters');
   };
 
-  // ── Excel Export — branches by view, both read from the same allRows ──
   const handleExcel = async () => {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
@@ -520,7 +523,6 @@ const PurchaseOrderReport: React.FC = () => {
       img.src = url;
     });
 
-  // ── PDF Export — branches by view ──
   const handleDownloadPDF = async () => {
     const { jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
@@ -662,12 +664,12 @@ const PurchaseOrderReport: React.FC = () => {
           8: { cellWidth: 16 }, 9: { cellWidth: 16 }, 10: { cellWidth: 16 },
         },
         head: [[
-          { content: 'PO Number', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'PO Date', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Supplier Code', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Supplier Name', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
-          { content: 'PR Ref No', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'PO Number', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'PO Date', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Supplier Code', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Supplier Name', styles: {halign: 'left', fontSize: 9 } },
+          { content: 'Amount', styles: {halign: 'right', fontSize: 9 } },
+          { content: 'PR Ref No', styles: {halign: 'left', fontSize: 9 } },
           { content: 'Scope Of Work', styles: {halign: 'left', fontSize: 9 } },
           { content: 'Payment Term', styles: {halign: 'left', fontSize: 9 } },
           { content: 'W/O Number', styles: {halign: 'left', fontSize: 9 } },
@@ -704,7 +706,6 @@ const PurchaseOrderReport: React.FC = () => {
     </tr>
   );
 
-  // ── Detail table markup ──
   const detailTable = poGroups.length === 0 ? (
     <div className="rp-empty">No records found.</div>
   ) : (
@@ -785,7 +786,6 @@ const PurchaseOrderReport: React.FC = () => {
 
   const summaryRows = useMemo(() => buildSummaryRows(filteredRows), [filteredRows]);
 
-  // ── Summary table markup ──
   const summaryTable = summaryRows.length === 0 ? (
     <div className="rp-empty">No records found.</div>
   ) : (

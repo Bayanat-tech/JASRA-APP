@@ -1,10 +1,87 @@
 import { oracleDb } from "../../database/connection";
-import { Request, Response } from 'express';
+import { Request, Response } from "express";
 
-function buildFilterWhere(
-  query: Request['query'],
-  exclude?: 'ref_doc_no' | 'project_name' | 'supp_name' | 'status' | 'div_code',
-) {
+/** Normalize body value to a string array */
+function toStringArray(val: unknown): string[] {
+  if (val == null) return [];
+  if (Array.isArray(val)) {
+    return val.map((v) => String(v).trim()).filter(Boolean);
+  }
+  const s = String(val).trim();
+  return s ? [s] : [];
+}
+
+/** Escape single quotes for Oracle string literals */
+function escapeOracleString(s: string): string {
+  return s.replace(/'/g, "''");
+}
+
+/**
+ * Build WHERE from POST body.
+ * Filters are arrays (or single values normalized to arrays).
+ * Dates expected as MMDDYYYY.
+ */
+function buildFilterWhereFromBody(
+  body: Record<string, unknown>,
+  exclude?: "ref_doc_no" | "project_name" | "supp_name" | "status" | "div_code"
+): string {
+  const company_code =
+    body.company_code != null ? String(body.company_code).trim() : "";
+  const conditions: string[] = [];
+
+  if (!company_code) return "1=0";
+  conditions.push(`company_code = '${escapeOracleString(company_code)}'`);
+
+  const addInClause = (column: string, values: string[]) => {
+    if (!values.length) return;
+    const list = values.map((v) => `'${escapeOracleString(v)}'`).join(", ");
+    conditions.push(`${column} IN (${list})`);
+  };
+
+  if (exclude !== "ref_doc_no") {
+    addInClause("ref_doc_no", toStringArray(body.ref_doc_no));
+  }
+  if (exclude !== "project_name") {
+    addInClause("project_name", toStringArray(body.project_name));
+  }
+  if (exclude !== "supp_name") {
+    addInClause("supp_name", toStringArray(body.supp_name));
+  }
+  if (exclude !== "status") {
+    addInClause("status", toStringArray(body.status));
+  }
+  if (exclude !== "div_code") {
+    addInClause("div_code", toStringArray(body.div_code));
+  }
+
+  // Dates: MMDDYYYY
+  const dateFrom =
+    body.date_from != null ? String(body.date_from).trim() : "";
+  const dateTo = body.date_to != null ? String(body.date_to).trim() : "";
+  if (dateFrom && /^\d{8}$/.test(dateFrom)) {
+    conditions.push(`updated_at >= TO_DATE('${dateFrom}', 'MMDDYYYY')`);
+  }
+  if (dateTo && /^\d{8}$/.test(dateTo)) {
+    conditions.push(`updated_at <= TO_DATE('${dateTo}', 'MMDDYYYY')`);
+  }
+
+  if (body.amount_from != null && body.amount_from !== "") {
+    const n = Number(body.amount_from);
+    if (!Number.isNaN(n)) conditions.push(`amount >= ${n}`);
+  }
+  if (body.amount_to != null && body.amount_to !== "") {
+    const n = Number(body.amount_to);
+    if (!Number.isNaN(n)) conditions.push(`amount <= ${n}`);
+  }
+
+  return conditions.join(" AND ");
+}
+
+/** Same helper for option endpoints that still use query params (comma-separated). */
+function buildFilterWhereFromQuery(
+  query: Request["query"],
+  exclude?: "ref_doc_no" | "project_name" | "supp_name" | "status" | "div_code"
+): string {
   const {
     company_code,
     ref_doc_no,
@@ -18,56 +95,72 @@ function buildFilterWhere(
     amount_to,
   } = query as Record<string, string | undefined>;
 
-  const conditions: string[] = ['company_code = :company_code'];
-  const binds: Record<string, any> = { company_code };
+  const conditions: string[] = [];
+  if (!company_code) return "1=0";
+  conditions.push(`company_code = '${escapeOracleString(company_code)}'`);
 
-  const addInClause = (column: string, bindPrefix: string, raw?: string) => {
+  const addInClause = (column: string, raw?: string) => {
     if (!raw) return;
-    const values = raw.split(',').map(v => v.trim()).filter(Boolean);
-    if (values.length === 0) return;
-    const placeholders = values.map((v, i) => {
-      const key = `${bindPrefix}${i}`;
-      binds[key] = v;
-      return `:${key}`;
-    });
-    conditions.push(`${column} IN (${placeholders.join(', ')})`);
+    const values = raw
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (!values.length) return;
+    const list = values.map((v) => `'${escapeOracleString(v)}'`).join(", ");
+    conditions.push(`${column} IN (${list})`);
   };
 
-  if (exclude !== 'ref_doc_no')   addInClause('ref_doc_no', 'ref', ref_doc_no);
-  if (exclude !== 'project_name') addInClause('project_name', 'proj', project_name);
-  if (exclude !== 'supp_name')    addInClause('supp_name', 'supp', supp_name);
-  if (exclude !== 'status')       addInClause('status', 'stat', status);
-  if (exclude !== 'div_code')     addInClause('div_code', 'div', div_code);
+  if (exclude !== "ref_doc_no") addInClause("ref_doc_no", ref_doc_no);
+  if (exclude !== "project_name") addInClause("project_name", project_name);
+  if (exclude !== "supp_name") addInClause("supp_name", supp_name);
+  if (exclude !== "status") addInClause("status", status);
+  if (exclude !== "div_code") addInClause("div_code", div_code);
 
+  // Option endpoints may still send YYYY-MM-DD; support both
   if (date_from) {
-    conditions.push(`updated_at >= TO_DATE(:date_from, 'YYYY-MM-DD')`);
-    binds.date_from = date_from;
+    if (/^\d{8}$/.test(date_from)) {
+      conditions.push(`updated_at >= TO_DATE('${date_from}', 'MMDDYYYY')`);
+    } else {
+      conditions.push(
+        `updated_at >= TO_DATE('${escapeOracleString(date_from)}', 'YYYY-MM-DD')`
+      );
+    }
   }
   if (date_to) {
-    conditions.push(`updated_at <= TO_DATE(:date_to, 'YYYY-MM-DD')`);
-    binds.date_to = date_to;
+    if (/^\d{8}$/.test(date_to)) {
+      conditions.push(`updated_at <= TO_DATE('${date_to}', 'MMDDYYYY')`);
+    } else {
+      conditions.push(
+        `updated_at <= TO_DATE('${escapeOracleString(date_to)}', 'YYYY-MM-DD')`
+      );
+    }
   }
   if (amount_from) {
-    conditions.push(`po_amount >= :amount_from`);
-    binds.amount_from = Number(amount_from);
+    const n = Number(amount_from);
+    if (!Number.isNaN(n)) conditions.push(`amount >= ${n}`);
   }
   if (amount_to) {
-    conditions.push(`po_amount <= :amount_to`);
-    binds.amount_to = Number(amount_to);
+    const n = Number(amount_to);
+    if (!Number.isNaN(n)) conditions.push(`amount <= ${n}`);
   }
 
-  return { whereSql: conditions.join(' AND '), binds };
+  return conditions.join(" AND ");
 }
 
+// ── Main report: POST body with arrays ───────────────────────
 const getPoDetailRegister = async (req: Request, res: Response) => {
   try {
-    const { company_code } = req.query;
+    const body = (req.body || {}) as Record<string, unknown>;
+    const company_code =
+      body.company_code != null ? String(body.company_code).trim() : "";
+
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required body parameter: company_code",
+      });
       return;
     }
-
-    const { whereSql, binds } = buildFilterWhere(req.query);
 
     const sql = `
       SELECT
@@ -96,33 +189,34 @@ const getPoDetailRegister = async (req: Request, res: Response) => {
           r.payment_terms,
           r.wo_number
       FROM VW_BO_PO_REGISTER_JASRA r
-      WHERE ${whereSql}
+      WHERE COMPANY_CODE = '${escapeOracleString(company_code)}'
     `;
 
-    console.log("Executing SQL Query:", sql, "with binds:", binds);
-    const result = await oracleDb.query(sql, binds);
-    console.log("Query Result:", result.rows);
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
+    console.log("Query Result rows:", result.rows?.length);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ── Option endpoints (still GET + query) ─────────────────────
 const getDivCodes = async (req: Request, res: Response) => {
   try {
     const { company_code } = req.query;
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: company_code",
+      });
       return;
     }
 
-    const { whereSql, binds } = buildFilterWhere(req.query, 'div_code');
+    const sql = `SELECT DISTINCT div_code, div_name FROM MS_HR_DIVISION_JASRA WHERE COMPANY_CODE = '${escapeOracleString(String(company_code).trim())}' ORDER BY div_code`;
 
-    const sql = `SELECT DISTINCT div_code, div_name FROM MS_HR_DIVISION_JASRA WHERE ${whereSql}`;
-
-    console.log("Executing SQL Query:", sql, "with binds:", binds);
-    const result = await oracleDb.query(sql, binds);
-    console.log("Query Result:", result.rows);
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -133,11 +227,14 @@ const getPoNo = async (req: Request, res: Response) => {
   try {
     const { company_code } = req.query;
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: company_code",
+      });
       return;
     }
 
-    const { whereSql, binds } = buildFilterWhere(req.query, 'ref_doc_no');
+    const whereSql = buildFilterWhereFromQuery(req.query, "ref_doc_no");
 
     const sql = `
       SELECT DISTINCT ref_doc_no as PO_NO
@@ -145,9 +242,8 @@ const getPoNo = async (req: Request, res: Response) => {
       WHERE ${whereSql}
     `;
 
-    console.log("Executing SQL Query:", sql, "with binds:", binds);
-    const result = await oracleDb.query(sql, binds);
-    console.log("Query Result:", result.rows);
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -156,23 +252,32 @@ const getPoNo = async (req: Request, res: Response) => {
 
 const getProjectNames = async (req: Request, res: Response) => {
   try {
-    const { company_code, div_code } = req.query as { company_code?: string; div_code?: string };
+    const { company_code, div_code } = req.query as {
+      company_code?: string;
+      div_code?: string;
+    };
 
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: company_code",
+      });
       return;
     }
 
     if (!div_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: div_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: div_code",
+      });
       return;
     }
 
-    let sql: string;
-    const binds: Record<string, any> = { div_code };
+    const safeDiv = escapeOracleString(String(div_code).trim());
 
-    if (div_code === 'NA') {
-      // When DIV_CODE = 'NA'
+    let sql: string;
+
+    if (div_code === "NA") {
       sql = `
         SELECT P.PROJECT_CODE, P.PROJECT_NAME
         FROM MS_PS_PROJECT_MASTER P
@@ -183,10 +288,9 @@ const getProjectNames = async (req: Request, res: Response) => {
             FROM PURCHASE_REQUEST_DETAILS D
             WHERE D.PROJECT_CODE = P.PROJECT_CODE
           )
-          AND P.DIV_CODE = :div_code
+          AND P.DIV_CODE = '${safeDiv}'
       `;
     } else {
-      // When DIV_CODE NOT EQUAL TO 'NA'
       sql = `
         SELECT P.PROJECT_CODE, P.PROJECT_NAME
         FROM MS_PS_PROJECT_MASTER P
@@ -196,13 +300,12 @@ const getProjectNames = async (req: Request, res: Response) => {
             FROM PURCHASE_REQUEST_DETAILS D
             WHERE D.PROJECT_CODE = P.PROJECT_CODE
           )
-          AND P.DIV_CODE = :div_code
+          AND P.DIV_CODE = '${safeDiv}'
       `;
     }
 
-    console.log("Executing SQL Query:", sql, "with binds:", binds);
-    const result = await oracleDb.query(sql, binds);
-    console.log("Query Result:", result.rows);
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -214,7 +317,10 @@ const getSupplierNames = async (req: Request, res: Response) => {
     const { company_code } = req.query;
 
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: company_code",
+      });
       return;
     }
 
@@ -230,7 +336,6 @@ const getSupplierNames = async (req: Request, res: Response) => {
 
     console.log("Executing SQL Query:", sql);
     const result = await oracleDb.query(sql);
-    console.log("Query Result:", result.rows);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
@@ -241,22 +346,19 @@ const getStatusOptions = async (req: Request, res: Response) => {
   try {
     const { company_code } = req.query;
     if (!company_code) {
-      res.status(400).json({ success: false, message: "Missing required query parameter: company_code" });
+      res.status(400).json({
+        success: false,
+        message: "Missing required query parameter: company_code",
+      });
       return;
     }
 
-    const { whereSql, binds } = buildFilterWhere(req.query, 'status');
-
     const sql = `
-      SELECT DISTINCT LAST_ACTION AS STATUS
-      FROM PURCHASE_REQUEST_HEADER
-      WHERE LAST_ACTION <> 'SAVEASDRAFT'
-        AND ${whereSql}
+    select distinct status from vw_bo_po_register_jasra where company_code = '${escapeOracleString(String(company_code).trim())}'    
     `;
 
-    console.log("Executing SQL Query:", sql, "with binds:", binds);
-    const result = await oracleDb.query(sql, binds);
-    console.log("Query Result:", result.rows);
+    console.log("Executing SQL Query:", sql);
+    const result = await oracleDb.query(sql);
     res.status(200).json(result.rows);
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

@@ -9,7 +9,7 @@ router.get('/po-no',
             passport.authenticate("jwt", { session: false }),
             checkUserAuthorization,
             getPoNo);
-router.get('/po-detail-register',
+router.post('/po-detail-register',
             passport.authenticate("jwt", { session: false }),
             checkUserAuthorization,
             getPoDetailRegister);
