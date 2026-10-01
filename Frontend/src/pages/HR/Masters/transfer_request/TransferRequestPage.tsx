@@ -1,9 +1,11 @@
-import { LoadingOutlined, PlusOutlined, SaveOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
+import { CalendarOutlined, LoadingOutlined, PlusOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'; // CHANGED
 import {
   Autocomplete,
   Button,
   FormHelperText,
   Grid,
+  IconButton, // CHANGED
+  InputAdornment, // CHANGED
   InputLabel,
   TextField as MuiTextField,
   Tabs,
@@ -19,7 +21,7 @@ import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import { getIn, useFormik } from 'formik';
 import useAuth from 'hooks/useAuth';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'; // CHANGED
 import { useIntl } from 'react-intl';
 import axiosServices from 'utils/axios';
 import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
@@ -127,7 +129,7 @@ const TransferRequestServiceInstance = {
 };
 
 // =====================================================================================
-// FORM (unchanged)
+// FORM
 // =====================================================================================
 type TSupervisorDetail = {
   EMPLOYEE_CODE?: string;
@@ -150,7 +152,16 @@ type TSupervisorDetail = {
   engineer_name?: string;
   division?: string;
   department?: string;
+};
 
+const formatDateForDisplay = (date?: string | Date | null): string => {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 const AddTransferRequestForm = ({
@@ -167,9 +178,13 @@ const AddTransferRequestForm = ({
   viewOnly?: boolean;
 }) => {
   const { user } = useAuth();
+  console.log('user', user);
   const flowLevel = existingData?.flow_level_running ?? 1;
   const isLevel2 = flowLevel === 2;
   const isFieldDisabled = isLevel2 || viewOnly;
+
+  // CHANGED: ref to the hidden native date input used only for the picker popup
+  const wefPickerRef = useRef<HTMLInputElement>(null);
 
   const toDateInputValue = (date?: string | Date | null): string => {
     if (!date) return '';
@@ -191,6 +206,7 @@ const AddTransferRequestForm = ({
       last_action: 'SAVEASDRAFT',
       flow_level_running: 1,
       company_code: user?.company_code
+      // created_by_rpt_name: user?.login_name,
     },
     onSubmit: async (values, { setSubmitting }) => {
       try {
@@ -272,41 +288,57 @@ const AddTransferRequestForm = ({
 
   const handleSaveAsDraft = () => handleAction('SAVEASDRAFT');
   const handleSubmitRequest = () => handleAction('SUBMITTED');
-  const handleReject = () => handleAction('REJECT');
+  // const handleReject = () => handleAction('REJECT');
   // const handleSentBack = () => handleAction('SENTBACK');
+
+  // CHANGED: opens the hidden native date picker
+  const openWefPicker = () => {
+    if (isFieldDisabled) return;
+    const el = wefPickerRef.current;
+    if (!el) return;
+    if (typeof (el as any).showPicker === 'function') {
+      try {
+        (el as any).showPicker();
+        return;
+      } catch {
+        // fall through to focus/click
+      }
+    }
+    el.focus();
+    el.click();
+  };
 
   const getDetail = (upperKey: keyof TSupervisorDetail, lowerKey: keyof TSupervisorDetail) =>
     supervisorDetail?.[upperKey] || supervisorDetail?.[lowerKey] || '-';
 
   return (
     <Grid container spacing={2} component={'form'} onSubmit={(e) => e.preventDefault()}>
-      <Grid item xs={12} sm={6}>
+      <Grid item xs={12} sm={3}>
         <InputLabel>Request Number</InputLabel>
         <MuiTextField value={formik.values.request_number || ''} name="request_number" fullWidth disabled />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid item xs={12} sm={3}>
         <InputLabel>Request Date</InputLabel>
         <MuiTextField
-          type="date"
-          value={formik.values.request_date || ''}
+          type="text"
+          value={formatDateForDisplay(formik.values.request_date)}
           name="request_date"
-          onChange={formik.handleChange}
           fullWidth
           disabled
         />
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid item xs={12} sm={3}>
         <InputLabel>Select Employee*</InputLabel>
         <Autocomplete
           options={employeeOptions}
           getOptionLabel={(option: any) => option?.rpt_name || option?.employee_name || ''}
           isOptionEqualToValue={(option: any, value: any) => option?.employee_code === value?.employee_code}
           value={employeeOptions.find((emp: any) => emp.employee_code === formik.values.employee_code) || null}
-          onChange={(_, newValue: any) =>{ 
-            formik.setFieldValue('employee_code', newValue?.employee_code || '')
-            formik.setFieldValue('current_supervisor_empcode', newValue?.curr_supervisor_code || '')
+          onChange={(_, newValue: any) => {
+            formik.setFieldValue('employee_code', newValue?.employee_code || '');
+            formik.setFieldValue('current_supervisor_empcode', newValue?.curr_supervisor_code || '');
           }}
           disabled={isFieldDisabled}
           renderInput={(params) => (
@@ -321,7 +353,7 @@ const AddTransferRequestForm = ({
         )}
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      <Grid item xs={12} sm={3}>
         <InputLabel>Transfer to Supervisor*</InputLabel>
         <Autocomplete
           options={transferToSupervisorOptions || []}
@@ -355,15 +387,15 @@ const AddTransferRequestForm = ({
             <MuiTextField value="Loading..." fullWidth disabled />
           ) : supervisorDetail ? (
             <Grid container spacing={2} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Employee Code</InputLabel>
                 <MuiTextField value={getDetail('EMPLOYEE_CODE', 'employee_code')} fullWidth disabled size="small" />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Name</InputLabel>
                 <MuiTextField value={getDetail('RPT_NAME', 'rpt_name')} fullWidth disabled size="small" />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Dept Head</InputLabel>
                 <MuiTextField
                   value={`${getDetail('DEPT_HEAD_NAME', 'dept_head_name')} (${getDetail('DEPT_HEAD_EMP_CODE', 'dept_head_emp_code')})`}
@@ -372,7 +404,7 @@ const AddTransferRequestForm = ({
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Supervisor</InputLabel>
                 <MuiTextField
                   value={`${getDetail('SUPERVISOR_NAME', 'supervisor_name')} (${getDetail('SUPERVISOR_EMP_CODE', 'supervisor_emp_code')})`}
@@ -381,7 +413,7 @@ const AddTransferRequestForm = ({
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Engineer</InputLabel>
                 <MuiTextField
                   value={`${getDetail('ENGINEER_NAME', 'engineer_name')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
@@ -390,19 +422,19 @@ const AddTransferRequestForm = ({
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Division</InputLabel>
                 <MuiTextField
-                  value={`${getDetail('DIVISION','division')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
+                  value={`${getDetail('DIVISION', 'division')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
                   fullWidth
                   disabled
                   size="small"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid item xs={12} sm={3}>
                 <InputLabel shrink>Department</InputLabel>
                 <MuiTextField
-                  value={`${getDetail('DEPARTMENT','department')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
+                  value={`${getDetail('DEPARTMENT', 'department')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
                   fullWidth
                   disabled
                   size="small"
@@ -432,19 +464,52 @@ const AddTransferRequestForm = ({
         )}
       </Grid>
 
-      <Grid item xs={12} sm={6}>
+      {/* CHANGED: Transfer W.E.F. — displays dd/mm/yyyy, stores YYYY-MM-DD in formik (backend unchanged) */}
+      <Grid item xs={12} sm={3} sx={{ position: 'relative' }}>
         <InputLabel>Transfer W.E.F.</InputLabel>
+
+        {/* Visible field: display only, formatted dd/mm/yyyy */}
         <MuiTextField
-          type="date"
-          value={formik.values.transfer_wef || ''}
-          name="transfer_wef"
-          onChange={formik.handleChange}
+          type="text"
+          value={formatDateForDisplay(formik.values.transfer_wef)}
+          placeholder="dd/mm/yyyy"
           fullWidth
           disabled={isFieldDisabled}
-          inputProps={{
-            min: formik.values.request_date || undefined
+          onClick={openWefPicker}
+          inputProps={{ readOnly: true, style: { cursor: isFieldDisabled ? 'default' : 'pointer' } }}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton edge="end" onClick={openWefPicker} disabled={isFieldDisabled} size="small">
+                  <CalendarOutlined />
+                </IconButton>
+              </InputAdornment>
+            )
           }}
           error={Boolean(getIn(formik.touched, 'transfer_wef') && getIn(formik.errors, 'transfer_wef'))}
+        />
+
+        {/* Hidden native date input: only used to open the picker; value stays YYYY-MM-DD */}
+        <input
+          ref={wefPickerRef}
+          type="date"
+          name="transfer_wef"
+          value={formik.values.transfer_wef ? String(formik.values.transfer_wef) : ''}
+          min={formik.values.request_date ? String(formik.values.request_date) : undefined}
+          onChange={formik.handleChange}
+          tabIndex={-1}
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            bottom: 0,
+            width: '100%',
+            height: 0,
+            opacity: 0,
+            border: 0,
+            padding: 0,
+            pointerEvents: 'none'
+          }}
         />
         {getIn(formik.touched, 'transfer_wef') && getIn(formik.errors, 'transfer_wef') && (
           <FormHelperText error>{getIn(formik.errors, 'transfer_wef')}</FormHelperText>
@@ -504,7 +569,7 @@ const AddTransferRequestForm = ({
                 >
                   Sent Back
                 </Button> */}
-                <Button
+                {/* <Button
                   variant="outlined"
                   color="error"
                   onClick={handleReject}
@@ -512,7 +577,7 @@ const AddTransferRequestForm = ({
                   startIcon={formik.isSubmitting ? <LoadingOutlined /> : <StopOutlined />}
                 >
                   Reject
-                </Button>
+                </Button> */}
               </>
             )}
           </>
@@ -606,16 +671,16 @@ const TransferRequestPage = () => {
   }, [user?.loginid1, currentUserEmployeeData]);
 
   const tabParameters = [
-    'TRANSFER_REQUEST_PENDING',
+    // 'TRANSFER_REQUEST_PENDING',
     'TRANSFER_REQUEST_IN_PROGRESS',
-    'TRANSFER_REQUEST_CLOSED',
-    'TRANSFER_REQUEST_REJECT',
-    'TRANSFER_REQUEST_SENTBACK'
+    'TRANSFER_REQUEST_CLOSED'
+    // 'TRANSFER_REQUEST_REJECT',
+    // 'TRANSFER_REQUEST_SENTBACK'
   ] as const;
 
   const tabLabels = [
+    // intl.formatMessage({ id: 'Pending', defaultMessage: 'Pending' }),
     intl.formatMessage({ id: 'Pending', defaultMessage: 'Pending' }),
-    intl.formatMessage({ id: 'In Progress', defaultMessage: 'In Progress' }),
     intl.formatMessage({ id: 'Closed', defaultMessage: 'Closed' })
     // Rejected & Sent Back tabs can be re-enabled later
   ];
@@ -701,28 +766,55 @@ const TransferRequestPage = () => {
           if (!params.value) return '';
           const d = new Date(params.value);
           if (isNaN(d.getTime())) return String(params.value);
-          return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+
+          // Force dd/mm/yyyy for display only
+          const day = String(d.getDate()).padStart(2, '0');
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const year = d.getFullYear();
+          return `${day}/${month}/${year}`;
         }
       },
       {
         field: 'employee_code',
         headerName: 'Employee',
+        valueGetter: (params: any) => {
+          const code = params.data?.employee_code || '';
+          const name = params.data?.employee_name || '';
+          return code && name ? `${code} - ${name}` : code || name || '';
+        },
         minWidth: 120
       },
       {
-        field: 'current_supervisor_empcode',
-        headerName: 'Current Supervisor',
-        minWidth: 150
+        headerName: 'Current Superior',
+        field: 'current_supervisor',
+        valueGetter: (params: any) => {
+          const code = params.data?.current_supervisor_empcode || '';
+          const name = params.data?.current_supervisor_rpt_name || '';
+          return code && name ? `${code} - ${name}` : code || name || '';
+        },
+        minWidth: 220
       },
       {
-        field: 'transfer_to_supervisor_empcode',
         headerName: 'Transfer To',
-        minWidth: 140
+        field: 'transfer_to_supervisor',
+        valueGetter: (params: any) => {
+          const code = params.data?.transfer_to_supervisor_empcode || '';
+          const name = params.data?.transfer_to_supervisor_rpt_name || '';
+          return code && name ? `${code} - ${name}` : code || name || '';
+        },
+        minWidth: 220
       },
       {
         field: 'last_action',
         headerName: 'Status',
-        minWidth: 120
+        minWidth: 120,
+        valueFormatter: (params) => {
+          // On Pending tab → show SAVEASDRAFT by default if empty
+          if (activeTab === 0 && (!params.value || params.value === '')) {
+            return 'SAVEASDRAFT';
+          }
+          return params.value || '';
+        }
       },
       {
         headerName: 'Actions',
@@ -737,25 +829,16 @@ const TransferRequestPage = () => {
 
           let actionButtons: TAvailableActionButtons[] = [];
 
-          // Closed / Rejected / Sent Back → view only
-          if (activeTab >= 2) {
+          // Closed tab → always view only
+          if (activeTab === 1) {
             actionButtons = ['view'];
           }
-          // In Progress
-          else if (activeTab === 1) {
+          // In Progress tab
+          else {
             actionButtons = isLevel2Approver ? ['edit'] : ['view'];
           }
-          // Pending
-          else {
-            actionButtons = ['edit'];
-          }
 
-          return (
-            <ActionButtonsGroup
-              handleActions={(action) => handleActions(action, row)}
-              buttons={actionButtons}
-            />
-          );
+          return <ActionButtonsGroup handleActions={(action) => handleActions(action, row)} buttons={actionButtons} />;
         }
       }
     ],
@@ -788,7 +871,7 @@ const TransferRequestPage = () => {
             backgroundColor: '#fff',
             color: '#082A89',
             border: '1.5px solid #082A89',
-            fontWeight: 600,
+            fontWeight: 300,
             '&:hover': {
               backgroundColor: '#082A89',
               color: '#fff',
@@ -831,7 +914,7 @@ const TransferRequestPage = () => {
           '& .Mui-selected': {
             backgroundColor: '#fff',
             color: '#082A89 !important',
-            fontWeight: 600,
+            fontWeight: 300,
             border: '2px solid #082A89',
             borderBottom: 'none',
             position: 'relative',
@@ -860,7 +943,7 @@ const TransferRequestPage = () => {
           height="520px"
           paginationPageSize={15}
           paginationPageSizeSelector={[10, 15, 25, 50]}
-          getRowId={(params : any) => params.data?.request_number || `row-${Math.random()}`}
+          getRowId={(params: any) => params.data?.request_number || `row-${Math.random()}`}
           // optional: show loading state if you want
           // suppressNoRowsOverlay={isTabDataLoading}
         />
