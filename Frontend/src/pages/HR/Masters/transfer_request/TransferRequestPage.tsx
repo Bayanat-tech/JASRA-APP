@@ -1,4 +1,4 @@
-import { LoadingOutlined, PlusOutlined, RollbackOutlined, SaveOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
+import { LoadingOutlined, PlusOutlined, SaveOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 import {
   Autocomplete,
   Button,
@@ -14,10 +14,9 @@ import {
   Typography
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { ColumnDef } from '@tanstack/react-table';
+import { ColDef } from 'ag-grid-community';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
 import UniversalDialog from 'components/popup/UniversalDialog';
-import CustomDataTable from 'components/tables/CustomDataTables';
 import { getIn, useFormik } from 'formik';
 import useAuth from 'hooks/useAuth';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -27,6 +26,7 @@ import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
 import { TUniversalDialogProps } from 'types/types.UniversalDialog';
 import common from '../../../../service/Attendance/common_service';
 import HrRequestServiceInstance, { IHrEmployee } from 'service/services.hr';
+import CustomAgGrid from 'components/grid/CustomAgGrid';
 
 // =====================================================================================
 // TYPES
@@ -101,7 +101,7 @@ const TransferRequestServiceInstance = {
 
   getEmployee: async (loginid: string): Promise<any> => {
     const data = await common.proc_build_dynamic_sql_common({
-      parameter: 'TRANSFER_REQUEST_EMPLOYEE_DROP_DOWN',
+      parameter: 'TRANSFER_REQUEST_TRANSFER_TO_SUPERVISIOR_DROP_DOWN',
       loginid
     });
     return data || [];
@@ -127,7 +127,7 @@ const TransferRequestServiceInstance = {
 };
 
 // =====================================================================================
-// FORM
+// FORM (unchanged)
 // =====================================================================================
 type TSupervisorDetail = {
   EMPLOYEE_CODE?: string;
@@ -139,6 +139,8 @@ type TSupervisorDetail = {
   ENGINEER_EMP_CODE?: string;
   ENGINEER_NAME?: string;
   employee_code?: string;
+  DIVISION?: string;
+  DEPARTMENT?: string;
   rpt_name?: string;
   dept_head_emp_code?: string;
   dept_head_name?: string;
@@ -146,6 +148,9 @@ type TSupervisorDetail = {
   supervisor_name?: string;
   engineer_emp_code?: string;
   engineer_name?: string;
+  division?: string;
+  department?: string;
+
 };
 
 const AddTransferRequestForm = ({
@@ -268,7 +273,7 @@ const AddTransferRequestForm = ({
   const handleSaveAsDraft = () => handleAction('SAVEASDRAFT');
   const handleSubmitRequest = () => handleAction('SUBMITTED');
   const handleReject = () => handleAction('REJECT');
-  const handleSentBack = () => handleAction('SENTBACK');
+  // const handleSentBack = () => handleAction('SENTBACK');
 
   const getDetail = (upperKey: keyof TSupervisorDetail, lowerKey: keyof TSupervisorDetail) =>
     supervisorDetail?.[upperKey] || supervisorDetail?.[lowerKey] || '-';
@@ -299,7 +304,10 @@ const AddTransferRequestForm = ({
           getOptionLabel={(option: any) => option?.rpt_name || option?.employee_name || ''}
           isOptionEqualToValue={(option: any, value: any) => option?.employee_code === value?.employee_code}
           value={employeeOptions.find((emp: any) => emp.employee_code === formik.values.employee_code) || null}
-          onChange={(_, newValue: any) => formik.setFieldValue('employee_code', newValue?.employee_code || '')}
+          onChange={(_, newValue: any) =>{ 
+            formik.setFieldValue('employee_code', newValue?.employee_code || '')
+            formik.setFieldValue('current_supervisor_empcode', newValue?.curr_supervisor_code || '')
+          }}
           disabled={isFieldDisabled}
           renderInput={(params) => (
             <MuiTextField
@@ -377,6 +385,24 @@ const AddTransferRequestForm = ({
                 <InputLabel shrink>Engineer</InputLabel>
                 <MuiTextField
                   value={`${getDetail('ENGINEER_NAME', 'engineer_name')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
+                  fullWidth
+                  disabled
+                  size="small"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <InputLabel shrink>Division</InputLabel>
+                <MuiTextField
+                  value={`${getDetail('DIVISION','division')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
+                  fullWidth
+                  disabled
+                  size="small"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <InputLabel shrink>Department</InputLabel>
+                <MuiTextField
+                  value={`${getDetail('DEPARTMENT','department')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
                   fullWidth
                   disabled
                   size="small"
@@ -469,7 +495,7 @@ const AddTransferRequestForm = ({
             </Button>
             {isLevel2 && isEditMode && (
               <>
-                <Button
+                {/* <Button
                   variant="outlined"
                   color="warning"
                   onClick={handleSentBack}
@@ -477,7 +503,7 @@ const AddTransferRequestForm = ({
                   startIcon={formik.isSubmitting ? <LoadingOutlined /> : <RollbackOutlined />}
                 >
                   Sent Back
-                </Button>
+                </Button> */}
                 <Button
                   variant="outlined"
                   color="error"
@@ -588,15 +614,14 @@ const TransferRequestPage = () => {
   ] as const;
 
   const tabLabels = [
-    intl.formatMessage({ id: 'Pending' }) || 'Pending',
-    intl.formatMessage({ id: 'In Progress' }) || 'In Progress',
-    intl.formatMessage({ id: 'Closed' }) || 'Closed',
-    intl.formatMessage({ id: 'Rejected' }) || 'Rejected',
-    intl.formatMessage({ id: 'Sent Back' }) || 'Sent Back'
+    intl.formatMessage({ id: 'Pending', defaultMessage: 'Pending' }),
+    intl.formatMessage({ id: 'In Progress', defaultMessage: 'In Progress' }),
+    intl.formatMessage({ id: 'Closed', defaultMessage: 'Closed' })
+    // Rejected & Sent Back tabs can be re-enabled later
   ];
 
-  const visibleTabs = userFlowLevel === 2 ? tabLabels : tabLabels.slice(0, 4);
-  const visibleTabParameters = userFlowLevel === 2 ? tabParameters : tabParameters.slice(0, 4);
+  const visibleTabs = userFlowLevel === 2 ? tabLabels : tabLabels.slice(0, 3);
+  const visibleTabParameters = userFlowLevel === 2 ? tabParameters : tabParameters.slice(0, 3);
 
   const {
     data: tabData,
@@ -612,6 +637,7 @@ const TransferRequestPage = () => {
       ),
     enabled: !!user?.company_code && !!user?.user_id && visibleTabParameters[activeTab] !== undefined
   });
+  console.log(isTabDataLoading, 'isTabDataLoading');
 
   // -----------------------------------------------------------------
   // Popup handlers
@@ -658,89 +684,75 @@ const TransferRequestPage = () => {
   }, []);
 
   // -----------------------------------------------------------------
-  // Columns
+  // AG Grid column definitions
   // -----------------------------------------------------------------
-  const columns = useMemo<ColumnDef<TTransferRequest>[]>(
+  const columnDefs = useMemo<ColDef[]>(
     () => [
       {
-        accessorFn: (row) => row.request_number,
-        id: 'request_number',
-        header: () => <span>Request Number</span>
+        field: 'request_number',
+        headerName: 'Request Number',
+        minWidth: 140
       },
       {
-        accessorFn: (row) => row.request_date,
-        id: 'request_date',
-        header: () => <span>Request Date</span>,
-        cell: ({ getValue }) => {
-          const value = getValue() as string | Date | null | undefined;
-          if (!value) return '';
-          const d = new Date(value);
-          if (isNaN(d.getTime())) return String(value);
-          // Clean DD/MM/YYYY format (no time)
-          return d.toLocaleDateString('en-GB');
+        field: 'request_date',
+        headerName: 'Request Date',
+        minWidth: 130,
+        valueFormatter: (params) => {
+          if (!params.value) return '';
+          const d = new Date(params.value);
+          if (isNaN(d.getTime())) return String(params.value);
+          return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
         }
       },
       {
-        accessorFn: (row) => row.employee_code,
-        id: 'employee_code',
-        header: () => <span>Employee</span>
+        field: 'employee_code',
+        headerName: 'Employee',
+        minWidth: 120
       },
       {
-        accessorFn: (row) => row.current_supervisor_empcode,
-        id: 'current_supervisor_empcode',
-        header: () => <span>Current Supervisor</span>
+        field: 'current_supervisor_empcode',
+        headerName: 'Current Supervisor',
+        minWidth: 150
       },
       {
-        accessorFn: (row) => row.transfer_to_supervisor_empcode,
-        id: 'transfer_to_supervisor_empcode',
-        header: () => <span>Transfer To</span>
+        field: 'transfer_to_supervisor_empcode',
+        headerName: 'Transfer To',
+        minWidth: 140
       },
       {
-        accessorFn: (row) => row.last_action,
-        id: 'last_action',
-        header: () => <span>Status</span>
+        field: 'last_action',
+        headerName: 'Status',
+        minWidth: 120
       },
       {
-        id: 'actions',
-        header: () => <span>Actions</span>,
-        cell: ({ row }) => {
-          // Closed (2), Rejected (3), Sent Back (4) → View only
+        headerName: 'Actions',
+        field: 'actions',
+        minWidth: 120,
+        maxWidth: 140,
+        sortable: false,
+        filter: false,
+        cellRenderer: (params: any) => {
+          const row = params.data as TTransferRequest;
+          if (!row) return null;
+
+          let actionButtons: TAvailableActionButtons[] = [];
+
+          // Closed / Rejected / Sent Back → view only
           if (activeTab >= 2) {
-            const actionButtons: TAvailableActionButtons[] = ['view'];
-            return (
-              <ActionButtonsGroup
-                handleActions={(action) => handleActions(action, row.original)}
-                buttons={actionButtons}
-              />
-            );
+            actionButtons = ['view'];
+          }
+          // In Progress
+          else if (activeTab === 1) {
+            actionButtons = isLevel2Approver ? ['edit'] : ['view'];
+          }
+          // Pending
+          else {
+            actionButtons = ['edit'];
           }
 
-          // In Progress (1)
-          if (activeTab === 1) {
-            if (isLevel2Approver) {
-              const actionButtons: TAvailableActionButtons[] = ['edit'];
-              return (
-                <ActionButtonsGroup
-                  handleActions={(action) => handleActions(action, row.original)}
-                  buttons={actionButtons}
-                />
-              );
-            }
-            // Non-Level 2 → view only
-            const actionButtons: TAvailableActionButtons[] = ['view'];
-            return (
-              <ActionButtonsGroup
-                handleActions={(action) => handleActions(action, row.original)}
-                buttons={actionButtons}
-              />
-            );
-          }
-
-          // Pending (0)
-          const actionButtons: TAvailableActionButtons[] = ['edit'];
           return (
             <ActionButtonsGroup
-              handleActions={(action) => handleActions(action, row.original)}
+              handleActions={(action) => handleActions(action, row)}
               buttons={actionButtons}
             />
           );
@@ -756,16 +768,16 @@ const TransferRequestPage = () => {
     <div>
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2, mt: 1 }}>
         <Link underline="hover" color="inherit" href="/dashboard">
-          {intl.formatMessage({ id: 'Home' }) || 'Home'}
+          {intl.formatMessage({ id: 'Home', defaultMessage: 'Home' })}
         </Link>
         <Link underline="hover" color="inherit" href="/dashboard">
-          {intl.formatMessage({ id: 'Activity' }) || 'Activity'}
+          {intl.formatMessage({ id: 'Activity', defaultMessage: 'Activity' })}
         </Link>
         <Link underline="hover" color="inherit" href="/dashboard">
-          {intl.formatMessage({ id: 'Request' }) || 'Request'}
+          {intl.formatMessage({ id: 'Request', defaultMessage: 'Request' })}
         </Link>
         <Typography color="text.primary">
-          {intl.formatMessage({ id: 'Transfer Request' }) || 'Transfer Request'}
+          {intl.formatMessage({ id: 'Transfer Request', defaultMessage: 'Transfer Request' })}
         </Typography>
       </Breadcrumbs>
 
@@ -788,7 +800,7 @@ const TransferRequestPage = () => {
           onClick={handleAddTransferRequest}
           startIcon={<PlusOutlined />}
         >
-          {intl.formatMessage({ id: 'New Transfer Request' }) || 'New Transfer Request'}
+          {intl.formatMessage({ id: 'New Transfer Request', defaultMessage: 'New Transfer Request' })}
         </Button>
       </div>
 
@@ -842,12 +854,15 @@ const TransferRequestPage = () => {
       </Tabs>
 
       <div className="mt-2">
-        <CustomDataTable
-          row_id="request_number"
-          data={tabData || []}
-          columns={columns}
-          count={tabData?.length}
-          isDataLoading={isTabDataLoading}
+        <CustomAgGrid
+          rowData={tabData || []}
+          columnDefs={columnDefs}
+          height="520px"
+          paginationPageSize={15}
+          paginationPageSizeSelector={[10, 15, 25, 50]}
+          getRowId={(params : any) => params.data?.request_number || `row-${Math.random()}`}
+          // optional: show loading state if you want
+          // suppressNoRowsOverlay={isTabDataLoading}
         />
       </div>
 
