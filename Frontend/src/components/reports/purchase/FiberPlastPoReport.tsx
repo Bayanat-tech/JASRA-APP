@@ -1,40 +1,20 @@
-// import React from 'react';
-// import PfReportView from '../PfReportView';
-// // ** FiberPlast PO Report **
-// const FiberPlastPoReport: React.FC = () => {
-//     return <PfReportView reportPath="ba2578fe-acbd-4f08-9989-22bc6907e3fe" />;
-// };
-
-// export default FiberPlastPoReport;
 import React, { useMemo, useRef, useState } from 'react';
 import { Autocomplete, Box, Button, CircularProgress, TextField, Typography } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import { useQuery } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
-import useAuth from 'hooks/useAuth';
+// import useAuth from 'hooks/useAuth';
 import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from 'pages/Report/components/dynamicData';
 import { cancel, draft } from 'pages/Report/components/img';
 import { spellNumber } from 'pages/Report/components/functions';
 
 // ** FiberPlast (AJFP) PO Report **
-// Replaces the discontinued Bold Reports viewer with our own React report.
-// Pick a PO from the dropdown -> that single PO's detail report is shown and can be printed.
 
-/* ───────────────────────────── CONFIG ─────────────────────────────
-   Everything you might need to tweak lives in this block. */
+/* ───────────────────────────── CONFIG ───────────────────────────── */
 
-// Bold report used a hard-coded login for the approver signature.
 const SIGNATORY_LOGINID = 'USER_PM';
-
-// Old Bold report showed unit price with 6 decimals (0.200000). Set to 2 for 0.20.
 const UNIT_PRICE_DECIMALS = 6;
-
-// Column names in VW_BOIM_PO_PRINT for the 4 UOM/qty columns of the AJFP layout.
-// PRINT_UOM is taken from the existing PO report; the L_* names are guesses -> adjust.
-const FIELD_P_UOM = 'PRINT_UOM';
-const FIELD_L_UOM = 'L_UOM';
-const FIELD_L_QTY = 'L_QTY';
 
 // Static company text used when dynamicData has no entry / images for this division.
 const COMPANY = {
@@ -66,10 +46,7 @@ const PRINT_PAGE_STYLE = `
 
 type Row = Record<string, any>;
 
-// Escape single quotes before interpolating into raw SQL.
 const esc = (v: unknown) => String(v ?? '').replace(/'/g, "''");
-
-// Same meaning as Bold's IsNothing(x) OR Trim(x) = ""
 const isBlank = (v: unknown) => v === null || v === undefined || String(v).trim() === '';
 
 const toNum = (v: unknown): number => {
@@ -78,8 +55,6 @@ const toNum = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// executeRawSql may return an array or { data: [] }. Upper-case keys so Oracle/Bold-style
-// field names (allocated_approved_quantity vs ALLOCATED_APPROVED_QUANTITY) both work.
 const toRows = (res: any): Row[] => {
   const rows: any[] = Array.isArray(res) ? res : res?.data ?? [];
   return rows.map((r) => Object.fromEntries(Object.entries(r ?? {}).map(([k, v]) => [k.toUpperCase(), v])));
@@ -94,30 +69,31 @@ const fmtQty = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits:
 
 /* ── Ported Bold report expressions ───────────────────────────────── */
 
-// WO No
+// WO No - Updated to handle "PO" type and use WO_NUMBER from API
 const getWoNo = (row: Row): string => {
   const type = row.TYPE_OF_PR;
   const wo = row.WO_NUMBER;
   if (type === 'Charge to Customer') return `${wo ?? ''} - Chargeable`;
   if (type === 'Non Chargeable') return isBlank(wo) ? 'WO-N/A - Non-Chargeable' : `${wo} - Non-Chargeable`;
+  if (type === 'PO') return wo || 'Charge to Employee';
   return 'Charge to Employee';
 };
 
-// Quantity: allocated_approved_quantity, falling back to po_mod_appr_qty
-const getQty = (row: Row): number =>
-  isBlank(row.ALLOCATED_APPROVED_QUANTITY) ? toNum(row.PO_MOD_APPR_QTY) : toNum(row.ALLOCATED_APPROVED_QUANTITY);
+// Quantity: Use QTY_PUOM from API, fallback to ALLOCATED_APPROVED_QUANTITY
+const getQty = (row: Row): number => {
+  if (!isBlank(row.QTY_PUOM)) return toNum(row.QTY_PUOM);
+  return isBlank(row.ALLOCATED_APPROVED_QUANTITY) ? toNum(row.PO_MOD_APPR_QTY) : toNum(row.ALLOCATED_APPROVED_QUANTITY);
+};
 
-// Unit Price: po_mod_final_rate, falling back to FINAL_RATE; null (blank) if both are 0/empty
+// Unit Price: Use FINAL_RATE from API, fallback to PO_MOD_FINAL_RATE
 const getUnitPrice = (row: Row): number | null => {
-  const modRate = toNum(row.PO_MOD_FINAL_RATE);
   const finalRate = toNum(row.FINAL_RATE);
+  const modRate = toNum(row.PO_MOD_FINAL_RATE);
   if (modRate === 0 && finalRate === 0) return null;
   return modRate !== 0 ? modRate : finalRate;
 };
 
-// Amount: quantity * unit price; null (blank) if either is missing.
-// NOTE: the Bold expression multiplied allocated_approved_quantity only (so a row whose quantity
-// came from po_mod_appr_qty got a blank amount). Here the effective quantity is used instead.
+// Amount: quantity * unit price
 const getAmount = (row: Row): number | null => {
   const qty = getQty(row);
   const price = getUnitPrice(row);
@@ -125,9 +101,8 @@ const getAmount = (row: Row): number | null => {
   return qty * price;
 };
 
-// Item Description
-const getItemDesc = (row: Row): string =>
-  row.SERVICE_RM_FLAG === 'RM' && row.ITEM_CODE !== 'NEWITEM' ? row.ITEM_DESP ?? '' : row.ADDL_ITEM_DESC ?? '';
+// Item Description: Use ITEM_DESP from API
+const getItemDesc = (row: Row): string => row.ITEM_DESP || row.ADDL_ITEM_DESC || '';
 
 /* ───────────────────────────── STYLES ───────────────────────────── */
 
@@ -159,13 +134,11 @@ const LV = ({ l, v, bold }: { l: string; v: React.ReactNode; bold?: boolean }) =
 /* ───────────────────────────── COMPONENT ───────────────────────────── */
 
 const FiberPlastPoReport: React.FC = () => {
-  const { user } = useAuth();
-  const companyCode: string = user?.company_code || '';
+  const companyCode: string = 'BSG';
 
   const [docNo, setDocNo] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  // "AND COMPANY_CODE = 'x'" style clause, only when we know the logged-in company.
   const companyClause = (col: string) => (companyCode ? `${col} = '${esc(companyCode)}' AND ` : '');
   const docKey = `REPLACE('${esc(docNo)}', '/', '$')`;
 
@@ -179,7 +152,7 @@ const FiberPlastPoReport: React.FC = () => {
       ).then((rows) => rows.map((r) => String(r.DOC_NO ?? '')).filter(Boolean))
   });
 
-  /* 2. Main PO rows (PO_REGISTER dataset) */
+  /* 2. Main PO rows */
   const { data: mainRows, isFetching: mainLoading } = useQuery<Row[]>({
     queryKey: ['fp_po_main', companyCode, docNo],
     staleTime: 1000 * 60 * 5,
@@ -264,8 +237,7 @@ const FiberPlastPoReport: React.FC = () => {
   }, [poData]);
 
   const totalAmount = useMemo(() => items.reduce((sum, r) => sum + (getAmount(r) ?? 0), 0), [items]);
-  // DISCOUNT_AMOUNT is read from the first row (assumed to be a PO-level value repeated on every row).
-  const discountAmount = toNum(poData?.DISCOUNT_AMOUNT);
+  const discountAmount = toNum(poData?.DISC_HDR || poData?.DISCOUNT_AMOUNT); 
   const discountedTotal = totalAmount - discountAmount;
   const currCode = poData?.CURR_CODE || 'QAR';
 
@@ -339,7 +311,6 @@ const FiberPlastPoReport: React.FC = () => {
         </Box>
       </Box>
 
-      {/* company / form line */}
       <Box sx={{ backgroundColor: CYAN_BG, borderTop: '1.5px solid #000', borderBottom: '1.5px solid #000', px: 1, py: 0.75 }}>
         <Typography align="center" sx={{ fontWeight: 700, fontSize: 11 }}>{COMPANY.shortName}</Typography>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
@@ -349,7 +320,6 @@ const FiberPlastPoReport: React.FC = () => {
         </Box>
       </Box>
 
-      {/* footer: images from dynamicData when available, otherwise the text bars */}
       {div?.footerYes ? (
         div.multipleFooters ? (
           <Box sx={{ py: 0.6, px: 0.5, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
@@ -375,7 +345,7 @@ const FiberPlastPoReport: React.FC = () => {
     const paymentTerms = termsInfo?.PAYMENT_TERMS ?? po.PAYMENT_TERMS;
     const deliveryTerm = termsInfo?.DLVR_TERM ?? po.DLVR_TERM;
     const remarks = termsInfo?.REMARKS ?? po.REMARKS;
-    const project = [po.PROJECT_CODE, po.PROJECT_NAME].filter(Boolean).join(': ');
+    const project = [po.PROJECT_CODE?.trim(), po.PROJECT_NAME].filter(Boolean).join(': ');
 
     return (
       <Box
@@ -409,7 +379,6 @@ const FiberPlastPoReport: React.FC = () => {
         {renderPageHeader()}
 
         <Box sx={{ border: '2px solid #000', boxSizing: 'border-box', px: 1, py: 1 }}>
-          {/* ── Title + PO header ── */}
           <Box className="print-avoid" sx={{ px: 1, pt: 0.25, pb: 0.5 }}>
             <Typography align="center" sx={{ fontWeight: 800, fontSize: 16, mb: 0.5, textDecoration: 'underline' }}>
               PURCHASE ORDER
@@ -423,8 +392,8 @@ const FiberPlastPoReport: React.FC = () => {
                 <Typography sx={{ fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase' }}>{po.SUPP_NAME}</Typography>
                 <Typography sx={{ fontSize: 10.5 }}>P.O Box No: {po.ADDRESS}</Typography>
                 <Typography sx={{ fontSize: 10.5 }}>TEL- {po.SUPP_TELNO1 || '-'}</Typography>
-                <Typography sx={{ fontSize: 10.5 }}>FAX- {po.SUPP_FAXNO1 || '-'}</Typography>
-                <Typography sx={{ fontSize: 10.5 }}>MOB - {po.MOBILE || '-'}</Typography>
+                <Typography sx={{ fontSize: 10.5 }}>FAX- {po.PARTY_FAX || po.SUPP_FAXNO1 || '-'}</Typography>
+                <Typography sx={{ fontSize: 10.5 }}>MOB - {po.MOBILE ?? ''}</Typography> {/* Fixed: Removed '-' fallback */}
                 <Typography sx={{ fontSize: 10.5 }}>EMAIL: {po.SUPP_EMAIL1 || '-'}</Typography>
               </Box>
 
@@ -450,18 +419,18 @@ const FiberPlastPoReport: React.FC = () => {
                 >
                   <LV l="Purchase Order No:" v={po.DOC_NO} bold />
                   <LV l="DATE:" v={orderDate} bold />
-                  <LV l="Buyer:" v={buyerInfo?.REAL_NAME || '-'} bold />
-                  <LV l="Delivery Address :" v={deliveryInfo?.STORE_NAME || po.DELIVERY_ADDRESS || '-'} />
-                  <LV l="Contact Name :" v={deliveryInfo?.CONTACT_PERSON || '-'} />
-                  <LV l="Contact No :" v={deliveryInfo?.CONTACT_NUMBER || '-'} />
-                  <LV l="PR. No :" v={po.REQUEST_NUMBER || '-'} />
+                  <LV l="Buyer:" v={buyerInfo?.REAL_NAME || po.BUYER || '-'} bold />
+                  <LV l="Delivery Address :" v={deliveryInfo?.STORE_NAME || po.PROJECT_NAME || po.DELIVERY_ADDRESS || '-'} />
+                  <LV l="Contact Name :" v={deliveryInfo?.CONTACT_PERSON || po.CONTACT_PERSON || '-'} />
+                  <LV l="Contact No :" v={deliveryInfo?.CONTACT_NUMBER || po.CONTACT_NUMBER || '-'} />
+                  <LV l="PR. No :" v={po.PR_NO || po.REQUEST_NUMBER || '-'} />
                   <LV l="WO No :" v={getWoNo(po)} />
                 </Box>
               </Box>
             </Box>
           </Box>
 
-          {/* ── Payment / delivery / project strip ── */}
+          {/* Payment / delivery / project strip */}
           <table className="print-avoid" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr>
@@ -479,7 +448,7 @@ const FiberPlastPoReport: React.FC = () => {
             </tbody>
           </table>
 
-          {/* ── Items ── */}
+          {/* Items */}
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6, tableLayout: 'fixed' }}>
             <thead>
               <tr>
@@ -500,7 +469,7 @@ const FiberPlastPoReport: React.FC = () => {
                   colSpan={9}
                   style={{ border: `1px solid ${BORDER_BLUE}`, padding: '4px 6px', fontWeight: 700, fontSize: 10.5, backgroundColor: '#fff' }}
                 >
-                  Scope of Work:- {po.DESCRIPTION}
+                  Scope of Work:- {po.SCOPE_WORK || po.DESCRIPTION}
                   {remarks && (
                     <>
                       <br />
@@ -517,12 +486,13 @@ const FiberPlastPoReport: React.FC = () => {
                 return (
                   <tr key={`${row.ITEM_SEQUENCE_NO ?? i}-${i}`}>
                     <td style={{ ...tdBase, textAlign: 'center' }}>{row.ITEM_SEQUENCE_NO || i + 1}</td>
-                    <td style={{ ...tdBase, textAlign: 'center' }}>{row.COST_CODE || ''}</td>
+                    <td style={{ ...tdBase, textAlign: 'center' }}>{row.ITEM_CODE || ''}</td>
                     <td style={{ ...tdBase, fontWeight: 700 }}>{getItemDesc(row)}</td>
-                    <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{row[FIELD_P_UOM] ?? ''}</td>
+                    <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{row.P_UOM || ''}</td>
                     <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{qty ? fmtQty(qty) : ''}</td>
-                    <td style={{ ...tdBase, textAlign: 'center' }}>{row[FIELD_L_UOM] ?? ''}</td>
-                    <td style={{ ...tdBase, textAlign: 'center' }}>{fmtQty(toNum(row[FIELD_L_QTY]))}</td>
+                    <td style={{ ...tdBase, textAlign: 'center' }}>{row.L_UOM || ''}</td>
+                    {/* Fixed: Show 0 instead of blank */}
+                    <td style={{ ...tdBase, textAlign: 'center' }}>{isBlank(row.QTY_LUOM) ? '' : fmtQty(toNum(row.QTY_LUOM))}</td>
                     <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700 }}>{fmt(price, UNIT_PRICE_DECIMALS)}</td>
                     <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700, backgroundColor: CYAN_BG }}>{fmt(amount)}</td>
                   </tr>
@@ -549,7 +519,7 @@ const FiberPlastPoReport: React.FC = () => {
             </tbody>
           </table>
 
-          {/* ── Quotation reference + terms text ── */}
+          {/* Quotation reference + terms text */}
           <Box className="print-avoid" sx={{ px: 1, py: 0.75 }}>
             <Typography sx={{ fontWeight: 700, fontSize: 10 }}>
               Above is as per attached quotation Ref: {po.QUATATION_REFERENCE}
@@ -575,7 +545,7 @@ const FiberPlastPoReport: React.FC = () => {
           {renderSignatureBlock()}
         </Box>
 
-        {/* ── Standard Purchase Terms (own page, 3 columns) ── */}
+        {/* Standard Purchase Terms (own page, 3 columns) */}
         {Array.isArray(div?.clauses) && div.clauses.length > 0 && (
           <Box sx={{ mt: 2, '@media print': { mt: 0, breakBefore: 'page', pageBreakBefore: 'always' } }}>
             {renderPageHeader()}
