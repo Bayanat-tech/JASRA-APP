@@ -135,71 +135,86 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         cellClass: 'text-right',
         cellStyle: { fontSize: '12px' }
       },
-{
-  headerName: 'Actions',
-  field: 'actions',
-  colId: 'prActions',
-  cellStyle: { fontSize: '12px' },
-  cellRenderer: (params: any) => {
-    const docType = (params.data.document_type || '').toUpperCase();
-    const docNumber = (params.data.document_number || '').replace(/\$/g, '/').toUpperCase();
-    // Hide Actions for Purchase Orders
-    const isPO =
-      docType.includes('PURCHASE ORDER') ||
-      docNumber.includes('/PO/');
+      {
+        headerName: 'Actions',
+        field: 'actions',
+        colId: 'prActions',
+        cellStyle: { fontSize: '12px' },
+        cellRenderer: (params: any) => {
+          const docType = (params.data.document_type || '').toUpperCase();
+          const docNumber = (params.data.document_number || '').replace(/\$/g, '/').toUpperCase();
+          
+          // Check if it's a Purchase Order (PO)
+          const isPO =
+            docType.includes('PURCHASE ORDER') ||
+            docNumber.includes('PO$') ||
+            docNumber.includes('/PO/');
 
-    if (isPO) return null;
+          // Check if it's a Purchase Request (PR)
+          const isPR = /\/PR\//i.test(docNumber) || docType.includes('PURCHASE REQUEST');
 
-    const actionButtons: TAvailableActionButtons[] = ['view'];
-    if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
-      actionButtons.push('cancel');
-    }
+          const actionButtons: TAvailableActionButtons[] = [];
 
-    return (
-      <ActionButtonsGroup
-        handleActions={(action) => handleActions(action, params.data)}
-        buttons={actionButtons}
-      />
-    );
-  }
-},
+          // 1. If it's a PR, show the view (eye) button
+          if (isPR) {
+            actionButtons.push('view');
+          }
+
+          // 2. If it's a PO and userlevel is 5, show the cancel (x) button
+          if (isPO && userlevel === 5 && params.data.document_type === 'Purchase Order') {
+            actionButtons.push('cancel');
+          }
+
+          // If no buttons are applicable for this row, return null
+          if (actionButtons.length === 0) {
+            return null;
+          }
+
+          return (
+            <ActionButtonsGroup
+              handleActions={(action) => handleActions(action, params.data)}
+              buttons={actionButtons}
+            />
+          );
+        }
+      },
       // Added back the PO Report column
-{
-  headerName: 'PO Report',
-  field: 'actions',
-  colId: 'poReportActions',
-  cellStyle: { fontSize: '12px' },
-  cellRenderer: (params: any) => {
-    const rawDocNumber = params.data.document_number || '';
-    const formattedDocNumber = rawDocNumber.replace(/\$/g, '/');
+      {
+        headerName: 'PO Report',
+        field: 'actions',
+        colId: 'poReportActions',
+        cellStyle: { fontSize: '12px' },
+        cellRenderer: (params: any) => {
+          const rawDocNumber = params.data.document_number || '';
+          const formattedDocNumber = rawDocNumber.replace(/\$/g, '/');
 
-    // Robust PR detection: matches .../PR/... anywhere in the doc number,
-    // regardless of document_type accuracy
-    const isPR = /\/PR\//i.test(formattedDocNumber);
+          // Robust PR detection: matches .../PR/... anywhere in the doc number,
+          // regardless of document_type accuracy
+          const isPR = /\/PR\//i.test(formattedDocNumber);
 
-    const divisionCode = params.data.div_code || params.data.division_code || '';
+          const divisionCode = params.data.div_code || params.data.division_code || '';
 
-    return (
-      <div
-        className="flex flex-col gap-1"
-        style={isPR ? { opacity: 0.4, pointerEvents: 'none', cursor: 'not-allowed' } : undefined}
-      >
-        <ActionButtonsGroup
-          handleActions={() => {
-            if (isPR) return; // extra safety guard
-            setHandleReportOpen({
-              open: true,
-              poNumber: formattedDocNumber,
-              divCode: divisionCode,
-              companyCode: params.data.company_code || user?.company_code || ''
-            });
-          }}
-          buttons={['view']}
-        />
-      </div>
-    );
-  }
-},
+          return (
+            <div
+              className="flex flex-col gap-1"
+              style={isPR ? { opacity: 0.4, pointerEvents: 'none', cursor: 'not-allowed' } : undefined}
+            >
+              <ActionButtonsGroup
+                handleActions={() => {
+                  if (isPR) return; // extra safety guard
+                  setHandleReportOpen({
+                    open: true,
+                    poNumber: formattedDocNumber,
+                    divCode: divisionCode,
+                    companyCode: params.data.company_code || user?.company_code || ''
+                  });
+                }}
+                buttons={['view']}
+              />
+            </div>
+          );
+        }
+      },
     ],
     [userlevel,user]
   );
@@ -308,7 +323,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         break;
       }
       case 'cancel':
-        if (REQUEST_NUMBER.includes('PO$')) {
+        if (REQUEST_NUMBER.includes('PO$') || REQUEST_NUMBER.includes('PO/')) {
           handleCancelPopupOpen(REQUEST_NUMBER);
         }
         break;
