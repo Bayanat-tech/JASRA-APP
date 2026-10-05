@@ -97,20 +97,25 @@ const PAGE_HEIGHT_PX = 267 * MM_TO_PX;
 const SAFETY_BUFFER_PX = 64;
 
 // Standard (fixed) height of the "For Supplier / For <Company>" signature box.
-// Previously this box used `flex: 1` and stretched to fill the page.
 const SIGNATURE_BOX_HEIGHT_PX = 120;
+
+// Top margin (px) of the signature block under the terms text. Included in the
+// height reserved for it during pagination.
+const SIGNATURE_TOP_GAP_PX = 8;
+
+// Horizontal space (px) used by the page frame (2px border + 8px padding, each side).
+// The hidden measuring box mirrors this so images scale to the same width as on the page.
+const FRAME_INSET_PX = 10;
 
 // Gap between the 3 terms columns (px). Also used to offset continuation pages.
 const TERMS_GAP_PX = 10;
 
 const CYAN_BG = '#e3f2fd';
 const BORDER_BLUE = '#9bb1cc';
-// const BORDER_DARK = '#a0a0a0';
 
 const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProps>(
   ({ required_values }, ref) => {
     let { divCode, refDocNo } = required_values;
-    console.log('Rendering PurchaseReportDesign with:', { divCode, refDocNo });
     const [suppCode, setSuppCode] = useState<string>('');
     const [isExportingExcel, setIsExportingExcel] = useState(false);
 
@@ -201,8 +206,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     AND COMPANY_CODE = '${poData?.COMPANY_CODE}'
 `, [suppCode, poData?.COMPANY_CODE]);
 
-    // NOTE: previously this destructured only `isFetching`, so `supplierInfo` was
-    // never actually captured — that's why the Excel export had nothing to send.
     const { isFetching: isSupplierLoading } = useQuery<SupplierInfo>({
       queryKey: ['purchase_report_supplier_info', suppCode, poData?.COMPANY_CODE],
       staleTime: 1000 * 60 * 5,
@@ -335,6 +338,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     const tableHeadRef = useRef<HTMLTableSectionElement>(null);
     const scopeRowRef = useRef<HTMLTableRowElement>(null);
     const termsTextRef = useRef<HTMLDivElement>(null);
+    const signatureRef = useRef<HTMLDivElement>(null);
     const totalRowRef = useRef<HTMLTableRowElement>(null);
     const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
@@ -345,9 +349,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     }, [poItems]);
 
     // Logo / header / footer images have no intrinsic height until they load, so a
-    // measurement taken before that under-counts the header/footer/signature heights
-    // and lets the footer overflow onto its own (almost blank) page. Once every image
-    // inside the hidden measuring box has finished loading, re-run the pagination.
+    // measurement taken before that under-counts the header/footer/signature heights.
+    // Once every image inside the hidden measuring box has finished loading, re-run the
+    // pagination.
     useEffect(() => {
       const box = measureBoxRef.current;
       if (!box) return undefined;
@@ -440,6 +444,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const tableHeadH = tableHeadRef.current?.offsetHeight ?? 0;
       const scopeRowH = scopeRowRef.current?.offsetHeight ?? 0;
       const termsTextH = termsTextRef.current?.offsetHeight ?? 0;
+      // Signature box + blue band + footer images (sits right under the terms text on the
+      // last items page, like the old Bold PO).
+      const signatureH = (signatureRef.current?.offsetHeight ?? 0) + SIGNATURE_TOP_GAP_PX;
       const totalRowH = totalRowRef.current?.offsetHeight ?? 24;
       const heightOf = (idxs: number[]) => idxs.reduce((sum, i) => sum + rowHeights[i], 0);
 
@@ -488,15 +495,17 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const lastPageIdx = indexChunks.length - 1;
       const last = indexChunks[lastPageIdx];
       const isOnlyPage = lastPageIdx === 0;
-      // Last items page carries the "Above is as per attached quotation…" terms text.
-      // The signature box, footer strip and Standard Purchase Terms live in the
-      // separate closing section (page 2 onwards), exactly like the Bold report.
+      // The last items page carries the "Above is as per attached quotation…" terms text
+      // AND the signature box + footer strip (old Bold PO style). Only the Standard
+      // Purchase Terms live in the separate closing section (next page onwards).
       const reservedWithTerms =
-        pageHeaderH + tableHeadH + termsTextH + totalRowH + SAFETY_BUFFER_PX +
+        pageHeaderH + tableHeadH + termsTextH + signatureH + totalRowH + SAFETY_BUFFER_PX +
         (isOnlyPage ? firstPageExtraH + scopeRowH : 0);
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
       if (heightOf(last) > usableWithTerms) {
+        // Not enough room for terms text + signature under the last rows → give them a
+        // page of their own (header + terms text + signature + footer).
         indexChunks.push([]);
       }
 
@@ -649,6 +658,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       );
     };
 
+    // Scope of Work shows ONLY the description. Remarks / warranty (e.g. "6 Months") is
+    // printed at the bottom, in the "Above is as per attached quotation…" text (see
+    // renderTermsText) — it must not be repeated under the SOW.
     const renderScopeRow = (elRef?: React.Ref<HTMLTableRowElement>) => (
       <tr className="print-row-avoid" ref={elRef}>
         <td
@@ -662,12 +674,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           }}
         >
           Scope of Work:- {poData.DESCRIPTION}
-          {(termsInfo?.REMARKS ?? poData.REMARKS) && (
-            <>
-              <br />
-              <span style={{ fontWeight: 400 }}>{termsInfo?.REMARKS ?? poData.REMARKS}</span>
-            </>
-          )}
         </td>
       </tr>
     );
@@ -753,7 +759,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       </Box>
     );
 
-    const renderSignatureBlock = () => {
+    const renderSignatureBlock = (elRef?: React.Ref<HTMLDivElement>) => {
       const refNo = poData?.REF_DOC_NO || '';
       const isAJSS = refNo.startsWith('AJSS');
       const isAND = refNo.startsWith('AND');
@@ -784,7 +790,11 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       // One black-bordered box (like Bold): signature row | blue band | footer images,
       // with black divider lines between the three parts.
       return (
-        <Box className="print-avoid" sx={{ border: '1.5px solid #000', boxSizing: 'border-box' }}>
+        <Box
+          ref={elRef}
+          className="print-avoid"
+          sx={{ border: '1.5px solid #000', boxSizing: 'border-box', mt: `${SIGNATURE_TOP_GAP_PX}px` }}
+        >
           {/* Signature row — fixed standard height, black vertical divider */}
           <Box sx={{ display: 'flex', height: `${SIGNATURE_BOX_HEIGHT_PX}px`, boxSizing: 'border-box' }}>
             <Box
@@ -978,6 +988,10 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             </tbody>
           </table>
           {renderTermsText(termsTextRef)}
+          {/* Same horizontal inset as the real page frame so footer images scale identically */}
+          <Box sx={{ px: `${FRAME_INSET_PX}px`, boxSizing: 'border-box' }}>
+            {renderSignatureBlock(signatureRef)}
+          </Box>
         </Box>
 
         {pagesToRender.map((chunk, pageIdx) => {
@@ -997,8 +1011,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   flexDirection: 'column',
                   boxSizing: 'border-box',
                   minHeight: '267mm',
-                  breakAfter: isLastPage ? 'auto' : 'page',
-                  pageBreakAfter: isLastPage ? 'auto' : 'always',
+                  breakAfter: 'page',
+                  pageBreakAfter: 'always',
                 },
                 display: 'flex',
                 flexDirection: 'column',
@@ -1041,15 +1055,21 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   </table>
                 )}
 
-                {isLastPage && renderTermsText()}
+                {/* Last items page: terms text, then signature box + footer strip directly
+                    below it (old Bold PO layout). */}
+                {isLastPage && (
+                  <>
+                    {renderTermsText()}
+                    {renderSignatureBlock()}
+                  </>
+                )}
               </Box>
             </Box>
           );
         })}
 
-        {/* ── CLOSING PAGES (Bold page 2+): logo header on every page; page 1 of them has the
-            signature box + footer lines + "Standard Purchase Terms"; terms fill the columns
-            to the bottom of the page and continue on the next page ── */}
+        {/* ── CLOSING PAGES: logo header on every page; "Standard Purchase Terms" fill the
+            columns to the bottom of the page and continue on the next page ── */}
         {Array.from({ length: closingPageCount }).map((_, k) => (
           <Box
             key={`closing-${k}`}
@@ -1076,12 +1096,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               }}
             >
               {k === 0 && (
-                <>
-                  {renderSignatureBlock()}
-                  <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mt: 1, mb: 0.75, textDecoration: 'underline' }}>
-                    Standard Purchase Terms
-                  </Typography>
-                </>
+                <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}>
+                  Standard Purchase Terms
+                </Typography>
               )}
               <Box
                 ref={k === 0 ? termsViewportRef : undefined}
