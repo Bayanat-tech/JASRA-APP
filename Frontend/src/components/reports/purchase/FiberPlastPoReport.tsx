@@ -8,7 +8,7 @@ import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from 'pages/Report/components/dynamicData';
 import { cancel, draft } from 'pages/Report/components/img';
 import { spellNumber } from 'pages/Report/components/functions';
-
+import { FP_CLAUSES, Clause } from 'pages/Report/components/fiberplastTerms';
 // ** FiberPlast (AJFP) PO Report **
 
 /* ───────────────────────────── CONFIG ───────────────────────────── */
@@ -223,6 +223,8 @@ const FiberPlastPoReport: React.FC = () => {
 
   const div = (dynamicData as Record<string, any>)[String(poData?.DIV_CODE ?? '')];
 
+  const clauses: Clause[] = Array.isArray(div?.clauses) && div.clauses.length > 0 ? div.clauses : FP_CLAUSES;
+
   const status = useMemo(() => {
     if (!poData) return undefined;
     if (poData.PO_CANCEL === 'Y') return 'Cancelled';
@@ -257,26 +259,26 @@ const FiberPlastPoReport: React.FC = () => {
   /* ───────────── render pieces ───────────── */
 
   const renderPageHeader = () => {
-    const hasImages = div && (div.logoYes || div.headerYes);
-    if (!hasImages) {
-      return (
-        <Box sx={{ pb: '4px', mb: 0.5 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 18 }}>{COMPANY.name}</Typography>
-        </Box>
-      );
-    }
+    // const hasImages = div && (div.logoYes || div.headerYes);
+    // if (!hasImages) {
+    //   return (
+    //     <Box sx={{ pb: '4px', mb: 0.5 }}>
+    //       <Typography sx={{ fontWeight: 800, fontSize: 18 }}>{COMPANY.name}</Typography>
+    //     </Box>
+    //   );
+    // }
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: '4px', mb: 0.5 }}>
-        {div.logoYes && (
+        {/* {div.logoYes && (
           <Box sx={{ width: div.logoWidth ?? '32%', display: 'flex', justifyContent: 'flex-start' }}>
             <img src={div.logo} alt="logo" style={{ maxHeight: '65px', objectFit: 'contain' }} />
           </Box>
-        )}
-        {div.headerYes && (
+        )} */}
+        {/* {div.headerYes && (
           <Box sx={{ width: div.headerWidth ?? '63%', display: 'flex', justifyContent: 'flex-end' }}>
             <img src={div.header} alt="header text" style={{ maxHeight: '65px', objectFit: 'contain' }} />
           </Box>
-        )}
+        )} */}
       </Box>
     );
   };
@@ -545,37 +547,34 @@ const FiberPlastPoReport: React.FC = () => {
           {renderSignatureBlock()}
         </Box>
 
-        {/* Standard Purchase Terms (own page, 3 columns) */}
-        {Array.isArray(div?.clauses) && div.clauses.length > 0 && (
-          <Box sx={{ mt: 2, '@media print': { mt: 0, breakBefore: 'page', pageBreakBefore: 'always' } }}>
-            {renderPageHeader()}
-            <Box sx={{ border: '2px solid #000', p: '6px 8px', boxSizing: 'border-box' }}>
-              <Typography
-                align="center"
-                sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}
-              >
-                Standard Purchase Terms
-              </Typography>
-              <Box sx={{ columnCount: 3, columnGap: `${TERMS_GAP_PX}px`, fontSize: 5.6, lineHeight: 1.05 }}>
-                {div.clauses.map((clause: { title: string; body: string }) => {
-                  const isIntro = /^standard purchase terms/i.test(clause.title.trim());
-                  return (
-                    <Box key={clause.title} sx={{ mb: 0.6 }}>
-                      {!isIntro && (
-                        <Typography component="span" sx={{ fontWeight: 700, fontSize: 5.8, display: 'block' }}>
-                          {clause.title}
-                        </Typography>
-                      )}
-                      <Typography component="span" sx={{ fontSize: 5.6, lineHeight: 1.05, display: 'block' }}>
-                        {clause.body}
+{/* Standard Purchase Terms (own page, 3 columns) */}
+      {clauses.length > 0 && (
+        <Box sx={{ mt: 2, '@media print': { mt: 0, breakBefore: 'page', pageBreakBefore: 'always' } }}>
+          {renderPageHeader()}
+          <Box sx={{ border: '2px solid #000', p: '6px 8px', boxSizing: 'border-box' }}>
+            <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}>
+              Standard Purchase Terms
+            </Typography>
+            <Box sx={{ columnCount: 3, columnGap: `${TERMS_GAP_PX}px`, fontSize: 5.6, lineHeight: 1.05 }}>
+              {clauses.map((clause) => {
+                const isIntro = /^standard purchase terms/i.test(clause.title.trim());
+                return (
+                  <Box key={clause.title} sx={{ mb: 0.6 }}>
+                    {!isIntro && (
+                      <Typography component="span" sx={{ fontWeight: 700, fontSize: 5.8, display: 'block' }}>
+                        {clause.title}
                       </Typography>
-                    </Box>
-                  );
-                })}
-              </Box>
+                    )}
+                    <Typography component="span" sx={{ fontSize: 5.6, lineHeight: 1.05, display: 'block', whiteSpace: 'pre-line' }}>
+                      {clause.body}
+                    </Typography>
+                  </Box>
+                );
+              })}
             </Box>
           </Box>
-        )}
+        </Box>
+      )}
       </Box>
     );
   };
