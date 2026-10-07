@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Autocomplete, Box, Button, CircularProgress, TextField, Typography } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useQuery } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
 // import useAuth from 'hooks/useAuth';
@@ -9,6 +10,7 @@ import { dynamicData } from 'pages/Report/components/dynamicData';
 import { cancel, draft } from 'pages/Report/components/img';
 import { spellNumber } from 'pages/Report/components/functions';
 import { FP_CLAUSES, Clause } from 'pages/Report/components/fiberplastTerms';
+import { exportFiberPlastPoToExcel, FpExcelLine } from './Fiberplastpoexcelexport';
 // ** FiberPlast (AJFP) PO Report **
 
 /* ───────────────────────────── CONFIG ───────────────────────────── */
@@ -26,6 +28,16 @@ const COMPANY = {
   footerLine1: 'P.O. Box : 23300, Doha - Qatar, C.R No. : 122339, Tel: (+974) 4432 6930, Fax: (+974) 4432 1102',
   footerLine2: 'E-mail: info@aljassra-fiberplast.com, Website : www.aljassra-fiberplast.com'
 };
+
+// General terms printed under the items table (used by both the print view and the Excel export).
+const GENERAL_TERMS: string[] = [
+  '1. Our order number is to be quoted on all relevant Invoices & Delivery Notes. Your Invoice to be submitted against the actual Delivery/Services to our Head Office within seven days from the date of invoice supported with relevant Delivery Note or Job Completion Report or Service Report or attendance sheet whichever is applicable with all Original copies.',
+  '2. Notify Procurement Dept. immediately if you are unable to ship/deliver as specified.',
+  `3. Send all correspondence to: ${COMPANY.procurementEmail}`,
+  'Procurement Department',
+  'P.O. Box: 201325, 11th Floor Lusail Marina Tower No.50 Lusail-Qatar',
+  'Phone: +974 4404 0800   Fax: +974 4404 0801'
+];
 
 const CYAN_BG = '#e3f2fd';
 const BORDER_BLUE = '#9bb1cc';
@@ -137,6 +149,7 @@ const FiberPlastPoReport: React.FC = () => {
   const companyCode: string = 'BSG';
 
   const [docNo, setDocNo] = useState<string | null>(null);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   const companyClause = (col: string) => (companyCode ? `${col} = '${esc(companyCode)}' AND ` : '');
@@ -239,7 +252,7 @@ const FiberPlastPoReport: React.FC = () => {
   }, [poData]);
 
   const totalAmount = useMemo(() => items.reduce((sum, r) => sum + (getAmount(r) ?? 0), 0), [items]);
-  const discountAmount = toNum(poData?.DISC_HDR || poData?.DISCOUNT_AMOUNT); 
+  const discountAmount = toNum(poData?.DISC_HDR || poData?.DISCOUNT_AMOUNT);
   const discountedTotal = totalAmount - discountAmount;
   const currCode = poData?.CURR_CODE || 'QAR';
 
@@ -255,6 +268,79 @@ const FiberPlastPoReport: React.FC = () => {
     documentTitle: docNo ? `PO-${docNo.replace(/[\\/]/g, '-')}` : 'Purchase-Order',
     pageStyle: PRINT_PAGE_STYLE
   });
+
+  /* ───────────── Excel export ───────────── */
+
+  const handleExportExcel = async () => {
+    if (!poData || !docNo) return;
+    setIsExportingExcel(true);
+    try {
+      const paymentTerms = termsInfo?.PAYMENT_TERMS ?? poData.PAYMENT_TERMS;
+      const deliveryTerm = termsInfo?.DLVR_TERM ?? poData.DLVR_TERM;
+      const remarks = termsInfo?.REMARKS ?? poData.REMARKS;
+      const project = [poData.PROJECT_CODE?.trim(), poData.PROJECT_NAME].filter(Boolean).join(': ');
+
+      const lines: FpExcelLine[] = items.map((row, i) => {
+        const qty = getQty(row);
+        return {
+          seq: row.ITEM_SEQUENCE_NO || i + 1,
+          gl: row.ITEM_CODE || '',
+          desc: getItemDesc(row),
+          pUom: row.P_UOM || '',
+          qtyPuom: qty ? qty : null,
+          lUom: row.L_UOM || '',
+          qtyLuom: isBlank(row.QTY_LUOM) ? null : toNum(row.QTY_LUOM),
+          unitPrice: getUnitPrice(row),
+          amount: getAmount(row)
+        };
+      });
+
+      await exportFiberPlastPoToExcel({
+        company: COMPANY,
+        divName: div?.name,
+        docNo: String(poData.DOC_NO ?? docNo),
+        orderDate,
+        buyer: buyerInfo?.REAL_NAME || poData.BUYER || '-',
+        deliveryAddress: deliveryInfo?.STORE_NAME || poData.PROJECT_NAME || poData.DELIVERY_ADDRESS || '-',
+        contactName: deliveryInfo?.CONTACT_PERSON || poData.CONTACT_PERSON || '-',
+        contactNo: deliveryInfo?.CONTACT_NUMBER || poData.CONTACT_NUMBER || '-',
+        prNo: poData.PR_NO || poData.REQUEST_NUMBER || '-',
+        woNo: getWoNo(poData),
+        supplier: {
+          code: poData.SUPP_CODE || '-',
+          name: poData.SUPP_NAME || '',
+          address: poData.ADDRESS || '',
+          tel: poData.SUPP_TELNO1 || '-',
+          fax: poData.PARTY_FAX || poData.SUPP_FAXNO1 || '-',
+          mob: poData.MOBILE ?? '',
+          email: poData.SUPP_EMAIL1 || '-'
+        },
+        paymentTerms: paymentTerms ?? '',
+        deliveryTerm: deliveryTerm ?? '',
+        project,
+        scopeOfWork: poData.SCOPE_WORK || poData.DESCRIPTION || '',
+        remarks: remarks ?? '',
+        lines,
+        currCode,
+        totalAmount,
+        totalInWords: spellNumber(totalAmount, poData.CURR_CODE),
+        discountAmount,
+        discountedTotal,
+        discountedInWords: spellNumber(discountedTotal, poData.CURR_CODE),
+        quotationRef: poData.QUATATION_REFERENCE,
+        reasonForModify: poData.REASON_FOR_PO_MODIFY,
+        generalTerms: GENERAL_TERMS,
+        status: status as 'DRAFT' | 'Cancelled' | undefined,
+        signatureUrl: canShowSignature ? signaturePath : undefined,
+        printDate,
+        clauses
+      });
+    } catch (err) {
+      console.error('Excel export failed:', err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   /* ───────────── render pieces ───────────── */
 
@@ -532,49 +618,44 @@ const FiberPlastPoReport: React.FC = () => {
                 </>
               )}
             </Typography>
-            <Typography sx={{ fontSize: 9.5, mt: 0.5 }}>
-              1. Our order number is to be quoted on all relevant Invoices &amp; Delivery Notes. Your Invoice to be submitted against the actual
-              Delivery/Services to our Head Office within seven days from the date of invoice supported with relevant Delivery Note or Job
-              Completion Report or Service Report or attendance sheet whichever is applicable with all Original copies.
-            </Typography>
-            <Typography sx={{ fontSize: 9.5 }}>2. Notify Procurement Dept. immediately if you are unable to ship/deliver as specified.</Typography>
-            <Typography sx={{ fontSize: 9.5 }}>3. Send all correspondence to: {COMPANY.procurementEmail}</Typography>
-            <Typography sx={{ fontSize: 9.5 }}>Procurement Department</Typography>
-            <Typography sx={{ fontSize: 9.5 }}>P.O. Box: 201325, 11th Floor Lusail Marina Tower No.50 Lusail-Qatar</Typography>
-            <Typography sx={{ fontSize: 9.5 }}>Phone: +974 4404 0800 &nbsp; Fax: +974 4404 0801</Typography>
+            {GENERAL_TERMS.map((line, idx) => (
+              <Typography key={idx} sx={{ fontSize: 9.5, ...(idx === 0 ? { mt: 0.5 } : {}) }}>
+                {line}
+              </Typography>
+            ))}
           </Box>
 
           {renderSignatureBlock()}
         </Box>
 
-{/* Standard Purchase Terms (own page, 3 columns) */}
-      {clauses.length > 0 && (
-        <Box sx={{ mt: 2, '@media print': { mt: 0, breakBefore: 'page', pageBreakBefore: 'always' } }}>
-          {renderPageHeader()}
-          <Box sx={{ border: '2px solid #000', p: '6px 8px', boxSizing: 'border-box' }}>
-            <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}>
-              Standard Purchase Terms
-            </Typography>
-            <Box sx={{ columnCount: 3, columnGap: `${TERMS_GAP_PX}px`, fontSize: 5.6, lineHeight: 1.05 }}>
-              {clauses.map((clause) => {
-                const isIntro = /^standard purchase terms/i.test(clause.title.trim());
-                return (
-                  <Box key={clause.title} sx={{ mb: 0.6 }}>
-                    {!isIntro && (
-                      <Typography component="span" sx={{ fontWeight: 700, fontSize: 5.8, display: 'block' }}>
-                        {clause.title}
+        {/* Standard Purchase Terms (own page, 3 columns) */}
+        {clauses.length > 0 && (
+          <Box sx={{ mt: 2, '@media print': { mt: 0, breakBefore: 'page', pageBreakBefore: 'always' } }}>
+            {renderPageHeader()}
+            <Box sx={{ border: '2px solid #000', p: '6px 8px', boxSizing: 'border-box' }}>
+              <Typography align="center" sx={{ fontWeight: 800, fontSize: 11, fontStyle: 'italic', mb: 0.75, textDecoration: 'underline' }}>
+                Standard Purchase Terms
+              </Typography>
+              <Box sx={{ columnCount: 3, columnGap: `${TERMS_GAP_PX}px`, fontSize: 5.6, lineHeight: 1.05 }}>
+                {clauses.map((clause) => {
+                  const isIntro = /^standard purchase terms/i.test(clause.title.trim());
+                  return (
+                    <Box key={clause.title} sx={{ mb: 0.6 }}>
+                      {!isIntro && (
+                        <Typography component="span" sx={{ fontWeight: 700, fontSize: 5.8, display: 'block' }}>
+                          {clause.title}
+                        </Typography>
+                      )}
+                      <Typography component="span" sx={{ fontSize: 5.6, lineHeight: 1.05, display: 'block', whiteSpace: 'pre-line' }}>
+                        {clause.body}
                       </Typography>
-                    )}
-                    <Typography component="span" sx={{ fontSize: 5.6, lineHeight: 1.05, display: 'block', whiteSpace: 'pre-line' }}>
-                      {clause.body}
-                    </Typography>
-                  </Box>
-                );
-              })}
+                    </Box>
+                  );
+                })}
+              </Box>
             </Box>
           </Box>
-        </Box>
-      )}
+        )}
       </Box>
     );
   };
@@ -617,6 +698,15 @@ const FiberPlastPoReport: React.FC = () => {
           sx={{ textTransform: 'none' }}
         >
           Print
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={isExportingExcel ? <CircularProgress color="inherit" size={16} /> : <FileDownloadIcon />}
+          disabled={!poData || isLoading || isExportingExcel}
+          onClick={handleExportExcel}
+          sx={{ textTransform: 'none', backgroundColor: '#1f7a3a', '&:hover': { backgroundColor: '#26a34a' } }}
+        >
+          {isExportingExcel ? 'Exporting…' : 'Export to Excel'}
         </Button>
       </Box>
 
