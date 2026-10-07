@@ -1,11 +1,11 @@
-import { CalendarOutlined, LoadingOutlined, PlusOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons'; // CHANGED
+import { CalendarOutlined, LoadingOutlined, PlusOutlined, SaveOutlined, SendOutlined } from '@ant-design/icons';
 import {
   Autocomplete,
   Button,
   FormHelperText,
   Grid,
-  IconButton, // CHANGED
-  InputAdornment, // CHANGED
+  IconButton,
+  InputAdornment,
   InputLabel,
   TextField as MuiTextField,
   Tabs,
@@ -15,13 +15,13 @@ import {
   Link,
   Typography
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ColDef } from 'ag-grid-community';
 import ActionButtonsGroup from 'components/buttons/ActionButtonsGroup';
 import UniversalDialog from 'components/popup/UniversalDialog';
 import { getIn, useFormik } from 'formik';
 import useAuth from 'hooks/useAuth';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'; // CHANGED
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useIntl } from 'react-intl';
 import axiosServices from 'utils/axios';
 import { TAvailableActionButtons } from 'types/types.actionButtonsGroups';
@@ -55,12 +55,24 @@ type TTransferRequest = {
   final_approved?: string;
   flow_level_running?: number;
   transfer_wef?: string | Date;
+  // Names match the DB columns. They hold CODES only (never names).
+  transfer_to_dept_code?: string; // Dept Head employee code
+  transfer_to_engineer?: string; // Engineer employee code
+  transfer_to_division: string; // DIV_CODE  (mandatory)
+  transfer_to_department: string; // DEPT_CODE (mandatory)
 };
 
-type TSupervisorDropdownOption = {
+// CHANGED: the people list now carries each employee's division and department code
+type TPersonOption = {
   employee_code: string;
   rpt_name: string;
+  div_code: string;
+  dept_code: string;
 };
+
+type TCodeNameOption = { code: string; name: string };
+
+type TDetailField = 'transfer_to_dept_code' | 'transfer_to_engineer' | 'transfer_to_division' | 'transfer_to_department';
 
 // =====================================================================================
 // SERVICE
@@ -84,7 +96,8 @@ const TransferRequestServiceInstance = {
     return data || [];
   },
 
-  getTransferToSupervisorOptions: async (company_code: string): Promise<TSupervisorDropdownOption[]> => {
+  // Returns employee_code, rpt_name, div_code, dept_code, curr_supervisor_code ...
+  getTransferToSupervisorOptions: async (company_code: string): Promise<any[]> => {
     const data = await common.proc_build_dynamic_sql_common({
       parameter: 'TRANSFER_REQUEST_TRANSFER_TO_SUPERVISIOR_DROP_DOWN',
       code1: company_code
@@ -92,11 +105,12 @@ const TransferRequestServiceInstance = {
     return data || [];
   },
 
-  getSupervisorEmployeesDetails: async (loginid: string, employeeCode: string): Promise<any> => {
+  // CHANGED: called ONLY when an employee is selected -> filtered by that employee's current supervisor (code1)
+  getSupervisorEmployeesDetails: async (loginid: string, supervisorCode: string): Promise<any> => {
     const data = await common.proc_build_dynamic_sql_common({
       parameter: 'TRANSFER_REQUEST_SUPERVISIOR_DETAIL',
       loginid,
-      code1: employeeCode
+      code1: supervisorCode
     });
     return data || [];
   },
@@ -107,6 +121,29 @@ const TransferRequestServiceInstance = {
       loginid
     });
     return data || [];
+  },
+
+  // Division / department dropdowns
+  getDivisionOptions: async (loginid: string): Promise<TCodeNameOption[]> => {
+    const data = await common.proc_build_dynamic_sql_common({
+      parameter: 'TRANSFER_REQUEST_DIVISION_DROP_DOWN',
+      loginid
+    });
+    return (data || []).map((r: any) => ({
+      code: String(r.DIV_CODE ?? r.div_code ?? ''),
+      name: String(r.DIV_NAME ?? r.div_name ?? '')
+    }));
+  },
+
+  getDepartmentOptions: async (loginid: string): Promise<TCodeNameOption[]> => {
+    const data = await common.proc_build_dynamic_sql_common({
+      parameter: 'TRANSFER_REQUEST_DEPARTMENT_DROP_DOWN',
+      loginid
+    });
+    return (data || []).map((r: any) => ({
+      code: String(r.DEPT_CODE ?? r.dept_code ?? ''),
+      name: String(r.DEPT_NAME ?? r.dept_name ?? '')
+    }));
   },
 
   upsertTransferRequest: async (values: TTransferRequest) => {
@@ -129,31 +166,8 @@ const TransferRequestServiceInstance = {
 };
 
 // =====================================================================================
-// FORM
+// HELPERS
 // =====================================================================================
-type TSupervisorDetail = {
-  EMPLOYEE_CODE?: string;
-  RPT_NAME?: string;
-  DEPT_HEAD_EMP_CODE?: string;
-  DEPT_HEAD_NAME?: string;
-  SUPERVISOR_EMP_CODE?: string;
-  SUPERVISOR_NAME?: string;
-  ENGINEER_EMP_CODE?: string;
-  ENGINEER_NAME?: string;
-  employee_code?: string;
-  DIVISION?: string;
-  DEPARTMENT?: string;
-  rpt_name?: string;
-  dept_head_emp_code?: string;
-  dept_head_name?: string;
-  supervisor_emp_code?: string;
-  supervisor_name?: string;
-  engineer_emp_code?: string;
-  engineer_name?: string;
-  division?: string;
-  department?: string;
-};
-
 const formatDateForDisplay = (date?: string | Date | null): string => {
   if (!date) return '';
   const d = new Date(date);
@@ -164,6 +178,26 @@ const formatDateForDisplay = (date?: string | Date | null): string => {
   return `${day}/${month}/${year}`;
 };
 
+// "CODE - Name" display used by the grid columns
+const codeName = (code?: string | null, name?: string | null): string => {
+  const c = code || '';
+  const n = name || '';
+  return c && n ? `${c} - ${n}` : c || n || '';
+};
+
+// CHANGED: normalises a row of the people list (works with upper / lower case keys)
+const toPerson = (o: any): TPersonOption => ({
+  employee_code: String(o?.employee_code ?? o?.EMPLOYEE_CODE ?? ''),
+  rpt_name: String(o?.rpt_name ?? o?.RPT_NAME ?? o?.employee_name ?? ''),
+  div_code: String(o?.div_code ?? o?.DIV_CODE ?? ''),
+  dept_code: String(o?.dept_code ?? o?.DEPT_CODE ?? '')
+});
+
+const setOf = (values: string[]): Set<string> => new Set(values.filter(Boolean));
+
+// =====================================================================================
+// FORM
+// =====================================================================================
 const AddTransferRequestForm = ({
   onClose,
   isEditMode,
@@ -178,13 +212,20 @@ const AddTransferRequestForm = ({
   viewOnly?: boolean;
 }) => {
   const { user } = useAuth();
-  console.log('user', user);
+  const queryClient = useQueryClient();
   const flowLevel = existingData?.flow_level_running ?? 1;
   const isLevel2 = flowLevel === 2;
   const isFieldDisabled = isLevel2 || viewOnly;
 
-  // CHANGED: ref to the hidden native date input used only for the picker popup
+  // Ref to the hidden native date input used only for the picker popup
   const wefPickerRef = useRef<HTMLInputElement>(null);
+
+  // Detail fields the user cleared on purpose — the API response must not refill these
+  const clearedFieldsRef = useRef<Set<TDetailField>>(new Set());
+
+  // CHANGED: supervisor-detail API state (called only when an employee is selected)
+  const detailRequestRef = useRef(0);
+  const [isSupervisorDetailLoading, setIsSupervisorDetailLoading] = useState(false);
 
   const toDateInputValue = (date?: string | Date | null): string => {
     if (!date) return '';
@@ -199,6 +240,10 @@ const AddTransferRequestForm = ({
       request_date: new Date().toISOString().slice(0, 10),
       employee_code: '',
       transfer_to_supervisor_empcode: '',
+      transfer_to_dept_code: '',
+      transfer_to_engineer: '',
+      transfer_to_division: '',
+      transfer_to_department: '',
       reason_for_trnsfer: '',
       reson_for_rejection: '',
       transfer_wef: '',
@@ -206,11 +251,18 @@ const AddTransferRequestForm = ({
       last_action: 'SAVEASDRAFT',
       flow_level_running: 1,
       company_code: user?.company_code
-      // created_by_rpt_name: user?.login_name,
+    },
+    // Division and Department are NOT NULL in the DB, so they are required for Draft and Submit.
+    validate: (values) => {
+      const errors: Record<string, string> = {};
+      if (!values.employee_code) errors.employee_code = 'Employee is required';
+      if (!values.transfer_to_supervisor_empcode) errors.transfer_to_supervisor_empcode = 'Supervisor is required';
+      if (!values.transfer_to_division) errors.transfer_to_division = 'Division is required';
+      if (!values.transfer_to_department) errors.transfer_to_department = 'Department is required';
+      return errors;
     },
     onSubmit: async (values, { setSubmitting }) => {
       try {
-        console.log('Submitting with action:', values.last_action);
         const payload: TTransferRequest = {
           ...values,
           company_code: user?.company_code,
@@ -231,7 +283,11 @@ const AddTransferRequestForm = ({
     }
   });
 
-  const { data: currentSupervisorEmployeeData } = useQuery({
+  // CHANGED: always-current copy of the form values for use inside async callbacks
+  const valuesRef = useRef<TTransferRequest>(formik.values);
+  valuesRef.current = formik.values;
+
+  const { data: currentSupervisorEmployeeData, isFetching: isEmployeeLoading } = useQuery({
     queryKey: ['currentSupervisorEmployeeData', user?.loginid1],
     queryFn: async () => {
       if (!user?.loginid1) return null;
@@ -247,28 +303,89 @@ const AddTransferRequestForm = ({
     enabled: !!user?.loginid1
   });
 
-  const { data: transferToSupervisorOptions } = useQuery<TSupervisorDropdownOption[]>({
+  const { data: transferToSupervisorOptions, isFetching: isSupervisorOptionsLoading } = useQuery<any[]>({
     queryKey: ['transferToSupervisorOptions', user?.company_code],
     queryFn: () => TransferRequestServiceInstance.getTransferToSupervisorOptions(user?.company_code || ''),
     enabled: !!user?.company_code
   });
 
-  const selectedSupervisorCode = formik.values.transfer_to_supervisor_empcode;
-
-  const { data: supervisorDetailRaw, isFetching: isSupervisorDetailLoading } = useQuery({
-    queryKey: ['supervisorDetail', selectedSupervisorCode],
-    queryFn: async () => {
-      if (!selectedSupervisorCode || !user?.loginid1) return null;
-      const data = await TransferRequestServiceInstance.getSupervisorEmployeesDetails(user.loginid1, selectedSupervisorCode);
-      return Array.isArray(data) ? data[0] : data;
-    },
-    enabled: !!selectedSupervisorCode && !!user?.loginid1,
-    retry: false
+  // Division / department option lists
+  const { data: divisionOptions, isFetching: isDivisionLoading } = useQuery<TCodeNameOption[]>({
+    queryKey: ['transferDivisionOptions'],
+    queryFn: () => TransferRequestServiceInstance.getDivisionOptions(user?.loginid1 || ''),
+    enabled: !!user?.loginid1
   });
 
-  const supervisorDetail = supervisorDetailRaw as TSupervisorDetail | null | undefined;
+  const { data: departmentOptions, isFetching: isDepartmentLoading } = useQuery<TCodeNameOption[]>({
+    queryKey: ['transferDepartmentOptions'],
+    queryFn: () => TransferRequestServiceInstance.getDepartmentOptions(user?.loginid1 || ''),
+    enabled: !!user?.loginid1
+  });
+
+  // True while any dropdown list / detail lookup is still loading -> form shows a wait cursor
+  const isFormLoading =
+    isEmployeeLoading || isSupervisorOptionsLoading || isDivisionLoading || isDepartmentLoading || isSupervisorDetailLoading;
+
   const employeeOptions = useMemo(() => currentSupervisorEmployeeData || [], [currentSupervisorEmployeeData]);
 
+  // CHANGED: normalised supervisor list (with div_code / dept_code)
+  const supervisorList = useMemo<TPersonOption[]>(
+    () => (transferToSupervisorOptions || []).map(toPerson).filter((p) => p.employee_code),
+    [transferToSupervisorOptions]
+  );
+
+  // Dept Head / Engineer options = supervisor list + employee list (same values), de-duplicated
+  const personOptions = useMemo<TPersonOption[]>(() => {
+    const map = new Map<string, TPersonOption>();
+    supervisorList.forEach((p) => map.set(p.employee_code, p));
+    (employeeOptions as any[]).forEach((o) => {
+      const p = toPerson(o);
+      if (p.employee_code && !map.has(p.employee_code)) map.set(p.employee_code, p);
+    });
+    return Array.from(map.values());
+  }, [supervisorList, employeeOptions]);
+
+  // -----------------------------------------------------------------
+  // CHANGED: frontend cross-filtering (no API call)
+  //  - Supervisor / Dept Head / Engineer lists  -> only people of the selected Division / Department
+  //  - Division / Department lists              -> only those of the selected people (and of each other)
+  // The value that is currently selected is always kept in its list.
+  // -----------------------------------------------------------------
+  const selDiv = formik.values.transfer_to_division || '';
+  const selDept = formik.values.transfer_to_department || '';
+  const selSup = formik.values.transfer_to_supervisor_empcode || '';
+  const selHead = formik.values.transfer_to_dept_code || '';
+  const selEng = formik.values.transfer_to_engineer || '';
+
+  const peopleMatch = useCallback(
+    (p: TPersonOption) => (!selDiv || p.div_code === selDiv) && (!selDept || p.dept_code === selDept),
+    [selDiv, selDept]
+  );
+
+  const supervisorOptionsFiltered = useMemo(
+    () => supervisorList.filter((p) => p.employee_code === selSup || peopleMatch(p)),
+    [supervisorList, selSup, peopleMatch]
+  );
+
+  const selectedPeople = useMemo(() => {
+    const codes = new Set([selSup, selHead, selEng].filter(Boolean));
+    return personOptions.filter((p) => codes.has(p.employee_code));
+  }, [personOptions, selSup, selHead, selEng]);
+
+  // An empty restriction set (nothing selected / no data) means "no restriction", so the user is never stuck.
+  const isDivisionAllowed = useMemo(() => {
+    const fromPeople = setOf(selectedPeople.map((p) => p.div_code));
+    const fromDept = selDept ? setOf(personOptions.filter((p) => p.dept_code === selDept).map((p) => p.div_code)) : new Set<string>();
+    return (code: string) => (fromPeople.size === 0 || fromPeople.has(code)) && (fromDept.size === 0 || fromDept.has(code));
+  }, [selectedPeople, personOptions, selDept]);
+
+  const isDepartmentAllowed = useMemo(() => {
+    const fromPeople = setOf(selectedPeople.map((p) => p.dept_code));
+    const fromDiv = selDiv ? setOf(personOptions.filter((p) => p.div_code === selDiv).map((p) => p.dept_code)) : new Set<string>();
+    return (code: string) => (fromPeople.size === 0 || fromPeople.has(code)) && (fromDiv.size === 0 || fromDiv.has(code));
+  }, [selectedPeople, personOptions, selDiv]);
+
+  // Edit mode: existingData already carries transfer_to_* (same names as the DB columns)
   useEffect(() => {
     if (isEditMode && existingData) {
       formik.setValues({
@@ -291,7 +408,7 @@ const AddTransferRequestForm = ({
   // const handleReject = () => handleAction('REJECT');
   // const handleSentBack = () => handleAction('SENTBACK');
 
-  // CHANGED: opens the hidden native date picker
+  // Opens the hidden native date picker
   const openWefPicker = () => {
     if (isFieldDisabled) return;
     const el = wefPickerRef.current;
@@ -308,11 +425,116 @@ const AddTransferRequestForm = ({
     el.click();
   };
 
-  const getDetail = (upperKey: keyof TSupervisorDetail, lowerKey: keyof TSupervisorDetail) =>
-    supervisorDetail?.[upperKey] || supervisorDetail?.[lowerKey] || '-';
+  // User edited a detail field (remember if it was cleared so it isn't auto-refilled)
+  const setDetailField = (field: TDetailField, value: string) => {
+    if (value) clearedFieldsRef.current.delete(field);
+    else clearedFieldsRef.current.add(field);
+    formik.setFieldValue(field, value);
+  };
+
+  // When the employee changes, the old detail values no longer apply -> reset them
+  const resetDetailFields = () => {
+    detailRequestRef.current += 1; // ignore any detail response still on its way
+    setIsSupervisorDetailLoading(false);
+    clearedFieldsRef.current.clear();
+    formik.setFieldValue('transfer_to_dept_code', '');
+    formik.setFieldValue('transfer_to_engineer', '');
+    formik.setFieldValue('transfer_to_division', '');
+    formik.setFieldValue('transfer_to_department', '');
+  };
+
+  // CHANGED: the ONLY place the supervisor-detail API is called -> when an employee is selected.
+  // Fills only the empty detail fields (never overwrites what the user chose, never refills a cleared field).
+  const loadSupervisorDetails = async (supervisorCode: string) => {
+    if (!supervisorCode || !user?.loginid1) return;
+    const requestId = ++detailRequestRef.current;
+    setIsSupervisorDetailLoading(true);
+    try {
+      const data = await queryClient.fetchQuery({
+        queryKey: ['supervisorDetail', supervisorCode],
+        queryFn: () => TransferRequestServiceInstance.getSupervisorEmployeesDetails(user.loginid1 || '', supervisorCode),
+        staleTime: 5 * 60 * 1000
+      });
+      if (requestId !== detailRequestRef.current) return; // employee changed meanwhile
+      const r = (Array.isArray(data) ? data[0] : data) as Record<string, any> | null | undefined; // most common combination
+      if (!r) return;
+      const g = (key: string): string => String(r[key] ?? r[key.toLowerCase()] ?? '');
+      const fill = (field: TDetailField, value: string) => {
+        if (!value || clearedFieldsRef.current.has(field) || valuesRef.current[field]) return;
+        formik.setFieldValue(field, value);
+      };
+      fill('transfer_to_dept_code', g('DEPT_HEAD_EMP_CODE'));
+      fill('transfer_to_engineer', g('ENGINEER_EMP_CODE'));
+      fill('transfer_to_division', g('DIV_CODE'));
+      fill('transfer_to_department', g('DEPT_CODE'));
+    } catch (err) {
+      console.error('Supervisor detail error:', err);
+    } finally {
+      if (requestId === detailRequestRef.current) setIsSupervisorDetailLoading(false);
+    }
+  };
+
+  // Dropdown of people (stores employee_code). CHANGED: filtered by the selected Division / Department.
+  const renderPersonDropdown = (label: string, field: 'transfer_to_dept_code' | 'transfer_to_engineer') => {
+    const currentValue = (formik.values[field] as string) || '';
+    const options = personOptions.filter((p) => p.employee_code === currentValue || peopleMatch(p));
+    return (
+      <Grid item xs={12} sm={3}>
+        <InputLabel shrink>{label}</InputLabel>
+        <Autocomplete
+          size="small"
+          options={options}
+          loading={isFormLoading}
+          getOptionLabel={(option: TPersonOption) => (option?.rpt_name ? option.rpt_name : option?.employee_code || '')}
+          isOptionEqualToValue={(option, value) => option?.employee_code === value?.employee_code}
+          value={options.find((p) => p.employee_code === currentValue) || null}
+          onChange={(_, newValue) => setDetailField(field, newValue?.employee_code || '')} // stores CODE, not name
+          disabled={isFieldDisabled}
+          renderInput={(params) => <MuiTextField {...params} />}
+        />
+      </Grid>
+    );
+  };
+
+  // Dropdown of code/name pairs (stores the code). CHANGED: filtered by the selected people / the other of Division-Department.
+  const renderCodeNameDropdown = (
+    label: string,
+    field: 'transfer_to_division' | 'transfer_to_department',
+    baseOptions: TCodeNameOption[],
+    isAllowed: (code: string) => boolean
+  ) => {
+    const currentValue = (formik.values[field] as string) || '';
+    const filtered = baseOptions.filter((o) => o.code === currentValue || isAllowed(o.code));
+    const options =
+      currentValue && !filtered.some((o) => o.code === currentValue) ? [{ code: currentValue, name: currentValue }, ...filtered] : filtered;
+    const hasError = Boolean(getIn(formik.touched, field) && getIn(formik.errors, field));
+    return (
+      <Grid item xs={12} sm={3}>
+        <InputLabel shrink>{label}*</InputLabel>
+        <Autocomplete
+          size="small"
+          options={options}
+          loading={isFormLoading}
+          getOptionLabel={(option: TCodeNameOption) => option?.name || option?.code || ''}
+          isOptionEqualToValue={(option, value) => option?.code === value?.code}
+          value={options.find((o) => o.code === currentValue) || null}
+          onChange={(_, newValue) => setDetailField(field, newValue?.code || '')} // stores CODE, not name
+          disabled={isFieldDisabled}
+          renderInput={(params) => <MuiTextField {...params} error={hasError} />}
+        />
+        {hasError && <FormHelperText error>{getIn(formik.errors, field)}</FormHelperText>}
+      </Grid>
+    );
+  };
 
   return (
-    <Grid container spacing={2} component={'form'} onSubmit={(e) => e.preventDefault()}>
+    <Grid
+      container
+      spacing={2}
+      component={'form'}
+      onSubmit={(e) => e.preventDefault()}
+      sx={isFormLoading ? { cursor: 'wait', '& *': { cursor: 'wait !important' } } : undefined}
+    >
       <Grid item xs={12} sm={3}>
         <InputLabel>Request Number</InputLabel>
         <MuiTextField value={formik.values.request_number || ''} name="request_number" fullWidth disabled />
@@ -320,32 +542,31 @@ const AddTransferRequestForm = ({
 
       <Grid item xs={12} sm={3}>
         <InputLabel>Request Date</InputLabel>
-        <MuiTextField
-          type="text"
-          value={formatDateForDisplay(formik.values.request_date)}
-          name="request_date"
-          fullWidth
-          disabled
-        />
+        <MuiTextField type="text" value={formatDateForDisplay(formik.values.request_date)} name="request_date" fullWidth disabled />
       </Grid>
 
       <Grid item xs={12} sm={3}>
         <InputLabel>Select Employee*</InputLabel>
         <Autocomplete
           options={employeeOptions}
+          loading={isFormLoading}
           getOptionLabel={(option: any) => option?.rpt_name || option?.employee_name || ''}
           isOptionEqualToValue={(option: any, value: any) => option?.employee_code === value?.employee_code}
           value={employeeOptions.find((emp: any) => emp.employee_code === formik.values.employee_code) || null}
           onChange={(_, newValue: any) => {
+            const supCode = newValue?.curr_supervisor_code || '';
             formik.setFieldValue('employee_code', newValue?.employee_code || '');
-            formik.setFieldValue('current_supervisor_empcode', newValue?.curr_supervisor_code || '');
+            formik.setFieldValue('current_supervisor_empcode', supCode);
+            // Prefill Supervisor with the employee's current supervisor (user can change it afterwards)
+            formik.setFieldValue('transfer_to_supervisor_empcode', supCode);
+            // Old dept head / engineer / division / department belonged to the previous employee's supervisor
+            resetDetailFields();
+            // CHANGED: the one and only supervisor-detail API call
+            loadSupervisorDetails(supCode);
           }}
           disabled={isFieldDisabled}
           renderInput={(params) => (
-            <MuiTextField
-              {...params}
-              error={Boolean(getIn(formik.touched, 'employee_code') && getIn(formik.errors, 'employee_code'))}
-            />
+            <MuiTextField {...params} error={Boolean(getIn(formik.touched, 'employee_code') && getIn(formik.errors, 'employee_code'))} />
           )}
         />
         {getIn(formik.touched, 'employee_code') && getIn(formik.errors, 'employee_code') && (
@@ -354,17 +575,15 @@ const AddTransferRequestForm = ({
       </Grid>
 
       <Grid item xs={12} sm={3}>
-        <InputLabel>Transfer to Supervisor*</InputLabel>
+        <InputLabel>Supervisor*</InputLabel>
         <Autocomplete
-          options={transferToSupervisorOptions || []}
-          getOptionLabel={(option: TSupervisorDropdownOption) => option?.rpt_name || ''}
-          isOptionEqualToValue={(option: TSupervisorDropdownOption, value: any) => option?.employee_code === value?.employee_code}
-          value={
-            (transferToSupervisorOptions || []).find((sup) => sup.employee_code === formik.values.transfer_to_supervisor_empcode) || null
-          }
-          onChange={(_, newValue) => {
-            formik.setFieldValue('transfer_to_supervisor_empcode', newValue?.employee_code || '');
-          }}
+          options={supervisorOptionsFiltered}
+          loading={isFormLoading}
+          getOptionLabel={(option: TPersonOption) => option?.rpt_name || option?.employee_code || ''}
+          isOptionEqualToValue={(option: TPersonOption, value: TPersonOption) => option?.employee_code === value?.employee_code}
+          value={supervisorOptionsFiltered.find((sup) => sup.employee_code === formik.values.transfer_to_supervisor_empcode) || null}
+          // CHANGED: no API call and no reset -> other dropdowns are simply filtered on the frontend
+          onChange={(_, newValue) => formik.setFieldValue('transfer_to_supervisor_empcode', newValue?.employee_code || '')}
           disabled={isFieldDisabled}
           renderInput={(params) => (
             <MuiTextField
@@ -380,72 +599,17 @@ const AddTransferRequestForm = ({
         )}
       </Grid>
 
-      {selectedSupervisorCode && (
-        <Grid item xs={12}>
-          <InputLabel sx={{ mb: 1 }}>Supervisor Details</InputLabel>
-          {isSupervisorDetailLoading ? (
-            <MuiTextField value="Loading..." fullWidth disabled />
-          ) : supervisorDetail ? (
-            <Grid container spacing={2} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Employee Code</InputLabel>
-                <MuiTextField value={getDetail('EMPLOYEE_CODE', 'employee_code')} fullWidth disabled size="small" />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Name</InputLabel>
-                <MuiTextField value={getDetail('RPT_NAME', 'rpt_name')} fullWidth disabled size="small" />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Dept Head</InputLabel>
-                <MuiTextField
-                  value={`${getDetail('DEPT_HEAD_NAME', 'dept_head_name')} (${getDetail('DEPT_HEAD_EMP_CODE', 'dept_head_emp_code')})`}
-                  fullWidth
-                  disabled
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Supervisor</InputLabel>
-                <MuiTextField
-                  value={`${getDetail('SUPERVISOR_NAME', 'supervisor_name')} (${getDetail('SUPERVISOR_EMP_CODE', 'supervisor_emp_code')})`}
-                  fullWidth
-                  disabled
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Engineer</InputLabel>
-                <MuiTextField
-                  value={`${getDetail('ENGINEER_NAME', 'engineer_name')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
-                  fullWidth
-                  disabled
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Division</InputLabel>
-                <MuiTextField
-                  value={`${getDetail('DIVISION', 'division')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
-                  fullWidth
-                  disabled
-                  size="small"
-                />
-              </Grid>
-              <Grid item xs={12} sm={3}>
-                <InputLabel shrink>Department</InputLabel>
-                <MuiTextField
-                  value={`${getDetail('DEPARTMENT', 'department')} (${getDetail('ENGINEER_EMP_CODE', 'engineer_emp_code')})`}
-                  fullWidth
-                  disabled
-                  size="small"
-                />
-              </Grid>
-            </Grid>
-          ) : (
-            <MuiTextField value="No details found" fullWidth disabled />
-          )}
+      {/* Supervisor Details: editable dropdowns, filtered on the frontend by each other and by the Supervisor */}
+      <Grid item xs={12}>
+        <InputLabel sx={{ mb: 1 }}>Supervisor Details</InputLabel>
+        <Grid container spacing={2} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: '#fafafa' }}>
+          {renderPersonDropdown('Dept Head', 'transfer_to_dept_code')}
+          {renderPersonDropdown('Engineer', 'transfer_to_engineer')}
+          {renderCodeNameDropdown('Division', 'transfer_to_division', divisionOptions || [], isDivisionAllowed)}
+          {renderCodeNameDropdown('Department', 'transfer_to_department', departmentOptions || [], isDepartmentAllowed)}
         </Grid>
-      )}
+        {isSupervisorDetailLoading && <FormHelperText>Loading details...</FormHelperText>}
+      </Grid>
 
       <Grid item xs={12}>
         <InputLabel>Reason for Transfer</InputLabel>
@@ -464,7 +628,7 @@ const AddTransferRequestForm = ({
         )}
       </Grid>
 
-      {/* CHANGED: Transfer W.E.F. — displays dd/mm/yyyy, stores YYYY-MM-DD in formik (backend unchanged) */}
+      {/* Transfer W.E.F. — displays dd/mm/yyyy, stores YYYY-MM-DD in formik (backend unchanged) */}
       <Grid item xs={12} sm={3} sx={{ position: 'relative' }}>
         <InputLabel>Transfer W.E.F.</InputLabel>
 
@@ -702,7 +866,6 @@ const TransferRequestPage = () => {
       ),
     enabled: !!user?.company_code && !!user?.user_id && visibleTabParameters[activeTab] !== undefined
   });
-  console.log(isTabDataLoading, 'isTabDataLoading');
 
   // -----------------------------------------------------------------
   // Popup handlers
@@ -795,7 +958,7 @@ const TransferRequestPage = () => {
         minWidth: 220
       },
       {
-        headerName: 'Transfer To',
+        headerName: 'Supervisor',
         field: 'transfer_to_supervisor',
         valueGetter: (params: any) => {
           const code = params.data?.transfer_to_supervisor_empcode || '';
@@ -803,6 +966,31 @@ const TransferRequestPage = () => {
           return code && name ? `${code} - ${name}` : code || name || '';
         },
         minWidth: 220
+      },
+      // The 4 new columns (code - name; names come from the dynamic SQL)
+      {
+        headerName: 'Dept Head',
+        field: 'transfer_to_dept_code',
+        valueGetter: (params: any) => codeName(params.data?.transfer_to_dept_code, params.data?.transfer_to_dept_head_rpt_name),
+        minWidth: 200
+      },
+      {
+        headerName: 'Engineer',
+        field: 'transfer_to_engineer',
+        valueGetter: (params: any) => codeName(params.data?.transfer_to_engineer, params.data?.transfer_to_engineer_rpt_name),
+        minWidth: 200
+      },
+      {
+        headerName: 'Division',
+        field: 'transfer_to_division',
+        valueGetter: (params: any) => codeName(params.data?.transfer_to_division, params.data?.transfer_to_division_name),
+        minWidth: 160
+      },
+      {
+        headerName: 'Department',
+        field: 'transfer_to_department',
+        valueGetter: (params: any) => codeName(params.data?.transfer_to_department, params.data?.transfer_to_department_name),
+        minWidth: 160
       },
       {
         field: 'last_action',
@@ -936,7 +1124,7 @@ const TransferRequestPage = () => {
         ))}
       </Tabs>
 
-      <div className="mt-2">
+      <div className="mt-2" style={{ cursor: isTabDataLoading ? 'wait' : 'default' }}>
         <CustomAgGrid
           rowData={tabData || []}
           columnDefs={columnDefs}
@@ -944,8 +1132,6 @@ const TransferRequestPage = () => {
           paginationPageSize={15}
           paginationPageSizeSelector={[10, 15, 25, 50]}
           getRowId={(params: any) => params.data?.request_number || `row-${Math.random()}`}
-          // optional: show loading state if you want
-          // suppressNoRowsOverlay={isTabDataLoading}
         />
       </div>
 

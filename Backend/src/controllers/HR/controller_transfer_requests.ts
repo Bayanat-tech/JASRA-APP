@@ -60,6 +60,17 @@ export const upsertTransferReqFlow = async (
     }
 
     // --------------------------------------------------------
+    // Validate mandatory transfer-to codes (DB columns are NOT NULL)
+    // --------------------------------------------------------
+    if (!toStr(data.transfer_to_division) || !toStr(data.transfer_to_department)) {
+      res.status(400).json({
+        success: false,
+        message: "transfer_to_division and transfer_to_department are required"
+      });
+      return;
+    }
+
+    // --------------------------------------------------------
     // Get Oracle Connection
     // --------------------------------------------------------
     connection = await oracleDb.getConnection();
@@ -72,29 +83,32 @@ export const upsertTransferReqFlow = async (
       await connection.getDbObjectClass("TRANSFER_REQ_FLOW_OBJ");
 
     // --------------------------------------------------------
-    // Create Oracle Object
+    // Create Oracle Object (codes only, never names)
     // --------------------------------------------------------
-// This is fine – just pass the data through
     const obj: any = new TransferReqFlowObjClass({
-    REQUEST_NUMBER: data.request_number,          // '' or null → procedure handles it
-    REQUEST_DATE: toDate(data.request_date),
-    COMPANY_CODE: data.company_code,
-    CREATED_BY: data.created_by || data.loginid,
-    REASON_FOR_TRNSFER: data.reason_for_trnsfer,
-    NEXT_ACTION_BY: data.next_action_by,
-    RESON_FOR_REJECTION: data.reson_for_rejection,
-    EMPLOYEE_CODE: data.employee_code,
-    CREATED_AT: toDate(data.created_at),
-    UPDATED_BY: data.updated_by,
-    UPDATED_AT: toDate(data.updated_at),
-    LAST_ACTION: data.last_action,                // comes from button
-    CURRENT_SUPERVISOR_EMPCODE: data.current_supervisor_empcode,
-    TRANSFER_TO_SUPERVISOR_EMPCODE: data.transfer_to_supervisor_empcode,
-    DATA_TRANSFER: data.data_transfer,
-    FINAL_APPROVED: data.final_approved,
-    FLOW_LEVEL_RUNNING: toNumber(data.flow_level_running),
-    TRANSFER_WEF: toDate(data.transfer_wef),
-    HISTORY_SERIAL: toNumber(data.history_serial)
+      REQUEST_NUMBER: data.request_number, // '' or null → procedure handles it
+      REQUEST_DATE: toDate(data.request_date),
+      COMPANY_CODE: data.company_code,
+      CREATED_BY: data.created_by || data.loginid,
+      REASON_FOR_TRNSFER: data.reason_for_trnsfer,
+      NEXT_ACTION_BY: data.next_action_by,
+      RESON_FOR_REJECTION: data.reson_for_rejection,
+      EMPLOYEE_CODE: data.employee_code,
+      CREATED_AT: toDate(data.created_at),
+      UPDATED_BY: data.updated_by,
+      UPDATED_AT: toDate(data.updated_at),
+      LAST_ACTION: data.last_action, // comes from button
+      CURRENT_SUPERVISOR_EMPCODE: data.current_supervisor_empcode,
+      TRANSFER_TO_SUPERVISOR_EMPCODE: data.transfer_to_supervisor_empcode,
+      DATA_TRANSFER: data.data_transfer,
+      FINAL_APPROVED: data.final_approved,
+      FLOW_LEVEL_RUNNING: toNumber(data.flow_level_running),
+      TRANSFER_WEF: toDate(data.transfer_wef),
+      HISTORY_SERIAL: toNumber(data.history_serial),
+      TRANSFER_TO_DEPT_CODE: toStr(data.transfer_to_dept_code),
+      TRANSFER_TO_ENGINEER: toStr(data.transfer_to_engineer),
+      TRANSFER_TO_DIVISION: toStr(data.transfer_to_division),
+      TRANSFER_TO_DEPARTMENT: toStr(data.transfer_to_department)
     });
 
     // --------------------------------------------------------
