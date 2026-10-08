@@ -1,11 +1,10 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import WmsSerivceInstance from 'service/wms/service.wms';
 import { dynamicData } from './dynamicData';
 import { cancel, draft, POsignatureImg } from './img';
 import { spellNumber, formatAmount } from './functions';
-import { FiDownload } from 'react-icons/fi';
 import { exportPurchaseOrderToExcel } from './purchaseOrderExcelExport';
 
 export interface PurchaseOrderData {
@@ -85,36 +84,141 @@ interface SupplierInfo {
   SUPP_EMAIL1: string;
 }
 
+export interface ExcelExportApi {
+  exportToExcel: () => Promise<void>;
+  isExporting: boolean;
+  canExport: boolean;
+}
+
 export interface PurchaseReportDesignProps {
   required_values: {
     divCode: string;
     refDocNo: string;
   };
+  onExcelExportReady?: (api: ExcelExportApi) => void;
 }
 
 const MM_TO_PX = 96 / 25.4;
 const PAGE_HEIGHT_PX = 267 * MM_TO_PX;
-const SAFETY_BUFFER_PX = 64;
 
-// Standard (fixed) height of the "For Supplier / For <Company>" signature box.
+const SAFETY_BUFFER_PX = 24;
+
+const FRAME_EXTRA_PX = 30;
+
+const MAX_EXTRA_BUFFER_PX = 240;
+const EXTRA_BUFFER_STEP_PX = 16;
+
 const SIGNATURE_BOX_HEIGHT_PX = 120;
 
-// Top margin (px) of the signature block under the terms text. Included in the
-// height reserved for it during pagination.
 const SIGNATURE_TOP_GAP_PX = 8;
 
-// Horizontal space (px) used by the page frame (2px border + 8px padding, each side).
-// The hidden measuring box mirrors this so images scale to the same width as on the page.
-const FRAME_INSET_PX = 10;
-
-// Gap between the 3 terms columns (px). Also used to offset continuation pages.
 const TERMS_GAP_PX = 10;
 
+const DEFAULT_LOGO_WIDTH = '48%';
+const DEFAULT_HEADER_WIDTH = '40%';
+
+// Extra tolerance (px) allowed when deciding whether terms + signature can
+// share the last items page. Anything within this tolerance is trusted to the
+// browser's page-break handling; anything above triggers a fresh page.
+const LAST_PAGE_TOLERANCE_PX = 120;
+
+interface TrimmedInfo { src: string; w: number; h: number; }
+const trimPromises = new Map<string, Promise<TrimmedInfo | null>>();
+const trimResolved = new Map<string, TrimmedInfo | null>();
+
+const trimImage = (src: string): Promise<TrimmedInfo | null> => {
+  const cached = trimPromises.get(src);
+  if (cached) return cached;
+  const promise = new Promise<TrimmedInfo | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) return resolve(null);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, w, h);
+        let minX = w, minY = h, maxX = -1, maxY = -1;
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const i = (y * w + x) * 4;
+            const isContent = data[i + 3] > 20 && (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240);
+            if (isContent) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX < 0) return resolve(null);
+        const cw = maxX - minX + 1;
+        const ch = maxY - minY + 1;
+        const out = document.createElement('canvas');
+        out.width = cw;
+        out.height = ch;
+        const octx = out.getContext('2d');
+        if (!octx) return resolve(null);
+        octx.drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+        return resolve({ src: out.toDataURL('image/png'), w: cw, h: ch });
+      } catch {
+        return resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+  trimPromises.set(src, promise.then((r) => { trimResolved.set(src, r); return r; }));
+  return trimPromises.get(src) as Promise<TrimmedInfo | null>;
+};
+
+const TrimmedImg = ({
+  src,
+  alt,
+  style,
+  onTrimmed,
+}: {
+  src: string;
+  alt: string;
+  style?: React.CSSProperties;
+  onTrimmed?: () => void;
+}) => {
+  const [info, setInfo] = useState<TrimmedInfo | null>(trimResolved.get(src) ?? null);
+  useEffect(() => {
+    if (trimResolved.has(src)) {
+      setInfo(trimResolved.get(src) ?? null);
+      return undefined;
+    }
+    let cancelled = false;
+    trimImage(src).then((r) => {
+      if (cancelled) return;
+      setInfo(r);
+      if (r) onTrimmed?.();
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+  return (
+    <img
+      src={info?.src ?? src}
+      alt={alt}
+      style={{ ...style, ...(info ? { aspectRatio: `${info.w} / ${info.h}` } : {}) }}
+    />
+  );
+};
+
 const CYAN_BG = '#e3f2fd';
-const BORDER_BLUE = '#9bb1cc';
+const BORDER_BLUE = '#4a6a9c';
 
 const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProps>(
-  ({ required_values }, ref) => {
+  ({ required_values, onExcelExportReady }, ref) => {
     let { divCode, refDocNo } = required_values;
     const [suppCode, setSuppCode] = useState<string>('');
     const [isExportingExcel, setIsExportingExcel] = useState(false);
@@ -331,6 +435,12 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       }
     }, [poData, poItems, buyerInfo, deliveryInfo, termsInfo, totalAmount, orderDate, formattedWoNo, status, signature, div]);
 
+    const canExport = !!poData && !!div;
+    useEffect(() => {
+      onExcelExportReady?.({ exportToExcel: handleExportExcel, isExporting: isExportingExcel, canExport });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [handleExportExcel, isExportingExcel, canExport]);
+
     const measureBoxRef = useRef<HTMLDivElement>(null);
     const pageHeaderRef = useRef<HTMLDivElement>(null);
     const poHeaderBlockRef = useRef<HTMLDivElement>(null);
@@ -343,15 +453,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
     const [chunks, setChunks] = useState<PurchaseOrderData[][] | null>(null);
+    const [extraBuffer, setExtraBuffer] = useState(0);
 
     useLayoutEffect(() => {
       setChunks(null);
+      setExtraBuffer(0);
     }, [poItems]);
 
-    // Logo / header / footer images have no intrinsic height until they load, so a
-    // measurement taken before that under-counts the header/footer/signature heights.
-    // Once every image inside the hidden measuring box has finished loading, re-run the
-    // pagination.
     useEffect(() => {
       const box = measureBoxRef.current;
       if (!box) return undefined;
@@ -377,11 +485,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       };
     }, [poItems, poData, div]);
 
-    // ── Standard Purchase Terms: Bold-style page fill ─────────────────────────
-    // The columns get a FIXED height (= the space left on the first closing page) and
-    // `column-fill: auto`, so text fills column 1, 2, 3 to the bottom of the page and the
-    // rest overflows into further columns. Each closing page then shows its own set of 3
-    // columns by shifting the same column box left by one page-width per page.
     const termsViewportRef = useRef<HTMLDivElement>(null);
     const termsColsRef = useRef<HTMLDivElement>(null);
     const [termsColH, setTermsColH] = useState<number | null>(null);
@@ -389,7 +492,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     const [lastPageUsedH, setLastPageUsedH] = useState<number | null>(null);
     const isReportLoading = isDeptdataLoading || isSignatureLoading || isSuppCodeLoading || isSupplierLoading;
 
-    // Height available for terms on the first closing page (re-measured when images load).
     useEffect(() => {
       const vp = termsViewportRef.current;
       if (!vp) return undefined;
@@ -404,7 +506,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       return () => ro.disconnect();
     }, [poData, isReportLoading]);
 
-    // How many closing pages are needed = ceil(total columns / 3).
     useLayoutEffect(() => {
       const cols = termsColsRef.current;
       if (!cols || !termsColH) return;
@@ -418,7 +519,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const pages = Math.max(1, Math.ceil(totalCols / 3));
       setClosingPageCount((prev) => (prev === pages ? prev : pages));
 
-      // Height actually used by text on the LAST page → its frame is only that tall (Bold page 3).
       if (pages > 1) {
         const top = cols.getBoundingClientRect().top;
         const pageStart = (pages - 1) * (width + TERMS_GAP_PX);
@@ -434,8 +534,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       }
     }, [termsColH, poData, div, isReportLoading]);
 
+    // ── Pagination ──────────────────────────────────────────────────────────
+    // Only the FIRST page carries the logo header. Subsequent pages are pure
+    // content, so we don't reserve pageHeaderH for them any more.
     useLayoutEffect(() => {
       if (chunks !== null || poItems.length === 0 || !poData) return;
+
+      const buffer = SAFETY_BUFFER_PX + extraBuffer;
 
       const rowHeights = poItems.map((_, i) => rowRefs.current[i]?.offsetHeight ?? 24);
       const pageHeaderH = pageHeaderRef.current?.offsetHeight ?? 0;
@@ -444,8 +549,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const tableHeadH = tableHeadRef.current?.offsetHeight ?? 0;
       const scopeRowH = scopeRowRef.current?.offsetHeight ?? 0;
       const termsTextH = termsTextRef.current?.offsetHeight ?? 0;
-      // Signature box + blue band + footer images (sits right under the terms text on the
-      // last items page, like the old Bold PO).
       const signatureH = (signatureRef.current?.offsetHeight ?? 0) + SIGNATURE_TOP_GAP_PX;
       const totalRowH = totalRowRef.current?.offsetHeight ?? 24;
       const heightOf = (idxs: number[]) => idxs.reduce((sum, i) => sum + rowHeights[i], 0);
@@ -457,9 +560,11 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
 
       poItems.forEach((_, i) => {
         const isFirstDocPage = pageIdx === 0;
+        // pageHeaderH only matters on the first page because it's not rendered
+        // on the others.
         const reserved =
-          pageHeaderH + tableHeadH + SAFETY_BUFFER_PX +
-          (isFirstDocPage ? firstPageExtraH + scopeRowH : 0);
+          tableHeadH + FRAME_EXTRA_PX + buffer +
+          (isFirstDocPage ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const h = rowHeights[i];
 
@@ -478,8 +583,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         const lastIdx = indexChunks.length - 1;
         const isOnlyPageSoFar = lastIdx === 0;
         const reserved =
-          pageHeaderH + tableHeadH + SAFETY_BUFFER_PX +
-          (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0);
+          tableHeadH + FRAME_EXTRA_PX + buffer +
+          (isOnlyPageSoFar ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const chunk = indexChunks[lastIdx];
 
@@ -495,22 +600,35 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const lastPageIdx = indexChunks.length - 1;
       const last = indexChunks[lastPageIdx];
       const isOnlyPage = lastPageIdx === 0;
-      // The last items page carries the "Above is as per attached quotation…" terms text
-      // AND the signature box + footer strip (old Bold PO style). Only the Standard
-      // Purchase Terms live in the separate closing section (next page onwards).
+      // Only the first page carries the header now.
       const reservedWithTerms =
-        pageHeaderH + tableHeadH + termsTextH + signatureH + totalRowH + SAFETY_BUFFER_PX +
-        (isOnlyPage ? firstPageExtraH + scopeRowH : 0);
+        tableHeadH + termsTextH + signatureH + totalRowH + FRAME_EXTRA_PX + buffer +
+        (isOnlyPage ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
-      if (heightOf(last) > usableWithTerms) {
-        // Not enough room for terms text + signature under the last rows → give them a
-        // page of their own (header + terms text + signature + footer).
+      // Only push terms + signature to their own page if they clearly don't
+      // fit. A small overflow (<= LAST_PAGE_TOLERANCE_PX) is allowed — the
+      // browser will nudge the signature block onto a fresh page naturally
+      // instead of us forcing an empty page.
+      if (heightOf(last) > usableWithTerms + LAST_PAGE_TOLERANCE_PX) {
         indexChunks.push([]);
       }
 
       setChunks(indexChunks.map((idxs) => idxs.map((i) => poItems[i])));
-    }, [chunks, poItems, poData]);
+    }, [chunks, poItems, poData, extraBuffer]);
+
+    // Verify real page heights (unchanged behaviour).
+    useLayoutEffect(() => {
+      if (chunks === null) return;
+      const root = measureBoxRef.current?.parentElement;
+      if (!root) return;
+      const pages = Array.from(root.querySelectorAll<HTMLElement>('.report-page'));
+      const overflowing = pages.some((p) => p.offsetHeight > PAGE_HEIGHT_PX + 1);
+      if (overflowing && extraBuffer < MAX_EXTRA_BUFFER_PX) {
+        setExtraBuffer((b) => b + EXTRA_BUFFER_STEP_PX);
+        setChunks(null);
+      }
+    }, [chunks]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!divCode || !refDocNo) {
       return (
@@ -555,15 +673,47 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
     };
 
     const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
-      <Box ref={elRef} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: '4px', mb: 0.5 }}>
+      <Box
+        ref={elRef}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          pb: '4px',
+          mb: 0.5,
+        }}
+      >
         {div.logoYes && (
-          <Box sx={{ width: div.logoWidth ?? '32%', display: 'flex', justifyContent: 'flex-start' }}>
-            <img src={div.logo} alt="logo" style={{ maxHeight: '65px', objectFit: 'contain' }} />
+          <Box sx={{ width: div.logoWidth ?? DEFAULT_LOGO_WIDTH, flex: '0 1 auto', display: 'flex', justifyContent: 'flex-start' }}>
+            <TrimmedImg
+              src={div.logo}
+              alt="logo"
+              onTrimmed={() => setChunks(null)}
+              style={{
+                width: '100%',
+                height: 'auto',
+                objectFit: 'contain',
+                objectPosition: 'left center',
+                display: 'block',
+              }}
+            />
           </Box>
         )}
         {div.headerYes && (
-          <Box sx={{ width: div.headerWidth ?? '63%', display: 'flex', justifyContent: 'flex-end' }}>
-            <img src={div.header} alt="header text" style={{ maxHeight: '65px', objectFit: 'contain' }} />
+          <Box sx={{ width: div.headerWidth ?? DEFAULT_HEADER_WIDTH, flex: '0 1 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+            <TrimmedImg
+              src={div.header}
+              alt="header text"
+              onTrimmed={() => setChunks(null)}
+              style={{
+                width: '100%',
+                height: 'auto',
+                objectFit: 'contain',
+                objectPosition: 'right center',
+                display: 'block',
+              }}
+            />
           </Box>
         )}
       </Box>
@@ -576,7 +726,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         </Typography>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: !status ? '1fr 1fr' : '1fr 0.5fr 1.5fr', gap: 2 }}>
-          {/* Supplier */}
           <Box>
             <Typography sx={{ fontWeight: 700, fontSize: 10.5, mb: 0.5 }}>Supplier Details:</Typography>
             <Typography sx={{ fontSize: 10.5 }}>Supplier Number: {poData?.SUPP_CODE || '-'}</Typography>
@@ -652,15 +801,12 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             <th style={{ ...thItems, width: '12%' }}>Unit of Measure</th>
             <th style={{ ...thItems, width: '6%' }}>QTY</th>
             <th style={{ ...thItems, width: '11%' }}>UNIT PRICE</th>
-            <th style={{ ...thItems, width: '13%' }}>Amount</th>
+            <th style={{ ...thItems, width: '13%' }}>Amount({poData.CURR_CODE || 'QAR'})</th>
           </tr>
         </thead>
       );
     };
 
-    // Scope of Work shows ONLY the description. Remarks / warranty (e.g. "6 Months") is
-    // printed at the bottom, in the "Above is as per attached quotation…" text (see
-    // renderTermsText) — it must not be repeated under the SOW.
     const renderScopeRow = (elRef?: React.Ref<HTMLTableRowElement>) => (
       <tr className="print-row-avoid" ref={elRef}>
         <td
@@ -671,6 +817,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             fontWeight: 700,
             fontSize: '10.5px',
             backgroundColor: '#ffffff',
+            whiteSpace: 'pre-line',
           }}
         >
           Scope of Work:- {poData.DESCRIPTION}
@@ -694,13 +841,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         >
           <td style={{ ...tdBase, textAlign: 'center' }}>{item.ITEM_SEQUENCE_NO || index + 1}</td>
           <td style={{ ...tdBase, textAlign: 'center' }}>{item.COST_CODE || ''}</td>
-          <td style={{ ...tdBase, fontWeight: 700 }}>
+          <td style={{ ...tdBase, fontWeight: 700, whiteSpace: 'pre-line' }}>
             {item.SERVICE_RM_FLAG === 'RM' && item.ITEM_CODE !== 'NEWITEM' ? item.ITEM_DESP : item.ADDL_ITEM_DESC}
           </td>
           <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{item.PRINT_UOM}</td>
           <td style={{ ...tdBase, textAlign: 'center', fontWeight: 700 }}>{qty === 0 ? '' : qty}</td>
           <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700 }}>{unitPrice === 0 ? '' : unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-          <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700, backgroundColor: CYAN_BG }}>{amount === 0 ? '' : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style={{ ...tdBase, textAlign: 'right', fontWeight: 700 }}>{amount === 0 ? '' : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         </tr>
       );
     };
@@ -726,7 +873,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             fontWeight: 700,
             fontSize: 10.5,
             textAlign: 'right',
-            backgroundColor: CYAN_BG,
           }}
         >
           {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -763,7 +909,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       const refNo = poData?.REF_DOC_NO || '';
       const isAJSS = refNo.startsWith('AJSS');
       const isAND = refNo.startsWith('AND');
-      // Bold shows the print date here (e.g. 28-Sep-2026).
       const now = new Date();
       const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const printDate = `${String(now.getDate()).padStart(2, '0')}-${MONTHS[now.getMonth()]}-${now.getFullYear()}`;
@@ -787,15 +932,12 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         </Box>
       );
 
-      // One black-bordered box (like Bold): signature row | blue band | footer images,
-      // with black divider lines between the three parts.
       return (
         <Box
           ref={elRef}
           className="print-avoid"
           sx={{ border: '1.5px solid #000', boxSizing: 'border-box', mt: `${SIGNATURE_TOP_GAP_PX}px` }}
         >
-          {/* Signature row — fixed standard height, black vertical divider */}
           <Box sx={{ display: 'flex', height: `${SIGNATURE_BOX_HEIGHT_PX}px`, boxSizing: 'border-box' }}>
             <Box
               sx={{
@@ -831,7 +973,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             </Box>
           </Box>
 
-          {/* Light-blue band with black lines above and below */}
           <Box
             sx={{
               backgroundColor: CYAN_BG,
@@ -851,7 +992,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             </Box>
           </Box>
 
-          {/* Footer images */}
           {div.footerYes && (
             div.multipleFooters ? (
               <Box sx={{ py: 0.6, px: 0.5, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
@@ -884,7 +1024,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         }}
       >
         {div.clauses?.map((clause: { title: string; body: string }) => {
-          // Bold starts straight into the intro paragraph (no "… - Introduction" heading).
           const isIntro = /^standard purchase terms/i.test(clause.title.trim());
           return (
             <Box key={clause.title} sx={{ mb: 0.6 }}>
@@ -938,30 +1077,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         }}
       >
         <style>{`@page { size: A4 portrait; margin: 10mm 10mm 14mm 10mm; border: none; padding: 0; @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; } }`}</style>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            mb: 1,
-            '@media print': { display: 'none' },
-          }}
-        >
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<FiDownload />}
-            onClick={handleExportExcel}
-            disabled={isExportingExcel}
-            sx={{
-              textTransform: 'none',
-              backgroundColor: '#1f7a3a',
-              '&:hover': { backgroundColor: '#26a34a' },
-            }}
-          >
-            {isExportingExcel ? 'Exporting…' : 'Export to Excel'}
-          </Button>
-        </Box>
 
+        {/* Hidden measuring box — keeps the page-header render so pageHeaderH is measured. */}
         <Box
           ref={measureBoxRef}
           aria-hidden
@@ -975,21 +1092,20 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           }}
         >
           {renderPageHeader(pageHeaderRef)}
-          {renderPoHeaderBlock(poHeaderBlockRef)}
-          {renderPaymentTable(paymentTableRef)}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-            {renderItemsTableHead(tableHeadRef)}
-            <tbody>
-              {renderScopeRow(scopeRowRef)}
-              {poItems.map((item, i) =>
-                renderItemRow(item, i, (el) => { rowRefs.current[i] = el; })
-              )}
-              {renderTotalRow(totalRowRef)}
-            </tbody>
-          </table>
-          {renderTermsText(termsTextRef)}
-          {/* Same horizontal inset as the real page frame so footer images scale identically */}
-          <Box sx={{ px: `${FRAME_INSET_PX}px`, boxSizing: 'border-box' }}>
+          <Box sx={{ border: '2px solid transparent', boxSizing: 'border-box', px: 1, py: 1 }}>
+            {renderPoHeaderBlock(poHeaderBlockRef)}
+            {renderPaymentTable(paymentTableRef)}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
+              {renderItemsTableHead(tableHeadRef)}
+              <tbody>
+                {renderScopeRow(scopeRowRef)}
+                {poItems.map((item, i) =>
+                  renderItemRow(item, i, (el) => { rowRefs.current[i] = el; })
+                )}
+                {renderTotalRow(totalRowRef)}
+              </tbody>
+            </table>
+            {renderTermsText(termsTextRef)}
             {renderSignatureBlock(signatureRef)}
           </Box>
         </Box>
@@ -1003,8 +1119,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               key={pageIdx}
               className="report-page"
               sx={{
-                // border-box so the 1px border + padding are INSIDE the 267mm, otherwise
-                // the page is taller than the printable area and spills a blank page.
                 boxSizing: 'border-box',
                 '@media print': {
                   display: 'flex',
@@ -1018,9 +1132,9 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                 flexDirection: 'column',
               }}
             >
-              {renderPageHeader()}
+              {/* Logo header only on page 1 */}
+              {isFirstPage && renderPageHeader()}
 
-              {/* Frame starts under the logo and runs to the bottom of the page, like Bold */}
               <Box
                 sx={{
                   flex: '1 0 auto',
@@ -1055,8 +1169,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   </table>
                 )}
 
-                {/* Last items page: terms text, then signature box + footer strip directly
-                    below it (old Bold PO layout). */}
                 {isLastPage && (
                   <>
                     {renderTermsText()}
@@ -1068,8 +1180,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           );
         })}
 
-        {/* ── CLOSING PAGES: logo header on every page; "Standard Purchase Terms" fill the
-            columns to the bottom of the page and continue on the next page ── */}
+        {/* Closing pages — no logo header now. */}
         {Array.from({ length: closingPageCount }).map((_, k) => (
           <Box
             key={`closing-${k}`}
@@ -1083,7 +1194,6 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               '@media print': { breakBefore: 'page', pageBreakBefore: 'always' },
             }}
           >
-            {renderPageHeader()}
             <Box
               sx={{
                 border: '2px solid #000',

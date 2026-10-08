@@ -33,6 +33,8 @@ interface DivInfo {
   header?: string;
   logoYes?: boolean;
   headerYes?: boolean;
+  logoWidth?: string;
+  headerWidth?: string;
   footerYes?: boolean;
   footer?: string;
   multipleFooters?: boolean;
@@ -81,6 +83,16 @@ const thinDark = (): Partial<ExcelJS.Borders> => ({
 const COLS = 7;
 // const LAST_COL_LETTER = 'G';
 
+// Column widths (Excel units) for A..G. Also used to work out the sheet's width in pixels
+// so the header images can be sized/placed to exactly match the table width.
+const COL_WIDTHS = [8, 9, 46, 15, 9, 15, 17];
+const COL_PX = COL_WIDTHS.map((w) => Math.round(w * 7 + 5));
+const TOTAL_PX = COL_PX.reduce((a, b) => a + b, 0);
+
+// Same defaults as renderPageHeader() in PurchaseReportDesign.tsx so Excel matches the screen.
+const DEFAULT_LOGO_WIDTH_PCT = 0.48;
+const DEFAULT_HEADER_WIDTH_PCT = 0.4;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Small helpers
 // ─────────────────────────────────────────────────────────────────────────
@@ -110,6 +122,95 @@ async function fetchAsBuffer(url?: string): Promise<ArrayBuffer | null> {
 
 function guessExtension(url: string): 'png' | 'jpeg' {
   return /\.jpe?g(\?|$)/i.test(url) ? 'jpeg' : 'png';
+}
+
+interface PreparedImage {
+  buffer: ArrayBuffer;
+  extension: 'png' | 'jpeg';
+  /** Natural size (px) of the buffer that will be embedded (after trimming). */
+  width: number;
+  height: number;
+}
+
+/**
+ * Loads an image, crops away its blank (transparent / white) margins so the visible artwork
+ * reaches the edges (same idea as TrimmedImg on the screen), and returns the cropped PNG plus
+ * its pixel size. The size is needed so the image can be placed WITHOUT stretching it.
+ * Falls back to the untouched image if the browser can't decode / crop it.
+ */
+async function prepareImage(url?: string): Promise<PreparedImage | null> {
+  const original = await fetchAsBuffer(url);
+  if (!original || !url) return null;
+  const originalExt = guessExtension(url);
+
+  try {
+    const blob = new Blob([original]);
+    const bitmap = await createImageBitmap(blob);
+    const w = bitmap.width;
+    const h = bitmap.height;
+    if (!w || !h) return { buffer: original, extension: originalExt, width: 700, height: 100 };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { buffer: original, extension: originalExt, width: w, height: h };
+    ctx.drawImage(bitmap, 0, 0);
+
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = (y * w + x) * 4;
+        const isContent = data[i + 3] > 20 && (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240);
+        if (isContent) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return { buffer: original, extension: originalExt, width: w, height: h };
+
+    const cw = maxX - minX + 1;
+    const ch = maxY - minY + 1;
+    const out = document.createElement('canvas');
+    out.width = cw;
+    out.height = ch;
+    const octx = out.getContext('2d');
+    if (!octx) return { buffer: original, extension: originalExt, width: w, height: h };
+    octx.drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+
+    const croppedBlob: Blob | null = await new Promise((resolve) => out.toBlob(resolve, 'image/png'));
+    if (!croppedBlob) return { buffer: original, extension: originalExt, width: w, height: h };
+    return { buffer: await croppedBlob.arrayBuffer(), extension: 'png', width: cw, height: ch };
+  } catch {
+    return { buffer: original, extension: originalExt, width: 700, height: 100 };
+  }
+}
+
+/** "48%" -> 0.48, "100%" -> 1. Anything unparseable falls back to `fallback`. */
+function pctToFraction(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const m = /^\s*([\d.]+)\s*%\s*$/.exec(String(value));
+  if (!m) return fallback;
+  const n = Number(m[1]) / 100;
+  return n > 0 && n <= 1 ? n : fallback;
+}
+
+/** Converts a horizontal pixel offset from the left edge of column A into the fractional
+ * zero-based column index ExcelJS expects for an image anchor. */
+function pxToColAnchor(px: number): number {
+  let remaining = Math.max(0, px);
+  for (let i = 0; i < COL_PX.length; i += 1) {
+    if (remaining <= COL_PX[i]) return i + remaining / COL_PX[i];
+    remaining -= COL_PX[i];
+  }
+  return COL_PX.length;
 }
 
 function setCell(
@@ -322,40 +423,61 @@ export async function exportPurchaseOrderToExcel(params: ExportPurchaseOrderToEx
   workbook.creator = 'Bayanat WMS';
   workbook.created = new Date();
 
-  const ws = workbook.addWorksheet('Purchase Order', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0, footer: 0 } },
-    views: [{ showGridLines: false }],
-  });
+const ws = workbook.addWorksheet('Purchase Order', {
+  pageSetup: {
+    paperSize: 9,
+    orientation: 'portrait',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true, // centers the table on the printed page
+    margins: { left: 0.3, right: 0.3, top: 0.75, bottom: 0.5, header: 0, footer: 0 },
+  },
+  views: [{ showGridLines: false }],
+});
 
   // Column widths — proportional to the 5% / 6% / 44% / 12% / 7% / 12% / 14% item table
-  ws.columns = [
-    { width: 8 },  // A
-    { width: 9 },  // B
-    { width: 46 }, // C
-    { width: 15 }, // D
-    { width: 9 },  // E
-    { width: 15 }, // F
-    { width: 17 }, // G
-  ];
+  ws.columns = COL_WIDTHS.map((width) => ({ width }));
 
-  const mt = new MergeTracker();
-  let row = 1;
+const mt = new MergeTracker();
+const TOP_SPACER_PT = 18;
+ws.getRow(1).height = TOP_SPACER_PT; // empty spacer row
+let row = 2;                         
 
-  // ── Header: logo (left) + header banner (right) ─────────────────────
+  // ── Header: same placement as the on-screen report ───────────────────
+  //   LEFT  : div.logo   (company-info block with the blue bar)
+  //   RIGHT : div.header (brand logo), flush with the right edge of the table
+  // Each image keeps its own proportions (no stretching), is cropped of blank margins and is
+  // sized as a % of the table width using the same widths the screen uses.
   const HEADER_ROWS = 5;
-  mt.merge(ws, `A${row}:C${row + HEADER_ROWS - 1}`);
-  mt.merge(ws, `D${row}:G${row + HEADER_ROWS - 1}`);
-  for (let r = row; r < row + HEADER_ROWS; r++) ws.getRow(r).height = 15;
+  const [logoImg, headerImg] = await Promise.all([
+    prepareImage(div.logoYes ? div.logo : undefined),
+    prepareImage(div.headerYes ? div.header : undefined),
+  ]);
 
-  const [logoBuf, headerBuf] = await Promise.all([fetchAsBuffer(div.logoYes ? div.logo : undefined), fetchAsBuffer(div.headerYes ? div.header : undefined)]);
+  const logoW = logoImg ? Math.round(TOTAL_PX * pctToFraction(div.logoWidth, DEFAULT_LOGO_WIDTH_PCT)) : 0;
+  const logoH = logoImg ? Math.round((logoW * logoImg.height) / logoImg.width) : 0;
+  const headerW = headerImg ? Math.round(TOTAL_PX * pctToFraction(div.headerWidth, DEFAULT_HEADER_WIDTH_PCT)) : 0;
+  const headerH = headerImg ? Math.round((headerW * headerImg.height) / headerImg.width) : 0;
 
-  if (logoBuf) {
-    const imgId = workbook.addImage({ buffer: logoBuf as any, extension: guessExtension(div.logo || '') });
-    ws.addImage(imgId, { tl: { col: 0.1, row: row - 1 + 0.1 }, ext: { width: 160, height: 70 } });
+  const headerBlockPx = Math.max(logoH, headerH, 5 * 20);
+  // rows are in points (1px = 0.75pt); split the block evenly over the header rows
+  const headerRowPt = (headerBlockPx * 0.75) / HEADER_ROWS;
+  for (let r = row; r < row + HEADER_ROWS; r++) ws.getRow(r).height = headerRowPt;
+  const headerRowPx = headerBlockPx / HEADER_ROWS;
+
+  if (logoImg) {
+    const imgId = workbook.addImage({ buffer: logoImg.buffer as any, extension: logoImg.extension });
+    const topOffsetRows = (headerBlockPx - logoH) / 2 / headerRowPx;
+    ws.addImage(imgId, { tl: { col: 0, row: row - 1 + topOffsetRows }, ext: { width: logoW, height: logoH } });
   }
-  if (headerBuf) {
-    const imgId = workbook.addImage({ buffer: headerBuf as any, extension: guessExtension(div.header || '') });
-    ws.addImage(imgId, { tl: { col: 4.3, row: row - 1 + 0.1 }, ext: { width: 260, height: 70 } });
+  if (headerImg) {
+    const imgId = workbook.addImage({ buffer: headerImg.buffer as any, extension: headerImg.extension });
+    const topOffsetRows = (headerBlockPx - headerH) / 2 / headerRowPx;
+    ws.addImage(imgId, {
+      tl: { col: pxToColAnchor(TOTAL_PX - headerW), row: row - 1 + topOffsetRows },
+      ext: { width: headerW, height: headerH },
+    });
   }
   row += HEADER_ROWS;
 
@@ -464,11 +586,14 @@ export async function exportPurchaseOrderToExcel(params: ExportPurchaseOrderToEx
 
   // ── Items table ──────────────────────────────────────────────────────
   // const headerRow = row;
-  const headers = ['ITEM NO.', 'GL CODE', 'DESCRIPTION', 'Unit of Measure', 'QTY', 'UNIT PRICE', 'Amount'];
-  headers.forEach((h, i) => {
-    setCell(ws, ws.getCell(headerRow, i + 1).address, h, { bold: true, align: 'center', fill: CYAN_BG, border: thinBlue() });
+const itemsHeaderRow = row;
+const headers = ['ITEM NO.', 'GL CODE', 'DESCRIPTION', 'Unit of Measure', 'QTY', 'UNIT PRICE', 'Amount'];
+headers.forEach((h, i) => {
+  setCell(ws, ws.getCell(itemsHeaderRow, i + 1).address, h, {
+    bold: true, align: 'center', fill: CYAN_BG, border: thinBlue(),
   });
-  row += 1;
+});
+row += 1;
 
   // Scope of work row
   mt.merge(ws, `A${row}:G${row}`);

@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   Box, Button, Dialog, DialogActions,
   DialogContent, DialogTitle,
@@ -6,9 +6,22 @@ import {
 } from "@mui/material";
 import { useReactToPrint } from "react-to-print";
 import CloseIcon from "@mui/icons-material/Close";
+import { FiDownload } from "react-icons/fi";
+
+// Same shape as ExcelExportApi exported by PurchaseReportDesign.
+// Declared here so this dialog stays generic and doesn't import a specific report.
+export interface ExcelExportApi {
+  exportToExcel: () => Promise<void>;
+  isExporting: boolean;
+  canExport: boolean;
+}
 
 export interface ReportDialogPageProps {
-  Report: React.ComponentType<{ required_values: any }>;
+  Report: React.ComponentType<{
+    required_values: any;
+    // Only reports that support Excel export call this; others simply ignore it.
+    onExcelExportReady?: (api: ExcelExportApi) => void;
+  }>;
   required_values: any;
   onClose?: () => void;
   title?: string;
@@ -21,6 +34,8 @@ const ReportDialogPage = ({
   title
 }: ReportDialogPageProps) => {
   const reportRef = useRef<HTMLDivElement>(null);
+  // Filled by the report (if it supports Excel export). While null, the Excel button is hidden.
+  const [excelApi, setExcelApi] = useState<ExcelExportApi | null>(null);
 
   const fileName = `${title || 'Report'}-${new Date().toISOString().slice(0, 10)}`;
 
@@ -108,7 +123,10 @@ const ReportDialogPage = ({
           }}
         >
           <div ref={reportRef}>
-            <Report required_values={required_values} />
+            <Report
+              required_values={required_values}
+              onExcelExportReady={setExcelApi}
+            />
           </div>
         </Box>
       </DialogContent>
@@ -121,6 +139,23 @@ const ReportDialogPage = ({
           "@media print": { display: "none" },
         }}
       >
+        {/* Export to Excel — only shown for reports that support it */}
+        {excelApi && (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<FiDownload />}
+            onClick={() => excelApi.exportToExcel()}
+            disabled={!excelApi.canExport || excelApi.isExporting}
+            sx={{
+              textTransform: "none",
+              backgroundColor: "#1f7a3a",
+              "&:hover": { backgroundColor: "#26a34a" },
+            }}
+          >
+            {excelApi.isExporting ? "Exporting…" : "Export to Excel"}
+          </Button>
+        )}
 
         {/* Print — standard browser print dialog */}
         <Button
