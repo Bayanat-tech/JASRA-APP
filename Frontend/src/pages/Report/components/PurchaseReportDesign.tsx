@@ -108,7 +108,6 @@ const FRAME_EXTRA_PX = 30;
 const MAX_EXTRA_BUFFER_PX = 240;
 const EXTRA_BUFFER_STEP_PX = 16;
 
-const SIGNATURE_BOX_HEIGHT_PX = 120;
 
 const SIGNATURE_TOP_GAP_PX = 8;
 
@@ -116,11 +115,12 @@ const TERMS_GAP_PX = 10;
 
 const DEFAULT_LOGO_WIDTH = '48%';
 const DEFAULT_HEADER_WIDTH = '40%';
+const SIGNATURE_BOX_HEIGHT_PX = 96;
 
-// Extra tolerance (px) allowed when deciding whether terms + signature can
+  // Extra tolerance (px) allowed when deciding whether terms + signature can
 // share the last items page. Anything within this tolerance is trusted to the
 // browser's page-break handling; anything above triggers a fresh page.
-const LAST_PAGE_TOLERANCE_PX = 120;
+const LAST_PAGE_TOLERANCE_PX = 0;
 
 interface TrimmedInfo { src: string; w: number; h: number; }
 const trimPromises = new Map<string, Promise<TrimmedInfo | null>>();
@@ -685,8 +685,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         }}
       >
         {div.logoYes && (
-          <Box sx={{ width: div.logoWidth ?? DEFAULT_LOGO_WIDTH, flex: '0 1 auto', display: 'flex', justifyContent: 'flex-start' }}>
-            <TrimmedImg
+  <Box sx={{ width: DEFAULT_LOGO_WIDTH, flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
+                <TrimmedImg
               src={div.logo}
               alt="logo"
               onTrimmed={() => setChunks(null)}
@@ -701,8 +701,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           </Box>
         )}
         {div.headerYes && (
-          <Box sx={{ width: div.headerWidth ?? DEFAULT_HEADER_WIDTH, flex: '0 1 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-            <TrimmedImg
+  <Box sx={{ width: DEFAULT_HEADER_WIDTH, flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+                <TrimmedImg
               src={div.header}
               alt="header text"
               onTrimmed={() => setChunks(null)}
@@ -959,8 +959,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             <Box sx={{ width: '50%', p: '4px 4px 6px 10px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: 11.5, mb: 1.5, textAlign: 'center' }}>
-                  For {div?.name || ''}:
-                </Typography>
+                  For {(div?.name || '').replace(/:+$/, '')}:                </Typography>
                 <Box sx={{ fontSize: 11.5, textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                   {signature ? (
                     <img src={POsignatureImg} alt="Signature" style={{ maxWidth: '100px', maxHeight: '40px', height: 'auto' }} />
@@ -1115,35 +1114,28 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           const isLastPage = pageIdx === pagesToRender.length - 1;
 
           return (
-            <Box
-              key={pageIdx}
-              className="report-page"
-              sx={{
-                boxSizing: 'border-box',
-                '@media print': {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  boxSizing: 'border-box',
-                  minHeight: '267mm',
-                  breakAfter: 'page',
-                  pageBreakAfter: 'always',
-                },
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
+         <Box
+          key={pageIdx}
+          className="report-page"
+          sx={{
+            boxSizing: 'border-box',
+            '@media print': {
+              breakAfter: 'page',
+              pageBreakAfter: 'always',
+            },
+          }}
+          >
               {/* Logo header only on page 1 */}
               {isFirstPage && renderPageHeader()}
 
               <Box
                 sx={{
-                  flex: '1 0 auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  border: '2px solid #000',
-                  boxSizing: 'border-box',
-                  px: 1,
-                  py: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                border: '2px solid #000',
+                boxSizing: 'border-box',
+                px: 1,
+                py: 1,
                 }}
               >
                 {isFirstPage && (
@@ -1153,21 +1145,22 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
                   </>
                 )}
 
-                {chunk.length > 0 && (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-                    {renderItemsTableHead()}
-                    <tbody>
-                      {isFirstPage && renderScopeRow()}
-                      {chunk.map((item, i) => {
-                        const index = pagesToRender
-                          .slice(0, pageIdx)
-                          .reduce((sum, c) => sum + c.length, 0) + i;
-                        return renderItemRow(item, index);
-                      })}
-                      {pageIdx === lastItemsPageIdx && renderTotalRow()}
-                    </tbody>
-                  </table>
-                )}
+      {chunk.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
+          {renderItemsTableHead()}
+          <tbody>
+            {isFirstPage && renderScopeRow()}
+            {chunk.map((item, i) => {
+              const index = pagesToRender
+                .slice(0, pageIdx)
+                .reduce((sum, c) => sum + c.length, 0) + i;
+              return renderItemRow(item, index);
+            })}
+            {pageIdx === lastItemsPageIdx && renderTotalRow()}
+          </tbody>
+        </table>
+      )}
+
 
                 {isLastPage && (
                   <>

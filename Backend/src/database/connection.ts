@@ -3,7 +3,7 @@ import * as oracledb from "oracledb";
 import { DataSource, Repository, EntityTarget, ObjectLiteral } from "typeorm";
 import constants from "../helpers/constants"; 
 
-// oracledb.initOracleClient({ driverName: 'thin' });
+oracledb.initOracleClient({ driverName: 'thin' });
 
 const useCompiledEntities = process.env.USE_COMPILED_ENTITIES === "true";
 
