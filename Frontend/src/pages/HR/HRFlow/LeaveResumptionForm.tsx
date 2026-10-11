@@ -839,7 +839,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                           label={intl.formatMessage({ id: 'Actual Resume Date' })}
                           value={formData.actual_resume_date ? dayjs(formData.actual_resume_date) : null}
                           onChange={(newValue) => handleChange('actual_resume_date', newValue)}
-                          minDate={formData.leave_end_date ? dayjs(formData.leave_end_date) : undefined}
+                          // minDate={formData.leave_start_date ? dayjs(formData.leave_sart_date) : undefined}
                           format="DD/MM/YYYY"
                           slotProps={{
                             textField: {
@@ -847,6 +847,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                               size: 'small',
                               margin: 'dense',
                               required: true
+                              
                             }
                           }}
                         />

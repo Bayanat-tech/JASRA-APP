@@ -63,8 +63,13 @@ const LeaveResumptionApprovalPage = () => {
       WHERE ( ACTUAL_RESUME_DATE IS NULL
       AND NVL(RESUME_DATE_APPROVED,'NO') = 'NO'
         AND FINAL_APPROVED = 'YES'
-        AND LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED')
+        AND LAST_ACTION IN ('SAVEASDRAFT','SUBMITTED','SENTBACK')
         AND CREATED_BY = '${user?.loginid1}')
+        OR (ACTUAL_RESUME_DATE IS NOT NULL 
+      AND NVL(RESUME_DATE_APPROVED,'NO') = 'NO'
+      AND FINAL_APPROVED = 'YES' AND
+      LAST_ACTION IN ('SENTBACK') 
+      AND CREATED_BY = '${user?.loginid1}')
   `;
 
   const { data, refetch, isError } = useQuery({

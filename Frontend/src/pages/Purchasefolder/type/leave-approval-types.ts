@@ -16,6 +16,7 @@ export type TLeaveApproval = {
   UPDATED_BY: string;
   LAST_ACTION?: string;
   alternate_id?: string;
+  ALTERNATE_ID?: string;
   HOD?: string;
   IMMEDIATE_SUPERVISOR?: string;
   ENGNR_EMPID?:string;

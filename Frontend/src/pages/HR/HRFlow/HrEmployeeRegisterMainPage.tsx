@@ -93,7 +93,7 @@ const HrEmployeeRegisterMainPage: React.FC<Props> = ({ leaveTypes = [], leaveDat
  const sql_string = `
   SELECT DISTINCT *
   FROM (
-    SELECT EMPLOYEE_ID , RPT_NAME
+    SELECT EMPLOYEE_ID , RPT_NAME ,ALTERNATE_ID
     FROM VW_HR_EMPLOYEE_NEW
     WHERE EMP_STATUS <> 'S'
     START WITH
@@ -435,14 +435,14 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
                 size="small"
                 loading={employeesLoading}
                 loadingText="Loading employees..."
-                getOptionLabel={(option) => option.RPT_NAME || ''}
+                getOptionLabel={(option) => `${option.ALTERNATE_ID} - ${option.RPT_NAME}` || ''}
                 isOptionEqualToValue={(option, value) => option.EMPLOYEE_ID?.toString() === value.EMPLOYEE_ID?.toString()}
                 value={selectedEmployee}
                 onChange={handleEmployeeChange}
                 filterOptions={(options, state) => {
                   const inputValue = state.inputValue.toLowerCase();
                   return options?.filter(
-                    (option) =>option?.RPT_NAME?.toLowerCase().includes(inputValue) || option?.EMPLOYEE_ID?.toString().includes(inputValue)
+                    (option) =>option?.RPT_NAME?.toLowerCase().includes(inputValue) || option?.ALTERNATE_ID?.includes(inputValue)
                   ) || [];
                 }}
                   renderOption={(props, option, { selected }) => {
@@ -455,8 +455,8 @@ const { data: leaveBalance = [], isLoading: leaveBalanceLoading } = useQuery<ILe
                         fontWeight: isCurrentUser ? '650' : 'normal'
                       }}
                     >
-                      {option.RPT_NAME}
-                      {isCurrentUser }
+                      {option.ALTERNATE_ID} - {option.RPT_NAME} 
+                      {isCurrentUser && <span className="ml-2 text-xs text-yellow-500">(Current User)</span>}
                     </li>
                   );
                 }}
