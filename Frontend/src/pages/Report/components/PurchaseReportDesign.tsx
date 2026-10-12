@@ -113,9 +113,10 @@ const SIGNATURE_TOP_GAP_PX = 8;
 
 const TERMS_GAP_PX = 10;
 
-const DEFAULT_LOGO_WIDTH = '48%';
-const DEFAULT_HEADER_WIDTH = '40%';
+const DEFAULT_LOGO_WIDTH = '17%';
+const DEFAULT_HEADER_WIDTH = '33.5%';
 const SIGNATURE_BOX_HEIGHT_PX = 96;
+const PAGE_CONTENT_WIDTH = '204mm';   // new: old report box is almost full width
 
   // Extra tolerance (px) allowed when deciding whether terms + signature can
 // share the last items page. Anything within this tolerance is trusted to the
@@ -564,7 +565,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         // on the others.
         const reserved =
           tableHeadH + FRAME_EXTRA_PX + buffer +
-          (isFirstDocPage ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
+       pageHeaderH + (isFirstDocPage ? firstPageExtraH + scopeRowH : 0)
         const usable = PAGE_HEIGHT_PX - reserved;
         const h = rowHeights[i];
 
@@ -584,7 +585,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         const isOnlyPageSoFar = lastIdx === 0;
         const reserved =
           tableHeadH + FRAME_EXTRA_PX + buffer +
-          (isOnlyPageSoFar ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
+        pageHeaderH + (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0)
         const usable = PAGE_HEIGHT_PX - reserved;
         const chunk = indexChunks[lastIdx];
 
@@ -603,7 +604,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       // Only the first page carries the header now.
       const reservedWithTerms =
         tableHeadH + termsTextH + signatureH + totalRowH + FRAME_EXTRA_PX + buffer +
-        (isOnlyPage ? pageHeaderH + firstPageExtraH + scopeRowH : 0);
+          pageHeaderH + (isOnlyPage ? firstPageExtraH + scopeRowH : 0)
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
       // Only push terms + signature to their own page if they clearly don't
@@ -672,53 +673,39 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       verticalAlign: 'top',
     };
 
-    const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
-      <Box
-        ref={elRef}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
-          pb: '4px',
-          mb: 0.5,
-        }}
-      >
-        {div.logoYes && (
-  <Box sx={{ width: DEFAULT_LOGO_WIDTH, flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
-                <TrimmedImg
-              src={div.logo}
-              alt="logo"
-              onTrimmed={() => setChunks(null)}
-              style={{
-                width: '100%',
-                height: 'auto',
-                objectFit: 'contain',
-                objectPosition: 'left center',
-                display: 'block',
-              }}
-            />
-          </Box>
-        )}
-        {div.headerYes && (
-  <Box sx={{ width: DEFAULT_HEADER_WIDTH, flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-                <TrimmedImg
-              src={div.header}
-              alt="header text"
-              onTrimmed={() => setChunks(null)}
-              style={{
-                width: '100%',
-                height: 'auto',
-                objectFit: 'contain',
-                objectPosition: 'right center',
-                display: 'block',
-              }}
-            />
-          </Box>
-        )}
+const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
+  <Box
+    ref={elRef}
+    sx={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+      pb: '14px',
+    }}
+  >
+    {div.logoYes && (
+      <Box sx={{ width: DEFAULT_LOGO_WIDTH, ml: '1%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
+        <TrimmedImg
+          src={div.logo}
+          alt="logo"
+          onTrimmed={() => setChunks(null)}
+          style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
+        />
       </Box>
-    );
-
+    )}
+    {div.headerYes && (
+      <Box sx={{ width: DEFAULT_HEADER_WIDTH, mr: '3.5%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+        <TrimmedImg
+          src={div.header}
+          alt="header text"
+          onTrimmed={() => setChunks(null)}
+          style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'right center', display: 'block' }}
+        />
+      </Box>
+    )}
+  </Box>
+);
     const renderPoHeaderBlock = (elRef?: React.Ref<HTMLDivElement>) => (
       <Box ref={elRef} className="print-avoid" sx={{ px: 1, pt: 0.25, pb: 0.5 }}>
         <Typography align="center" sx={{ fontWeight: 800, fontSize: 16, mb: 0.5, textDecoration: 'underline' }}>
@@ -1049,7 +1036,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         className="print-container"
         sx={{
           width: '100%',
-          maxWidth: '190mm',
+          maxWidth: PAGE_CONTENT_WIDTH,
           mx: 'auto',
           backgroundColor: '#fff',
           color: '#111',
@@ -1058,7 +1045,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           lineHeight: 1.2,
           position: 'relative',
           '@media print': {
-            width: '190mm',
+            width: PAGE_CONTENT_WIDTH,
             margin: 0,
             boxSizing: 'border-box',
             WebkitPrintColorAdjust: 'exact',
@@ -1075,7 +1062,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           },
         }}
       >
-        <style>{`@page { size: A4 portrait; margin: 10mm 10mm 14mm 10mm; border: none; padding: 0; @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; } }`}</style>
+        <style>{`@page { size: A4 portrait;  margin: 6mm 3mm 14mm 3mm; border: none; padding: 0; @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #000; } }`}</style>
 
         {/* Hidden measuring box — keeps the page-header render so pageHeaderH is measured. */}
         <Box
@@ -1085,7 +1072,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             position: 'absolute',
             top: 0,
             left: '-99999px',
-            width: '190mm',
+            width: PAGE_CONTENT_WIDTH,
             visibility: 'hidden',
             pointerEvents: 'none',
           }}
@@ -1126,8 +1113,8 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           }}
           >
               {/* Logo header only on page 1 */}
-              {isFirstPage && renderPageHeader()}
-
+              {/* {isFirstPage && renderPageHeader()} */}
+              {renderPageHeader()}
               <Box
                 sx={{
                 display: 'flex',
@@ -1187,6 +1174,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
               '@media print': { breakBefore: 'page', pageBreakBefore: 'always' },
             }}
           >
+              {renderPageHeader()}
             <Box
               sx={{
                 border: '2px solid #000',
