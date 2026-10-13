@@ -125,7 +125,7 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
           fontSize: '12px',
           textAlign: 'center'
         } as any,
-        minWidth: 140,
+        minWidth: 120,
         suppressMenu: true,
         sortable: true,
         filter: true
@@ -134,12 +134,21 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         headerName:  intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
         field: 'REQUEST_DATE',
         width: 120,
-        minWidth: 150,
+        minWidth: 130,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
           return date.isValid() ? date.format('DD/MM/YYYY') : 'NA';
         },
+        sortable: true,
+        filter: true
+      },
+      {
+            headerName: intl.formatMessage({ id: 'ALTERNATE ID' }) || 'ALTERNATE ID',
+        field: 'ALTERNATE_ID',
+        width: 120,
+        minWidth: 130,
+        cellStyle: { fontSize: '12px',textAlign: 'center' } as any,
         sortable: true,
         filter: true
       },

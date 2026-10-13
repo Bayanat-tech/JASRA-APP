@@ -382,9 +382,9 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
           const result = await HrServiceInstance.getMasters(
             'hr',
             MASTER,
-            { page: pageNum, rowsPerPage: pageSize },   // service maps → ?limit=
+            { page: pageNum, rowsPerPage: pageSize },   
             filterPayload,
-            user?.loginid1                                // → ?code=
+            user?.loginid1                                
           );
 
           params.successCallback(result?.tableData ?? [], result?.count ?? 0);

@@ -51,15 +51,15 @@ export const leaveDaysCntHandler = async (req: Request, res: Response) => {
       leaveEndDate,
       leaveType,
       company_code,
-      employee_code,
+      half_day,
     } = req.query;
 
     const data = await HrService.LeaveDaysCount({
+      company_code: company_code as string,
       leaveStartDate: leaveStartDate as string,
       leaveEndDate: leaveEndDate as string,
       leaveType: leaveType as string,
-      company_code: company_code as string,
-      employee_code: employee_code as string,
+      half_day: half_day as string,
     });
 
     res.json(data);

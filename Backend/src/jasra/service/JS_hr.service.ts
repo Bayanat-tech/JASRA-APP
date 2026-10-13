@@ -108,37 +108,40 @@ export const HrService = {
   },
 
  LeaveDaysCount: async (params: {
+    company_code: string;
     leaveStartDate: string;
     leaveEndDate: string;
+    half_day: string;
     leaveType: string;
-    company_code: string;
-    employee_code: string;
   }) => {
-    const { leaveStartDate, leaveEndDate , leaveType , company_code } = params;
-
+    const {company_code, leaveStartDate, leaveEndDate , leaveType , half_day } = params;
+    console.log("leave params",params);
+    
     const query = `
     DECLARE
      v_leave_days NUMBER;
      BEGIN
-        v_leave_days := FUN_CALC_LEAVE_DAYS(
+        v_leave_days := FUN_CALCULATE_FINAL_LEAVE_DAYS(
+          :p_company_code,
           TO_DATE(:leaveStartDate, 'DD-MM-YYYY'),
           TO_DATE(:leaveEndDate, 'DD-MM-YYYY'),
-          :p_leaveType,
-          :p_company_code
+          :p_half_day,
+          :p_leaveType
         );
       :p_leave_days := v_leave_days;
       END;
     `;
     
     const bindParams = {
+      p_company_code: company_code,
       leaveStartDate: leaveStartDate,
       leaveEndDate: leaveEndDate,
+      p_half_day: half_day,
       p_leaveType: leaveType,
-      p_company_code: company_code,
       p_leave_days: {
         dir: oracledb.BIND_OUT,
         type: oracledb.NUMBER,
-      },
+      }
     };
 
     try {
