@@ -1162,7 +1162,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
           );
         })}
 
-        {/* Closing pages — no logo header now. */}
+        {/* Closing pages — no more logo header now. */}
         {Array.from({ length: closingPageCount }).map((_, k) => (
           <Box
             key={`closing-${k}`}
