@@ -108,17 +108,19 @@ const FRAME_EXTRA_PX = 30;
 const MAX_EXTRA_BUFFER_PX = 240;
 const EXTRA_BUFFER_STEP_PX = 16;
 
-
 const SIGNATURE_TOP_GAP_PX = 8;
 
 const TERMS_GAP_PX = 10;
 
 const DEFAULT_LOGO_WIDTH = '17%';
 const DEFAULT_HEADER_WIDTH = '33.5%';
-const SIGNATURE_BOX_HEIGHT_PX = 96;
-const PAGE_CONTENT_WIDTH = '204mm';   // new: old report box is almost full width
+// Taller box so the supplier (and company) have clear room to sign above the
+// "Signature" / "Date" lines. Pagination measures the real rendered height, so
+// the layout adjusts automatically.
+const SIGNATURE_BOX_HEIGHT_PX = 150;
+const PAGE_CONTENT_WIDTH = '204mm'; // new: old report box is almost full width
 
-  // Extra tolerance (px) allowed when deciding whether terms + signature can
+// Extra tolerance (px) allowed when deciding whether terms + signature can
 // share the last items page. Anything within this tolerance is trusted to the
 // browser's page-break handling; anything above triggers a fresh page.
 const LAST_PAGE_TOLERANCE_PX = 0;
@@ -565,7 +567,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         // on the others.
         const reserved =
           tableHeadH + FRAME_EXTRA_PX + buffer +
-       pageHeaderH + (isFirstDocPage ? firstPageExtraH + scopeRowH : 0)
+          pageHeaderH + (isFirstDocPage ? firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const h = rowHeights[i];
 
@@ -585,7 +587,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
         const isOnlyPageSoFar = lastIdx === 0;
         const reserved =
           tableHeadH + FRAME_EXTRA_PX + buffer +
-        pageHeaderH + (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0)
+          pageHeaderH + (isOnlyPageSoFar ? firstPageExtraH + scopeRowH : 0);
         const usable = PAGE_HEIGHT_PX - reserved;
         const chunk = indexChunks[lastIdx];
 
@@ -604,7 +606,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       // Only the first page carries the header now.
       const reservedWithTerms =
         tableHeadH + termsTextH + signatureH + totalRowH + FRAME_EXTRA_PX + buffer +
-          pageHeaderH + (isOnlyPage ? firstPageExtraH + scopeRowH : 0)
+        pageHeaderH + (isOnlyPage ? firstPageExtraH + scopeRowH : 0);
       const usableWithTerms = PAGE_HEIGHT_PX - reservedWithTerms;
 
       // Only push terms + signature to their own page if they clearly don't
@@ -673,39 +675,39 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       verticalAlign: 'top',
     };
 
-const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
-  <Box
-    ref={elRef}
-    sx={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      width: '100%',
-      pb: '14px',
-    }}
-  >
-    {div.logoYes && (
-      <Box sx={{ width: DEFAULT_LOGO_WIDTH, ml: '1%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
-        <TrimmedImg
-          src={div.logo}
-          alt="logo"
-          onTrimmed={() => setChunks(null)}
-          style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
-        />
+    const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
+      <Box
+        ref={elRef}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          pb: '14px',
+        }}
+      >
+        {div.logoYes && (
+          <Box sx={{ width: DEFAULT_LOGO_WIDTH, ml: '1%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
+            <TrimmedImg
+              src={div.logo}
+              alt="logo"
+              onTrimmed={() => setChunks(null)}
+              style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
+            />
+          </Box>
+        )}
+        {div.headerYes && (
+          <Box sx={{ width: DEFAULT_HEADER_WIDTH, mr: '3.5%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+            <TrimmedImg
+              src={div.header}
+              alt="header text"
+              onTrimmed={() => setChunks(null)}
+              style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'right center', display: 'block' }}
+            />
+          </Box>
+        )}
       </Box>
-    )}
-    {div.headerYes && (
-      <Box sx={{ width: DEFAULT_HEADER_WIDTH, mr: '3.5%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-        <TrimmedImg
-          src={div.header}
-          alt="header text"
-          onTrimmed={() => setChunks(null)}
-          style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'right center', display: 'block' }}
-        />
-      </Box>
-    )}
-  </Box>
-);
+    );
     const renderPoHeaderBlock = (elRef?: React.Ref<HTMLDivElement>) => (
       <Box ref={elRef} className="print-avoid" sx={{ px: 1, pt: 0.25, pb: 0.5 }}>
         <Typography align="center" sx={{ fontWeight: 800, fontSize: 16, mb: 0.5, textDecoration: 'underline' }}>
@@ -912,10 +914,12 @@ const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
           : 'Website: the-maintainers.com';
       const issued = isAJSS ? 'Form Issued Date: 26-02-2020' : isAND ? '' : `Form Issued Date:${printDate}`;
 
+      // The signing lines sit at the bottom of each half (mt: 'auto'), so the
+      // taller box gives a clear empty area above them for a signature/stamp.
       const signRow = (
         <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'space-between', px: 1 }}>
-          <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Signature</Box>
-          <Box sx={{ width: '38%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Date</Box>
+          <Box sx={{ width: '42%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Signature</Box>
+          <Box sx={{ width: '42%', borderTop: '1px solid #222', textAlign: 'center', pt: 0.75, fontWeight: 700, fontSize: 11.5 }}>Date</Box>
         </Box>
       );
 
@@ -946,7 +950,8 @@ const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
             <Box sx={{ width: '50%', p: '4px 4px 6px 10px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
               <Box>
                 <Typography sx={{ fontWeight: 700, fontSize: 11.5, mb: 1.5, textAlign: 'center' }}>
-                  For {(div?.name || '').replace(/:+$/, '')}:                </Typography>
+                  For {(div?.name || '').replace(/:+$/, '')}:
+                </Typography>
                 <Box sx={{ fontSize: 11.5, textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
                   {signature ? (
                     <img src={POsignatureImg} alt="Signature" style={{ maxWidth: '100px', maxHeight: '40px', height: 'auto' }} />
@@ -1101,28 +1106,26 @@ const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
           const isLastPage = pageIdx === pagesToRender.length - 1;
 
           return (
-         <Box
-          key={pageIdx}
-          className="report-page"
-          sx={{
-            boxSizing: 'border-box',
-            '@media print': {
-              breakAfter: 'page',
-              pageBreakAfter: 'always',
-            },
-          }}
-          >
-              {/* Logo header only on page 1 */}
-              {/* {isFirstPage && renderPageHeader()} */}
+            <Box
+              key={pageIdx}
+              className="report-page"
+              sx={{
+                boxSizing: 'border-box',
+                '@media print': {
+                  breakAfter: 'page',
+                  pageBreakAfter: 'always',
+                },
+              }}
+            >
               {renderPageHeader()}
               <Box
                 sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                border: '2px solid #000',
-                boxSizing: 'border-box',
-                px: 1,
-                py: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: '2px solid #000',
+                  boxSizing: 'border-box',
+                  px: 1,
+                  py: 1,
                 }}
               >
                 {isFirstPage && (
@@ -1132,22 +1135,21 @@ const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
                   </>
                 )}
 
-      {chunk.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-          {renderItemsTableHead()}
-          <tbody>
-            {isFirstPage && renderScopeRow()}
-            {chunk.map((item, i) => {
-              const index = pagesToRender
-                .slice(0, pageIdx)
-                .reduce((sum, c) => sum + c.length, 0) + i;
-              return renderItemRow(item, index);
-            })}
-            {pageIdx === lastItemsPageIdx && renderTotalRow()}
-          </tbody>
-        </table>
-      )}
-
+                {chunk.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
+                    {renderItemsTableHead()}
+                    <tbody>
+                      {isFirstPage && renderScopeRow()}
+                      {chunk.map((item, i) => {
+                        const index = pagesToRender
+                          .slice(0, pageIdx)
+                          .reduce((sum, c) => sum + c.length, 0) + i;
+                        return renderItemRow(item, index);
+                      })}
+                      {pageIdx === lastItemsPageIdx && renderTotalRow()}
+                    </tbody>
+                  </table>
+                )}
 
                 {isLastPage && (
                   <>
@@ -1174,7 +1176,7 @@ const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
               '@media print': { breakBefore: 'page', pageBreakBefore: 'always' },
             }}
           >
-              {renderPageHeader()}
+            {renderPageHeader()}
             <Box
               sx={{
                 border: '2px solid #000',
