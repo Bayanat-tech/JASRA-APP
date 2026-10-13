@@ -591,12 +591,39 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     return new Date(NaN);
   };
 
+    const getEffectiveLeaveEndDate = (): string => {
+    const { actual_resume_date, DUTY_RESUME_DATE, leave_end_date } = formData;
+
+    const hasBoth =
+      actual_resume_date &&
+      actual_resume_date !== '0000-00-00' &&
+      DUTY_RESUME_DATE &&
+      DUTY_RESUME_DATE !== '0000-00-00';
+
+    const normalize = (d: any) => {
+      if (!d) return '';
+      if (dayjs.isDayjs(d)) return d.format('YYYY-MM-DD');
+      return String(d).trim();
+    };
+
+    const actualStr = normalize(actual_resume_date);
+    const dutyStr = normalize(DUTY_RESUME_DATE);
+
+    if (hasBoth && actualStr && dutyStr && actualStr !== dutyStr) {
+      return dayjs.isDayjs(actual_resume_date)
+        ? actual_resume_date.format('YYYY-MM-DD')
+        : actualStr;
+    }
+
+    return leave_end_date;
+  };
+
   useEffect(() => {
     const fetchLeaveDays = async () => {
-
       if (formData.leave_start_date && formData.leave_end_date && formData.leave_type) {
         const start = parseCustomDate(formData.leave_start_date);
-        const end = parseCustomDate(formData.leave_end_date);
+        const effectiveEndDate = getEffectiveLeaveEndDate();
+        const end = parseCustomDate(effectiveEndDate);
 
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           try {
@@ -605,19 +632,31 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
               leaveEndDate: String(end),
               leaveType: formData.leave_type,
               company_code: String(user?.company_code),
-            })
-            setFormData((prev) => ({
-              ...prev,
-              leave_days: result?.leaveDays?.toString() || "",
-            }));
+              half_day: String(formData.is_half_day),
+            });
+          const rawDays = Number(result?.leaveDays ?? 0);
+
+          const dutyResume = formData.DUTY_RESUME_DATE ?? '';
+          const actualResume = formData.actual_resume_date ?? '';
+          const datesDiffer =
+            String(dutyResume).trim() !== '' &&
+            String(actualResume).trim() !== '' &&
+            String(dutyResume) !== String(actualResume);
+
+          const computedDays = datesDiffer ? rawDays - 1 : rawDays;
+
+          setFormData((prev) => ({
+            ...prev,
+            leave_days: Number.isFinite(computedDays) ? computedDays.toString() : '',
+          }));
           } catch (error) {
-            console.error("Error calculating leave days:", error);
+            console.error('Error calculating leave days:', error);
           }
         }
       }
-    }
+    };
     fetchLeaveDays();
-  }, [formData.leave_start_date, formData.leave_end_date,formData.leave_type]);
+  }, [formData.leave_start_date,formData.leave_end_date,formData.leave_type,formData.actual_resume_date,formData.DUTY_RESUME_DATE,]);
 
   const fetchLeaveTypes = async (employeeId: string) => {
     if (!employeeId) return;
@@ -627,9 +666,6 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     setLeaveTypesError('');
 
     try {
-      // const sql = `SELECT * FROM VW_HR_EMP_LEAVE_ENTITLE_AWARE WHERE EMPLOYEE_ID = ${employeeId}`
-
-      // const leaveHistory = await HrServiceInstance.executeRawSql(sql);
       
       const leaveHistory = await HrRequestServiceInstance.getLeaveHistory({ employeeId });
       const uniqueTypes = new Map<string, ILeaveType>();
@@ -646,9 +682,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
 
       let types = Array.from(uniqueTypes.values()).sort((a, b) => a.label.localeCompare(b.label));
 
-      // If formData.leave_type is set but missing in types, add it
       if (formData.leave_type && !types.find((t) => t.value === formData.leave_type)) {
-        // Optionally, add at the start or end with a placeholder label
         types = [{ value: formData.leave_type, label: formData.leave_type_desc || formData.leave_type }, ...types];
       }
 
@@ -675,16 +709,17 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     setValidationLoading(true);
     setValidationResult(null);
     setShowValidationAlert(true);
-
     try {
+      const effectiveLeaveEndDate = getEffectiveLeaveEndDate();
+
       const result = await HrRequestServiceInstance.getValidateLeave({
-        companyCode: 'BSG',
-        employeeId: formData.EMPLOYEE_ID,
-        leaveStartDate: formData.leave_start_date,
-        leaveEndDate: formData.leave_end_date,
-        leaveType: formData.leave_type,
-        leaveDays: requestedDays
-      });
+          companyCode: 'BSG',
+          employeeId: formData.EMPLOYEE_ID,
+          leaveStartDate: formData.leave_start_date,
+          leaveEndDate: effectiveLeaveEndDate,
+          leaveType: formData.leave_type,
+          leaveDays: requestedDays
+        });
 
       const balanceNum =
         result.availableBalance === undefined || result.availableBalance === null
@@ -1336,6 +1371,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                       label={intl.formatMessage({ id: 'Duty Resume Date' })}
                       value={formData.DUTY_RESUME_DATE ? dayjs(formData.DUTY_RESUME_DATE) : null}
                       onChange={(newValue) => handleChange('DUTY_RESUME_DATE', newValue)}
+                      minDate={formData.leave_end_date ? dayjs(formData.leave_end_date) : undefined}
                       format="DD/MM/YYYY"
                       readOnly={!readOnly || viewMode}
                       slotProps={{
@@ -1517,7 +1553,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                     label={intl.formatMessage({ id: 'Travel End Date' })}
                     value={formData.TRAVEL_END_DATE ? dayjs(formData.TRAVEL_END_DATE) : null}
                     onChange={(newValue) => handleChange('TRAVEL_END_DATE', newValue)}
-                    minDate={formData.TRAVEL_END_DATE ? dayjs(formData.TRAVEL_END_DATE) : undefined}
+                    minDate={formData.TRAVEL_DATE ? dayjs(formData.TRAVEL_DATE) : undefined}
                     format="DD/MM/YYYY"
                     readOnly={!readOnly || viewMode}
                     slotProps={{

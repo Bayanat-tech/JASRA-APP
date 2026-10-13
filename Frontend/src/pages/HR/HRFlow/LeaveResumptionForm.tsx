@@ -183,31 +183,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
   // Snackbar state for export notifications
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
-  // Report popup state
-  // const [printPopup, setPrintPopup] = useState<TUniversalDialogProps>({
-  //   action: {
-  //     open: false,
-  //     fullWidth: true,
-  //     maxWidth: 'xs'
-  //   },
 
-  //   title: intl.formatMessage({ id: 'Print Leave Resumption' }) || 'Print Leave Resumption',
-  //   data: { isPrintMode: false }
-  // });
-
-  // const [previewReportPopup, setPreviewReportPopup] = useState<TUniversalDialogProps>({
-  //   action: {
-  //     open: false,
-  //     fullWidth: true,
-  //     maxWidth: 'md'
-  //   },
-  //   title: intl.formatMessage({ id: 'Print Report' }) || 'Print Report',
-
-  //   data: { selectedReport: null }
-  // });
-
-
-  // Query to get logged-in user's employee data only
 
   const { data: currentUserEmployeeData } = useQuery<IHrEmployee | null, Error>({
     queryKey: ['current-user-employee', user?.loginid1],
@@ -225,22 +201,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
     enabled: !!user?.loginid1
   });
 
-  // Query to fetch report data
-  // const {
-  //   data: reportData,
-  //   isLoading: reportsLoading,
-  //   isError: reportsError,
-  //   refetch: refetchReportListData
-  // } = useQuery({
-  //   queryKey: ['employee_reports'],
-  //   queryFn: async () => {
-  //     const reports = await WmsSerivceInstance.getAllEmployeeReports();
-  //     return reports || null;
-  //   },
-  //   enabled: printPopup.action.open
-  // });
 
-  // Update form data when user data loads
   useEffect(() => {
     if (currentUserEmployeeData) {
       const employeeId = currentUserEmployeeData.EMPLOYEE_ID?.toString() || '';
@@ -381,12 +342,41 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
     return new Date(NaN);
   };
 
+  const getEffectiveLeaveEndDate = (): string => {
+      const { actual_resume_date, DUTY_RESUME_DATE, leave_end_date } = formData;
+  
+      const hasBoth =
+        actual_resume_date &&
+        actual_resume_date !== '0000-00-00' &&
+        DUTY_RESUME_DATE &&
+        DUTY_RESUME_DATE !== '0000-00-00';
+  
+      const normalize = (d: any) => {
+        if (!d) return '';
+        if (dayjs.isDayjs(d)) return d.format('YYYY-MM-DD');
+        return String(d).trim();
+      };
+  
+      const actualStr = normalize(actual_resume_date);
+      const dutyStr = normalize(DUTY_RESUME_DATE);
+  
+      if (hasBoth && actualStr && dutyStr && actualStr !== dutyStr) {
+        return dayjs.isDayjs(actual_resume_date)
+          ? actual_resume_date.format('YYYY-MM-DD')
+          : actualStr;
+      }
+  
+      return leave_end_date;
+    };
+    const ishalfday =formData.is_half_day ? 'Y' : 'N'
+    console.log('ishalfday',ishalfday);
+
   useEffect(() => {
     const fetchLeaveDays = async () => {
-
       if (formData.leave_start_date && formData.leave_end_date && formData.leave_type) {
         const start = parseCustomDate(formData.leave_start_date);
-        const end = parseCustomDate(formData.leave_end_date);
+        const effectiveEndDate = getEffectiveLeaveEndDate();
+        const end = parseCustomDate(effectiveEndDate);
 
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           try {
@@ -395,19 +385,31 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
               leaveEndDate: String(end),
               leaveType: formData.leave_type,
               company_code: String(user?.company_code),
-            })
-            setFormData((prev) => ({
-              ...prev,
-              leave_days: result?.leaveDays?.toString() || "",
-            }));
+              half_day: formData.is_half_day ? 'Y' : 'N',
+            });
+          const rawDays = Number(result?.leaveDays ?? 0);
+
+          const dutyResume = formData.DUTY_RESUME_DATE ?? '';
+          const actualResume = formData.actual_resume_date ?? '';
+          const datesDiffer =
+            String(dutyResume).trim() !== '' &&
+            String(actualResume).trim() !== '' &&
+            String(dutyResume) !== String(actualResume);
+
+          const computedDays = datesDiffer ? rawDays - 1 : rawDays;
+
+          setFormData((prev) => ({
+            ...prev,
+            leave_days: Number.isFinite(computedDays) ? computedDays.toString() : '',
+          }));
           } catch (error) {
-            console.error("Error calculating leave days:", error);
+            console.error('Error calculating leave days:', error);
           }
         }
       }
-    }
+    };
     fetchLeaveDays();
-  }, [formData.leave_start_date, formData.leave_end_date,formData.leave_type]);
+  }, [formData.leave_start_date,formData.leave_end_date,formData.leave_type,formData.actual_resume_date,formData.DUTY_RESUME_DATE,]);
 
   const getEmployeeNameById = async (employeeId: string): Promise<string> => {
     if (!employeeId) return '';
@@ -839,7 +841,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                           label={intl.formatMessage({ id: 'Actual Resume Date' })}
                           value={formData.actual_resume_date ? dayjs(formData.actual_resume_date) : null}
                           onChange={(newValue) => handleChange('actual_resume_date', newValue)}
-                          // minDate={formData.leave_start_date ? dayjs(formData.leave_sart_date) : undefined}
+                          minDate={formData.leave_start_date ? dayjs(formData.leave_start_date) : undefined}
                           format="DD/MM/YYYY"
                           slotProps={{
                             textField: {
@@ -847,7 +849,7 @@ const LeaveResumptionForm: React.FC<AddLeaveApprovalFormProps> = ({
                               size: 'small',
                               margin: 'dense',
                               required: true
-                              
+
                             }
                           }}
                         />

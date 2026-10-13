@@ -114,6 +114,7 @@ export interface ILeaveDaysParams {
   leaveEndDate: string;
   leaveType: string;
   company_code: string;
+  half_day: string;
 }
 
 // const {user} = useAuth();
@@ -190,14 +191,16 @@ class HrRequestService {
       leaveStartDate,
       leaveEndDate,
       leaveType,
-      company_code
+      company_code,
+      half_day
     }: ILeaveDaysParams) {
       const response = await axiosServices.get("/api/hr/gm/leaveDaysCount", {
         params: {
           leaveStartDate: formatDateOnly(leaveStartDate),
           leaveEndDate: formatDateOnly(leaveEndDate),
           leaveType: leaveType,
-          companycode : company_code,
+          company_code : company_code,
+          half_day: half_day
         },
       });
 

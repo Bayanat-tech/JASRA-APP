@@ -35,6 +35,7 @@ import { oracleDb, TypeORMService } from "../../database/connection";
 const ALLOWED_SORT_FIELDS: Record<string, string> = {
   REQUEST_NUMBER: "REQUEST_NUMBER",
   REQUEST_DATE: "REQUEST_DATE",
+  ALTERNATE_ID : "ALTERNATE_ID",
   LEAVE_START_DATE: "LEAVE_START_DATE",
   LEAVE_END_DATE: "LEAVE_END_DATE",
   LEAVE_TYPE: "LEAVE_TYPE",
@@ -54,6 +55,7 @@ const ALLOWED_FILTER_COLUMNS = new Set<string>([
   "LEAVE_TYPE_DESC",
   "EMPLOYEE_CODE",
   "EMPLOYEE_NAME_DISPLAY",
+  "ALTERNATE_ID",
   "NEXT_ACTION_BY_NAME",
   "REMARKS"
 ]);
