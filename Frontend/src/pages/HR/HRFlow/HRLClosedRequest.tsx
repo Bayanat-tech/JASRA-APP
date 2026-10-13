@@ -88,7 +88,7 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
     !!serialNumber && !!user_permission && Object.keys(user_permission).includes(serialNumber);
 
   /* ---------------- export ---------------- */
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!gridApi) {
       setSnackbar({
         open: true,
@@ -99,8 +99,38 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
     }
 
     try {
-      const rowData: any[] = [];
-      gridApi.forEachNodeAfterFilterAndSort((node: any) => rowData.push(node.data));
+      setSnackbar({
+        open: true,
+        message: intl.formatMessage({ id: 'Preparing export...' }) || 'Preparing export...',
+        severity: 'warning'
+      });
+
+      // Lazily fetch the complete dataset for export only
+      const sql_string = `
+          SELECT REQUEST_NUMBER, REQUEST_DATE, ALTERNATE_ID, EMPLOYEE_NAME_DISPLAY, LEAVE_TYPE_DESC,
+                 LEAVE_START_DATE, LEAVE_END_DATE, REMARKS
+            FROM VW_HR_LEAVE_REQUEST_FLOW
+            WHERE FINAL_APPROVED = 'YES'
+              AND LAST_ACTION NOT IN ('REJECTED', 'CANCEL')
+              AND (
+                    CREATED_BY = '${user?.loginid1}'
+                    OR IMMEDIATE_SUPERVISOR = '${user?.loginid1}'
+                    OR HOD = '${user?.loginid1}'
+                    OR DEPT_HEAD = '${user?.loginid1}'
+                    OR EXISTS (
+                        SELECT 1
+                        FROM ms_hr_employee e
+                        JOIN ms_hr_department d
+                            ON d.DEPT_CODE = e.DEPT_CODE
+                            AND d.DIV_CODE = e.DIV_CODE
+                        WHERE e.EMPLOYEE_ID = CREATED_BY
+                          AND d.LEAVE_FINAL_APPROVER = '${user?.loginid1}'
+                    )
+              )
+           Order by Request_Date DESC`;
+
+      const result = await HrServiceInstance.executeRawSql(sql_string);
+      const rowData: any[] = result ?? [];
 
       if (rowData.length === 0) {
         setSnackbar({
@@ -111,12 +141,27 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
         return;
       }
 
+      // Build export rows using column definitions
       const columnDefs = gridApi.getColumnDefs();
       const exportData = rowData.map((row: any) => {
         const exportedRow: any = {};
         columnDefs.forEach((col: any) => {
-          if (col.field && col.headerName) exportedRow[col.headerName] = row[col.field];
+          if (col.field && col.headerName && col.field !== 'FINAL_APPROVED') {
+            let value = row[col.field];
+
+            // apply the same valueFormatter as the grid (dates)
+            if (col.valueFormatter && typeof col.valueFormatter === 'function') {
+              try {
+                value = col.valueFormatter({ value, data: row });
+              } catch {
+                /* ignore */
+              }
+            }
+            exportedRow[col.headerName] = value;
+          }
         });
+        // Status column has no field — add manually
+        exportedRow[intl.formatMessage({ id: 'Status' }) || 'Status'] = 'Approved';
         return exportedRow;
       });
 
@@ -158,7 +203,7 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
         headerName: intl.formatMessage({ id: 'No.' }) || 'No.',
         field: 'REQUEST_NUMBER',
         width: 50,
-        minWidth: 140,
+        minWidth: 120,
         cellStyle: { fontSize: '12px', textAlign: 'center' } as any,
         suppressMenu: true,
         sortable: true,
@@ -169,7 +214,7 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
         headerName: intl.formatMessage({ id: 'Request Date' }) || 'Request Date',
         field: 'REQUEST_DATE',
         width: 120,
-        minWidth: 150,
+        minWidth: 130,
         cellStyle: { fontSize: '12px' },
         valueFormatter: (params: any) => {
           const date = dayjs(params.value);
@@ -186,6 +231,15 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
             return c.isBefore(fd) ? -1 : 1;
           }
         }
+      },
+      {
+        headerName: intl.formatMessage({ id: 'Alternate id' }) || 'Alternate id',
+        field: 'ALTERNATE_ID',
+        width: 120,
+        minWidth: 120,
+        cellStyle: { fontSize: '12px' },
+        sortable: true,
+        filter: 'agTextColumnFilter'
       },
       {
         headerName: intl.formatMessage({ id: 'Employee Name' }) || 'Employee Name',
@@ -258,13 +312,6 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
         sortable: true,
         filter: 'agTextColumnFilter'
       },
-      // {
-      //   headerName: intl.formatMessage({ id: 'Next Action By' }) || 'Next Action By',
-      //   field: 'NEXT_ACTION_BY_NAME',
-      //   width: 120, minWidth: 220,
-      //   cellStyle: { fontSize: '12px' },
-      //   sortable: true, filter: 'agTextColumnFilter'
-      // },
       {
         headerName: intl.formatMessage({ id: 'Status' }) || 'Status',
         field: 'FINAL_APPROVED',
@@ -406,9 +453,6 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
             <MenuItem onClick={() => handleMenuAction('export')}>
               {intl.formatMessage({ id: 'Export' }) || 'Export'}
             </MenuItem>
-            <MenuItem onClick={() => handleMenuAction('print')}>
-              {intl.formatMessage({ id: 'Print' }) || 'Print'}
-            </MenuItem>
           </Menu>
         </div>
 
@@ -449,7 +493,6 @@ const HRLClosedRequest: FC<HRLClosedRequestProps> = () => {
         </Alert>
       </Snackbar>
 
-      {/* View dialog (only one is needed now — the "add/edit" one is unused in closed page) */}
       {showFormDialog && (
         <DialogPop
           open={true}

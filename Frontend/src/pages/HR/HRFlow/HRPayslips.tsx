@@ -10,6 +10,7 @@ import HrServiceInstance from 'service/Service.hr';
 // Interface for employee data based on the response
 interface IHrEmployee {
   EMPLOYEE_ID: string;
+  ALTERNATE_ID: string;
   EMPLOYEE_CODE: string;
   RPT_NAME: string;
   SUPERVISOR_EMPID?: string;
@@ -51,7 +52,7 @@ export default function HRPayslips() {
         const sql = `
             SELECT DISTINCT *
             FROM (
-                SELECT EMPLOYEE_ID , RPT_NAME
+                SELECT EMPLOYEE_ID , RPT_NAME ,ALTERNATE_ID
                 FROM VW_HR_EMPLOYEE
                 WHERE EMP_STATUS <> 'S'
                 START WITH 
@@ -94,7 +95,7 @@ export default function HRPayslips() {
       
       try {
         const sql = `
-          SELECT EMPLOYEE_ID, EMPLOYEE_CODE, RPT_NAME, SUPERVISOR_EMPID, DEPT_HEAD_EMPID, MANGR_EMPID 
+          SELECT EMPLOYEE_ID,ALTERNATE_ID, EMPLOYEE_CODE, RPT_NAME, SUPERVISOR_EMPID, DEPT_HEAD_EMPID, MANGR_EMPID 
           FROM VW_HR_EMPLOYEE
           WHERE EMPLOYEE_ID = '${user.loginid1}'
         `;
@@ -122,6 +123,7 @@ export default function HRPayslips() {
       // Create current user object
       const currentUserEmployee: IHrEmployee = {
         EMPLOYEE_ID: user.loginid1,
+        ALTERNATE_ID: currentUserData?.ALTERNATE_ID || '',
         EMPLOYEE_CODE: user.loginid1,
         RPT_NAME: currentUserData?.RPT_NAME || 'Current User'
       };
@@ -265,7 +267,7 @@ export default function HRPayslips() {
             options={allEmployees}
             loading={isLoadingEmployees}
             getOptionLabel={(option: IHrEmployee) => 
-              option ? `${option.EMPLOYEE_ID} - ${option.RPT_NAME}` : ''
+              option ? `${option.ALTERNATE_ID} - ${option.RPT_NAME}` : ''
             }
             isOptionEqualToValue={(option, value) => 
               option.EMPLOYEE_ID === value?.EMPLOYEE_ID
@@ -279,7 +281,7 @@ export default function HRPayslips() {
                     backgroundColor: isCurrentUser ? '#FFFF00' : 'white',
                   }}
                 >
-                  {option.EMPLOYEE_ID} - {option.RPT_NAME}
+                  {option.ALTERNATE_ID} - {option.RPT_NAME}
                 </li>
               );
             }}
