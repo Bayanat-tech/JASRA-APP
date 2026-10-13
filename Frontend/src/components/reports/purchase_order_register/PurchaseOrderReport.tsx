@@ -19,7 +19,7 @@ type PORow = {
   ITEM_DESP: string; P_UOM: string; APPR_ITEM_P_QTY: number; L_UOM: string;
   APPR_ITEM_L_QTY: number; ITEM_RATE: number; CURRENCY_RATE: number; AMOUNT: number;
   PROJECT_NAME: string; CONTACT_NUMBER: string; COMPANY_LOGO_AWSURL: string;
-  MAIL_EMAIL: string; COMPANY_NAME: string; DIV_CODE: string;
+  MAIL_EMAIL: string; COMPANY_NAME: string; DIV_CODE: string; DIV_NAME?: string;
   PROJECT_CODE: string; DESCRIPTION: string; TYPE_OF_PR: string; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
 };
 
@@ -65,15 +65,18 @@ type DetailProjectGroup = {
 
 type DetailDivGroup = {
   divCode: string;
+  divName: string;
   projects: DetailProjectGroup[];
   total: number;
 };
 
 function groupDetailByDivProject(rows: PORow[]): DetailDivGroup[] {
   const divMap: Record<string, Record<string, PORow[]>> = {};
+  const divNames: Record<string, string> = {};
 
   for (const r of rows) {
     const divKey = r.DIV_CODE || 'Unassigned';
+    if (r.DIV_NAME && !divNames[divKey]) divNames[divKey] = r.DIV_NAME;
     const projKey = r.PROJECT_NAME || 'N/A';
     if (!divMap[divKey]) divMap[divKey] = {};
     if (!divMap[divKey][projKey]) divMap[divKey][projKey] = [];
@@ -90,13 +93,13 @@ function groupDetailByDivProject(rows: PORow[]): DetailDivGroup[] {
         total: pos.reduce((s, p) => s + p.total, 0),
       };
     });
-    return { divCode, projects, total: projects.reduce((s, p) => s + p.total, 0) };
+    return { divCode, divName: divNames[divCode] || '', projects, total: projects.reduce((s, p) => s + p.total, 0) };
   });
 }
 
 // ── Summary grouping — one row per PO ───────────────────────
 type SummaryPoRow = {
-  poNo: string; poDate: string; divCode: string; projectName: string; projectCode: string;
+  poNo: string; poDate: string; divCode: string; divName: string; projectName: string; projectCode: string;
   status: string; supplier: string; suppName: string; description: string; typeOfPr: string;
   total: number; PR_REF_NO: string; PAYMENT_TERMS: string; WO_NUMBER: string;
 };
@@ -107,7 +110,7 @@ function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
     const amount = parseFloat(String(r.AMOUNT)) || 0;
     if (!poMap[r.PO_NO]) {
       poMap[r.PO_NO] = {
-        poNo: r.PO_NO, PR_REF_NO: r.PR_REF_NO, poDate: r.PO_DATE, divCode: r.DIV_CODE || 'Unassigned',
+        poNo: r.PO_NO, PR_REF_NO: r.PR_REF_NO, poDate: r.PO_DATE, divCode: r.DIV_CODE || 'Unassigned', divName: r.DIV_NAME || '',
         projectName: r.PROJECT_NAME || 'N/A', projectCode: r.PROJECT_CODE || '',
         status: r.STATUS || 'N/A', supplier: r.SUPPLIER, suppName: r.SUPP_NAME,
         description: r.DESCRIPTION || '', typeOfPr: r.TYPE_OF_PR || '',
@@ -119,48 +122,23 @@ function buildSummaryRows(rows: PORow[]): SummaryPoRow[] {
   return Object.values(poMap);
 }
 
-// ── Hierarchical Summary: Div → Project → POs ───────────────
-type ProjectGroup = {
-  projectName: string;
-  projectCode: string;
+// ── Summary grouping: Division → plain PO rows (no project grouping) ──
+type DivGroup = {
+  divCode: string;
+  divName: string;
   rows: SummaryPoRow[];
   total: number;
 };
 
-type DivGroup = {
-  divCode: string;
-  projects: ProjectGroup[];
-  total: number;
-};
-
-function groupSummaryByDivProject(rows: SummaryPoRow[]): DivGroup[] {
-  const divMap: Record<string, any> = {};
-
+function groupSummaryByDiv(rows: SummaryPoRow[]): DivGroup[] {
+  const divMap: Record<string, DivGroup> = {};
   for (const r of rows) {
     const divKey = r.divCode || 'Unassigned';
-    const projKey = r.projectName || 'N/A';
-
-    if (!divMap[divKey]) {
-      divMap[divKey] = { divCode: divKey, projects: {}, total: 0 };
-    }
-    if (!divMap[divKey].projects[projKey]) {
-      divMap[divKey].projects[projKey] = {
-        projectName: projKey,
-        projectCode: r.projectCode || '',
-        rows: [],
-        total: 0,
-      };
-    }
-
-    divMap[divKey].projects[projKey].rows.push(r);
-    divMap[divKey].projects[projKey].total += r.total;
+    if (!divMap[divKey]) divMap[divKey] = { divCode: divKey, divName: r.divName || '', rows: [], total: 0 };
+    divMap[divKey].rows.push(r);
     divMap[divKey].total += r.total;
   }
-
-  return Object.values(divMap).map((div: any) => ({
-    ...div,
-    projects: Object.values(div.projects) as ProjectGroup[],
-  }));
+  return Object.values(divMap);
 }
 
 // ── Helpers: strip "10 – Name" → "10" so API & filter always get pure codes ──
@@ -369,20 +347,31 @@ const TABLE_CSS = `
   .po-table col.c0 { width: 15%; } .po-table col.c1 { width: 15%; } .po-table col.c2 { width: 7%; }
   .po-table col.c3 { width: 8%; } .po-table col.c4 { width: 7%; } .po-table col.c5 { width: 8%; }
   .po-table col.c6 { width: 10%; } .po-table col.c7 { width: 11%; } .po-table col.c8 { width: 8%; } .po-table col.c9 { width: 6%; }
-  .pos-table col.c0  { width: 15%; }
-  .pos-table col.c1  { width: 7%; }
-  .pos-table col.c2  { width: 6%; }
-  .pos-table col.c3  { width: 11%; }
-  .pos-table col.c4  { width: 7%; }
-  .pos-table col.c5  { width: 15%; }
-  .pos-table col.c6  { width: 16%; }
-  .pos-table col.c7  { width: 10%; }
-  .pos-table col.c8  { width: 8%; }
-  .pos-table col.c9  { width: 8%; }
-  .pos-table col.c10 { width: 6%; }
 
-  .po-table th, .po-table td, .pos-table th, .pos-table td { overflow: anywhere; border: 1px solid #9d9db3; padding: 7px 10px; vertical-align: top; }
+  /* Summary: 12 columns (total 100%) */
+  .pos-table col.c0  { width: 9%; }   /* PO Number */
+  .pos-table col.c1  { width: 6%; }   /* PO Date */
+  .pos-table col.c2  { width: 6%; }   /* Supplier Code */
+  .pos-table col.c3  { width: 12%; }  /* Supplier Name */
+  .pos-table col.c4  { width: 8%; }   /* Amount */
+  .pos-table col.c5  { width: 8%; }   /* PR Ref No */
+  .pos-table col.c6  { width: 15%; }  /* Scope Of Work */
+  .pos-table col.c7  { width: 8%; }   /* Payment Term */
+  .pos-table col.c8  { width: 10%; }  /* Project */
+  .pos-table col.c9  { width: 6%; }   /* W/O Number */
+  .pos-table col.c10 { width: 6%; }   /* Type Of PR */
+  .pos-table col.c11 { width: 6%; }   /* Status */
+
+  /* NOTE: "overflow: anywhere" was invalid CSS (dropped by the browser) — wrapping needs overflow-wrap */
+  .po-table th, .po-table td, .pos-table th, .pos-table td { overflow-wrap: anywhere; word-break: break-word; border: 1px solid #9d9db3; padding: 7px 10px; vertical-align: top; }
   .po-table thead th, .pos-table thead th { background: #d9d6e8; color: #1f1f2e; font-weight: 700; font-size: 12.5px; text-align: center; white-space: nowrap; }
+  .pos-table thead th { white-space: normal; font-size: 12px; padding: 7px 8px; }
+
+  /* Summary on-screen: fixed min width + horizontal scroll so 12 columns never get squeezed/clipped */
+  .pos-scroll { width: 100%; overflow-x: auto; }
+  table.pos-table { min-width: 1500px; font-size: 12px; }
+  .pos-table td { padding: 6px 8px; }
+  .pos-table tr.data-row td { line-height: 1.45; }
   .po-table thead th { cursor: pointer; user-select: none; }
   .po-table thead th:hover { background: #cbc7e0; }
   .po-table thead th.num, .pos-table thead th.num { text-align: right; }
@@ -398,23 +387,85 @@ const TABLE_CSS = `
   .po-table tr.item-total td { font-size: 12px; }
   .po-table tr.supp-total td, .po-table tr.po-total td { font-size: 12.5px; }
 
-  /* Division / Project hierarchy bands — shared by detail (po-table) and summary (pos-table) */
+  /* Division banner/total — shared by detail (po-table) and summary (pos-table) */
   .po-table tr.division-banner td, .pos-table tr.division-banner td { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 12.5px; padding: 8px 12px; }
-  .po-table tr.project-banner td, .pos-table tr.project-banner td { background: #dbe7f5; color: #1e3a5f; font-weight: 700; font-size: 12px; padding: 7px 12px; }
-  .pos-table tr.status-banner td { background: #f2f1f8; color: #374151; font-weight: 600; font-size: 11.5px; padding: 6px 12px; }
-  .pos-table tr.status-total td { background: #f2f1f8; font-weight: 700; color: #374151; font-size: 12px; }
-  .po-table tr.project-total td, .pos-table tr.project-total td { background: #e0e4ee; font-weight: 700; color: #1e3a5f; font-size: 12.5px; }
   .po-table tr.division-total td, .pos-table tr.division-total td { background: #ece9f3; font-weight: 700; color: #1e3a5f; font-size: 12.5px; }
   .po-table tr.grand-total td, .pos-table tr.grand-total td { background: #1e3a5f; color: #fff; font-weight: 700; font-size: 12.5px; }
 
+  /* Project hierarchy — detail view only */
+  .po-table tr.project-banner td { background: #dbe7f5; color: #1e3a5f; font-weight: 700; font-size: 12px; padding: 7px 12px; }
+  .po-table tr.project-total td { background: #e0e4ee; font-weight: 700; color: #1e3a5f; font-size: 12.5px; }
+
   @media print {
+    @page { size: A4 landscape; margin: 8mm; }
+
     table.po-table thead, table.pos-table thead { display: table-header-group; }
-    table.po-table tr, table.pos-table tr { page-break-inside: avoid; }
+    table.po-table tr, table.pos-table tr { page-break-inside: avoid; break-inside: avoid; }
+
+    /* ---- PO Summary Register print ---- */
+    .pos-scroll { overflow: visible !important; }
+    table.pos-table {
+      width: 100% !important;
+      min-width: 0 !important;
+      table-layout: fixed !important;
+      font-size: 8px !important;
+    }
+    table.pos-table th,
+    table.pos-table td {
+      padding: 2px 3px !important;
+      font-size: 8px !important;
+      line-height: 1.3 !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+    }
+    table.pos-table thead th { font-size: 8px !important; white-space: normal !important; }
+    table.pos-table tr.data-row td.num { white-space: nowrap !important; text-align: right !important; }
+
+    table.pos-table .pos-print-logo-row td { padding: 4px 6px !important; }
+    table.pos-table .pos-print-logo-flex img { height: 28px !important; }
+    table.pos-table .pos-print-meta-text { font-size: 8px !important; line-height: 1.5 !important; }
+    table.pos-table tr.pos-title-bar td { font-size: 11px !important; padding: 5px !important; }
+    table.pos-table tr.pos-meta-row td { font-size: 8px !important; padding: 3px 6px !important; }
+
+    table.pos-table tr.division-banner td { font-size: 9px !important; padding: 3px 6px !important; }
+    table.pos-table tr.division-total td  { font-size: 8.5px !important; padding: 3px 4px !important; }
+    table.pos-table tr.grand-total td     { font-size: 9px !important; padding: 4px !important; }
+
+    /* keep colours when printing */
+    table.pos-table * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 `;
 
 const PurchaseOrderReport: React.FC = () => {
   const { user } = useAuth();
+
+  // Division code -> name lookup (fallback when the register rows don't carry DIV_NAME)
+  const { data: divNameMap = {} } = useQuery<Record<string, string>>({
+    queryKey: ['po_div_names', user?.company_code],
+    queryFn: async () => {
+      const res = await axiosServices.get(
+        `/api/report/div-codes?${buildFilterParams(user?.company_code, EMPTY_FILTERS)}`
+      );
+      const map: Record<string, string> = {};
+      for (const item of Array.isArray(res.data) ? res.data : []) {
+        if (!item || typeof item !== 'object') continue;
+        const code = String(item.DIV_CODE ?? item.div_code ?? '').trim();
+        const name = String(item.DIV_NAME ?? item.div_name ?? '').trim();
+        if (code && name) map[code] = name;
+      }
+      return map;
+    },
+    enabled: !!user?.company_code,
+    staleTime: Infinity,
+  });
+
+  /** "10 – Civil Division" (or just the code if no name is known) */
+  const divLabel = (d: { divCode: string; divName?: string }) => {
+    const name = d.divName || divNameMap[d.divCode];
+    return name ? `${d.divCode} – ${name}` : d.divCode;
+  };
 
   const [viewType, setViewType] = useState<ViewType>('detail');
   const [hasGeneratedReport, setHasGeneratedReport] = useState(false);
@@ -510,10 +561,11 @@ const PurchaseOrderReport: React.FC = () => {
     });
   }, [sort]);
 
-  // ── Detail view now grouped: Division → Project → PO (> Supplier > Item) ──
+  // ── Detail view grouped: Division → Project → PO (> Supplier > Item) ──
   const detailDivGroups = useMemo(() => groupDetailByDivProject(filteredRows), [filteredRows]);
+  // ── Summary view grouped: Division → plain PO rows ──
   const summaryRows = useMemo(() => buildSummaryRows(filteredRows), [filteredRows]);
-  const divGroups = useMemo(() => groupSummaryByDivProject(summaryRows), [summaryRows]);
+  const divGroups = useMemo(() => groupSummaryByDiv(summaryRows), [summaryRows]);
   const grandTotal = filteredRows.reduce((s, r) => s + (parseFloat(String(r.AMOUNT)) || 0), 0);
   const filtersActive = isFiltersActive(applied, search);
 
@@ -561,7 +613,7 @@ const PurchaseOrderReport: React.FC = () => {
         ['PO No', 'PO Date', 'Supplier', 'Item Code', 'Description', 'PUOM', 'P Qty', 'LUOM', 'L Qty', 'Item Rate', 'Currency Rate', 'Amount (QAR)', 'Status', 'Type'],
       ];
       detailDivGroups.forEach(div => {
-        summaryData.push([`DIVISION: ${div.divCode}`]);
+        summaryData.push([`DIVISION: ${divLabel(div)}`]);
         div.projects.forEach(proj => {
           summaryData.push(['', `PROJECT: ${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ''}`]);
           proj.pos.forEach(po => {
@@ -584,7 +636,7 @@ const PurchaseOrderReport: React.FC = () => {
           });
           summaryData.push(['', '', `Project Total: ${proj.projectName}`, '', '', '', '', '', '', '', '', proj.total]);
         });
-        summaryData.push(['', '', `Division Total: ${div.divCode}`, '', '', '', '', '', '', '', '', div.total]);
+        summaryData.push(['', '', `Division Total: ${divLabel(div)}`, '', '', '', '', '', '', '', '', div.total]);
       });
       summaryData.push([]);
       summaryData.push(['', '', 'Grand Total', '', '', '', '', '', '', '', '', grandTotal]);
@@ -598,29 +650,28 @@ const PurchaseOrderReport: React.FC = () => {
         [`Print Date: ${printDate}`, '', `Print User: ${printUser}`],
         ...(filterCriteriaText ? [['Filter Criteria:', filterCriteriaText]] : []),
         [],
-        ['Division', 'Project', 'PO Number', 'PO Date', 'Supplier Code', 'Supplier Name', 'Amount (QAR)', 'PR Ref No', 'Scope Of Work', 'Payment Term', 'W/O Number', 'Type Of PR', 'Status'],
+        ['PO Number', 'PO Date', 'Supplier Code', 'Supplier Name', 'Amount (QAR)', 'PR Ref No',
+         'Scope Of Work', 'Payment Term', 'Project', 'W/O Number', 'Type Of PR', 'Status'],
       ];
 
       divGroups.forEach(div => {
-        summaryData.push([`DIVISION: ${div.divCode}`]);
-        div.projects.forEach(proj => {
-          summaryData.push(['', `PROJECT: ${proj.projectName}${proj.projectCode ? ` (${proj.projectCode})` : ''}`]);
-          proj.rows.forEach(row => {
-            summaryData.push([
-              '', '', row.poNo, formatDate(row.poDate), row.supplier, row.suppName,
-              row.total, row.PR_REF_NO, row.description, row.PAYMENT_TERMS,
-              row.WO_NUMBER, row.typeOfPr, row.status,
-            ]);
-          });
-          summaryData.push(['', '', '', '', '', `Project Total: ${proj.projectName}`, proj.total]);
+        summaryData.push([`DIVISION: ${divLabel(div)}`]);
+        div.rows.forEach(row => {
+          summaryData.push([
+            row.poNo, formatDate(row.poDate), row.supplier, row.suppName, row.total,
+            row.PR_REF_NO, row.description, row.PAYMENT_TERMS,
+            `${row.projectName}${row.projectCode ? ` (${row.projectCode})` : ''}`,
+            row.WO_NUMBER, row.typeOfPr, row.status,
+          ]);
         });
-        summaryData.push(['', '', '', '', '', `Division Total: ${div.divCode}`, div.total]);
+        summaryData.push(['', '', '', `Division Total: ${divLabel(div)}`, div.total]);
       });
 
       summaryData.push([]);
-      summaryData.push(['', '', '', '', '', 'Grand Total', grandTotal]);
+      summaryData.push(['', '', '', 'Grand Total', grandTotal]);
       const ws = XLSX.utils.aoa_to_sheet(summaryData);
-      ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+      ws['!cols'] = [{ wch: 18 }, { wch: 13 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 18 },
+                     { wch: 30 }, { wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, ws, 'PO Summary');
       XLSX.writeFile(wb, 'PO_Summary_Register.xlsx');
     }
@@ -686,7 +737,7 @@ const PurchaseOrderReport: React.FC = () => {
       detailDivGroups.forEach(div => {
         // Division subheader (dark navy)
         body.push([{
-          content: `DIVISION : ${div.divCode}`,
+          content: `DIVISION : ${divLabel(div)}`,
           colSpan: 9,
           styles: { fillColor: DIV_BG, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: cellPad },
         }]);
@@ -742,7 +793,7 @@ const PurchaseOrderReport: React.FC = () => {
 
         // Division total
         body.push([
-          { content: `Division Total : ${div.divCode}`, colSpan: 6, styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } },
+          { content: `Division Total : ${divLabel(div)}`, colSpan: 6, styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } },
           { content: formatAmount(div.total), styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
           { content: '', styles: { fillColor: DIV_TOTAL_BG } },
           { content: '', styles: { fillColor: DIV_TOTAL_BG } },
@@ -786,87 +837,76 @@ const PurchaseOrderReport: React.FC = () => {
       pdf.save('PO_Detail_Register.pdf');
     } else {
       const body: any[] = [];
-      const cellPad = { top: 2, bottom: 2, left: 5, right: 5 };
+      const cellPad = { top: 1.5, bottom: 1.5, left: 3, right: 3 };
+      const COLS = 12;
+      const f = 7.5;
 
       divGroups.forEach(div => {
         // Division banner
         body.push([{
-          content: `DIVISION : ${div.divCode}`,
-          colSpan: 11,
-          styles: { fillColor: DIV_BG, textColor: WHITE, fontStyle: 'bold', fontSize: 10, cellPadding: cellPad },
+          content: `DIVISION : ${divLabel(div)}`,
+          colSpan: COLS,
+          styles: { fillColor: DIV_BG, textColor: WHITE, fontStyle: 'bold', fontSize: 8.5, cellPadding: cellPad },
         }]);
 
-        div.projects.forEach(proj => {
-          // Project banner
-          body.push([{
-            content: `PROJECT : ${proj.projectName}${proj.projectCode ? `  (${proj.projectCode})` : ''}`,
-            colSpan: 11,
-            styles: { fillColor: PROJ_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad },
-          }]);
-
-          proj.rows.forEach(row => {
-            body.push([
-              { content: row.poNo || '', styles: { fontSize: 9, halign: 'left' } },
-              { content: formatDate(row.poDate), styles: { fontSize: 9 } },
-              { content: row.supplier || '', styles: { fontSize: 9 } },
-              { content: row.suppName || '', styles: { fontSize: 9 } },
-              { content: formatAmount(row.total), styles: { halign: 'right', fontSize: 9, fontStyle: 'bold' } },
-              { content: row.PR_REF_NO || '', styles: { fontSize: 9 } },
-              { content: row.description || '', styles: { fontSize: 9 } },
-              { content: row.PAYMENT_TERMS || '', styles: { fontSize: 9 } },
-              { content: row.WO_NUMBER || '', styles: { fontSize: 9 } },
-              { content: row.typeOfPr || '', styles: { fontSize: 9 } },
-              { content: row.status || '', styles: { fontSize: 9 } },
-            ]);
-          });
-
-          // Project total
+        // Plain PO rows (no project grouping)
+        div.rows.forEach(row => {
           body.push([
-            { content: `Project Total : ${proj.projectName}`, colSpan: 4, styles: { fillColor: PROJ_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 9, cellPadding: cellPad } },
-            { content: formatAmount(proj.total), styles: { fillColor: PROJ_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
-            { content: '', colSpan: 6, styles: { fillColor: PROJ_TOTAL_BG } },
+            { content: row.poNo || '', styles: { fontSize: f } },
+            { content: formatDate(row.poDate), styles: { fontSize: f } },
+            { content: row.supplier || '', styles: { fontSize: f } },
+            { content: row.suppName || '', styles: { fontSize: f } },
+            { content: formatAmount(row.total), styles: { halign: 'right', fontSize: f, fontStyle: 'bold' } },
+            { content: row.PR_REF_NO || '', styles: { fontSize: f } },
+            { content: row.description || '', styles: { fontSize: f } },
+            { content: row.PAYMENT_TERMS || '', styles: { fontSize: f } },
+            { content: row.projectName || '', styles: { fontSize: f } },
+            { content: row.WO_NUMBER || '', styles: { fontSize: f } },
+            { content: row.typeOfPr || '', styles: { fontSize: f } },
+            { content: row.status || '', styles: { fontSize: f } },
           ]);
         });
 
         // Division total
         body.push([
-          { content: `Division Total : ${div.divCode}`, colSpan: 4, styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 9.5, cellPadding: cellPad } },
-          { content: formatAmount(div.total), styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 9.5 } },
-          { content: '', colSpan: 6, styles: { fillColor: DIV_TOTAL_BG } },
+          { content: `Division Total : ${divLabel(div)}`, colSpan: 4, styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', fontSize: 8, cellPadding: cellPad } },
+          { content: formatAmount(div.total), styles: { fillColor: DIV_TOTAL_BG, textColor: NAVY, fontStyle: 'bold', halign: 'right', fontSize: 8 } },
+          { content: '', colSpan: 7, styles: { fillColor: DIV_TOTAL_BG } },
         ]);
       });
 
-      body.push([{ content: '', colSpan: 11, styles: { fillColor: [255, 255, 255], cellPadding: { top: 2, bottom: 2 } } }]);
       body.push([
-        { content: 'Grand Total :', colSpan: 4, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-        { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 10.5, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } } },
-        { content: '', colSpan: 6, styles: { fillColor: NAVY } },
+        { content: 'Grand Total :', colSpan: 4, styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 3, bottom: 3, left: 3, right: 3 } } },
+        { content: formatAmount(grandTotal), styles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', halign: 'right', fontSize: 9 } },
+        { content: '', colSpan: 7, styles: { fillColor: NAVY } },
       ]);
 
       autoTable(pdf, {
         startY: TABLE_TOP,
         margin: { left: margin, right: margin, top: HEADER_H + 4 },
+        tableWidth: pageW - margin * 2,
         columnStyles: {
-          0: { cellWidth: 22 }, 1: { cellWidth: 16 }, 2: { cellWidth: 16 }, 3: { cellWidth: 24 },
-          4: { cellWidth: 18 }, 5: { cellWidth: 22 }, 6: { cellWidth: 'auto' as any }, 7: { cellWidth: 18 },
-          8: { cellWidth: 16 }, 9: { cellWidth: 16 }, 10: { cellWidth: 16 },
+          0: { cellWidth: 22 }, 1: { cellWidth: 17 }, 2: { cellWidth: 17 }, 3: { cellWidth: 28 },
+          4: { cellWidth: 20, halign: 'right' }, 5: { cellWidth: 20 }, 6: { cellWidth: 'auto' as any },
+          7: { cellWidth: 20 }, 8: { cellWidth: 26 }, 9: { cellWidth: 16 }, 10: { cellWidth: 16 }, 11: { cellWidth: 16 },
         },
         head: [[
-          { content: 'PO Number', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'PO Date', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Supplier Code', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Supplier Name', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Amount', styles: { halign: 'right', fontSize: 9 } },
-          { content: 'PR Ref No', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Scope Of Work', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Payment Term', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'W/O Number', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Type Of PR', styles: { halign: 'left', fontSize: 9 } },
-          { content: 'Status', styles: { halign: 'left', fontSize: 9 } },
+          { content: 'PO Number', styles: { halign: 'left' } },
+          { content: 'PO Date', styles: { halign: 'left' } },
+          { content: 'Supplier Code', styles: { halign: 'left' } },
+          { content: 'Supplier Name', styles: { halign: 'left' } },
+          { content: 'Amount', styles: { halign: 'right' } },
+          { content: 'PR Ref No', styles: { halign: 'left' } },
+          { content: 'Scope Of Work', styles: { halign: 'left' } },
+          { content: 'Payment Term', styles: { halign: 'left' } },
+          { content: 'Project', styles: { halign: 'left' } },
+          { content: 'W/O Number', styles: { halign: 'left' } },
+          { content: 'Type Of PR', styles: { halign: 'left' } },
+          { content: 'Status', styles: { halign: 'left' } },
         ]],
         body,
-        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 9, cellPadding: { top: 5, bottom: 5, left: 5, right: 5 } },
-        bodyStyles: { fontSize: 8, textColor: DARK, cellPadding: { top: 3, bottom: 3, left: 5, right: 5 }, overflow: 'linebreak', minCellHeight: 0 },
+        headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 8, cellPadding: { top: 3, bottom: 3, left: 3, right: 3 } },
+        bodyStyles: { fontSize: f, textColor: DARK, cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }, overflow: 'linebreak', minCellHeight: 0 },
         tableLineColor: BORDER, tableLineWidth: 0.25,
         didDrawPage: drawPageHeader,
         didDrawCell: (data) => {
@@ -929,7 +969,7 @@ const PurchaseOrderReport: React.FC = () => {
           <React.Fragment key={div.divCode}>
             {/* Division subheader (dark navy) */}
             <tr className="division-banner">
-              <td colSpan={10}>DIVISION : {div.divCode}</td>
+              <td colSpan={10}>DIVISION : {divLabel(div)}</td>
             </tr>
 
             {div.projects.map(proj => (
@@ -992,7 +1032,7 @@ const PurchaseOrderReport: React.FC = () => {
 
             {/* Division total */}
             <tr className="division-total">
-              <td colSpan={7}>Division Total : {div.divCode}</td>
+              <td colSpan={7}>Division Total : {divLabel(div)}</td>
               <td className="num">{formatAmount(div.total)}</td>
               <td colSpan={2} />
             </tr>
@@ -1012,15 +1052,14 @@ const PurchaseOrderReport: React.FC = () => {
   const summaryTable = summaryRows.length === 0 ? (
     <div className="rp-empty">No records found.</div>
   ) : (
+    <div className="pos-scroll">
     <table className="pos-table">
       <colgroup>
-        <col className="c0" /><col className="c1" /><col className="c2" />
-        <col className="c3" /><col className="c4" /><col className="c5" /><col className="c6" />
-        <col className="c7" /><col className="c8" /><col className="c9" /><col className="c10" />
+        {Array.from({ length: 12 }, (_, i) => <col key={i} className={`c${i}`} />)}
       </colgroup>
       <thead>
         <tr className="pos-print-logo-row">
-          <td colSpan={11}>
+          <td colSpan={12}>
             <div className="pos-print-logo-flex">
               <img src={companyLogo} alt="Logo" />
               <div className="pos-print-meta-text">
@@ -1030,8 +1069,8 @@ const PurchaseOrderReport: React.FC = () => {
             </div>
           </td>
         </tr>
-        <tr className="pos-title-bar"><td colSpan={11}>PO Summary Register</td></tr>
-        {filterMetaRow(11, 'pos-meta-row')}
+        <tr className="pos-title-bar"><td colSpan={12}>PO Summary Register</td></tr>
+        {filterMetaRow(12, 'pos-meta-row')}
         <tr>
           <th className="left">PO Number</th>
           <th className="left">PO Date</th>
@@ -1041,6 +1080,7 @@ const PurchaseOrderReport: React.FC = () => {
           <th className="left">PR Ref No</th>
           <th className="left">Scope Of Work</th>
           <th className="left">Payment Term</th>
+          <th className="left">Project</th>
           <th className="left">W/O<br />Number</th>
           <th className="left">Type Of PR</th>
           <th className="left">Status</th>
@@ -1051,50 +1091,32 @@ const PurchaseOrderReport: React.FC = () => {
           <React.Fragment key={div.divCode}>
             {/* Division banner */}
             <tr className="division-banner">
-              <td colSpan={11}>DIVISION : {div.divCode}</td>
+              <td colSpan={12}>DIVISION : {divLabel(div)}</td>
             </tr>
 
-            {div.projects.map(proj => (
-              <React.Fragment key={`${div.divCode}|||${proj.projectName}`}>
-                {/* Project banner */}
-                <tr className="project-banner">
-                  <td colSpan={11}>
-                    PROJECT : {proj.projectName}
-                    {proj.projectCode ? `  (${proj.projectCode})` : ''}
-                  </td>
-                </tr>
-
-                {/* PO rows under this project */}
-                {proj.rows.map((row, ri) => (
-                  <tr key={`${row.poNo}-${ri}`} className="data-row">
-                    <td>{row.poNo}</td>
-                    <td>{formatDate(row.poDate)}</td>
-                    <td>{row.supplier}</td>
-                    <td>{row.suppName}</td>
-                    <td className="num">{formatAmount(row.total)}</td>
-                    <td>{row.PR_REF_NO}</td>
-                    <td>{row.description}</td>
-                    <td>{row.PAYMENT_TERMS}</td>
-                    <td>{row.WO_NUMBER}</td>
-                    <td>{row.typeOfPr}</td>
-                    <td>{row.status}</td>
-                  </tr>
-                ))}
-
-                {/* Project total */}
-                <tr className="project-total">
-                  <td colSpan={4}>Project Total : {proj.projectName}</td>
-                  <td className="num">{formatAmount(proj.total)}</td>
-                  <td colSpan={6} />
-                </tr>
-              </React.Fragment>
+            {/* Plain PO rows (project shown as a column) */}
+            {div.rows.map((row, ri) => (
+              <tr key={`${row.poNo}-${ri}`} className="data-row">
+                <td>{row.poNo}</td>
+                <td>{formatDate(row.poDate)}</td>
+                <td>{row.supplier}</td>
+                <td>{row.suppName}</td>
+                <td className="num">{formatAmount(row.total)}</td>
+                <td>{row.PR_REF_NO}</td>
+                <td>{row.description}</td>
+                <td>{row.PAYMENT_TERMS}</td>
+                <td>{row.projectName}</td>
+                <td>{row.WO_NUMBER}</td>
+                <td>{row.typeOfPr}</td>
+                <td>{row.status}</td>
+              </tr>
             ))}
 
             {/* Division total */}
             <tr className="division-total">
-              <td colSpan={4}>Division Total : {div.divCode}</td>
+              <td colSpan={4}>Division Total : {divLabel(div)}</td>
               <td className="num">{formatAmount(div.total)}</td>
-              <td colSpan={6} />
+              <td colSpan={7} />
             </tr>
           </React.Fragment>
         ))}
@@ -1103,10 +1125,11 @@ const PurchaseOrderReport: React.FC = () => {
         <tr className="grand-total">
           <td colSpan={4}>Grand Total</td>
           <td className="num">{formatAmount(grandTotal)}</td>
-          <td colSpan={6} />
+          <td colSpan={7} />
         </tr>
       </tbody>
     </table>
+    </div>
   );
 
   const tableContent = viewType === 'detail' ? detailTable : summaryTable;
