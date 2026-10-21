@@ -41,6 +41,17 @@ export interface LeaveResumeDatesUpdate {
   actualResumeDate?: Date | null;
 }
 
+const extractOracleUserMessage = (error: unknown, fallback: string): string => {
+  const err = error as { errorNum?: number; message?: string };
+
+  if (err?.errorNum && err.errorNum >= 20000 && err.errorNum <= 20999 && err.message) {
+    const firstLine = err.message.split("\n")[0];
+    return firstLine.replace(/^ORA-\d{5}:\s*/, "").trim();
+  }
+
+  return fallback;
+};
+
 export const HrService = {
   getEmployeesUnder: async (supervisor_empid: string) => {
     try {
@@ -166,7 +177,7 @@ export const HrService = {
         company_code: company_code,
         leaveDays: null,
         leaveType: leaveType,
-        message: "Failed to calculate leave days",
+        message: extractOracleUserMessage(error, "Failed to calculate leave days"),
       };
     }
   },

@@ -58,13 +58,6 @@ type AddLeaveApprovalFormProps = {
   disableButtons?: boolean;
 };
 
-// type ApproverIds = {
-//   SUPERVISOR_EMPID: string;
-//   ENGNR_EMPID: string;
-//   DEPT_HEAD_EMPID: string;
-//   MANGR_EMPID: string;
-// };
-
 interface SentBackPopupState {
   title: string;
   open: boolean;
@@ -79,6 +72,11 @@ interface ILeaveType {
   value: string;
   label: string;
 }
+  type TLeaveEligibilityRule = {
+  code: string;       // LEAVE_TYPE value
+  minMonths: number;  // months since join date before it can be selected
+  maxMonths?: number; // optional: stop offering it after this many months
+};
 
 const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   data,
@@ -224,6 +222,13 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
   const [rejectParams, setRejectParams] = useState<any>({
     CANCEL_REMARK: ''
   });
+
+  const LEAVE_ELIGIBILITY_RULES: TLeaveEligibilityRule[] = [
+    { code: '001', minMonths: 0 },
+    { code: 'SL', minMonths: 3 }   
+  ];
+
+  const DEFAULT_MIN_MONTHS = 6;
 
   // Snackbar state for export notifications
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
@@ -634,6 +639,11 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
               company_code: String(user?.company_code),
               half_day: String(formData.is_half_day),
             });
+
+          if (result.success === false) {
+            dispatch(showAlert({severity: 'error', message: result.message || 'Failed to calculate leave days', open: true }));
+          }
+
           const rawDays = Number(result?.leaveDays ?? 0);
 
           const dutyResume = formData.DUTY_RESUME_DATE ?? '';
@@ -697,6 +707,32 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       dispatch(closeBackdrop());
     } 
   };
+
+    const filteredLeaveTypes = React.useMemo(() => {
+    // Existing request opened: don't filter, so the saved type always displays
+    if (data) return leaveTypes;
+
+    const parsed = parseCustomDate(currentUserEmployeeData?.JOIN_DATE);
+    if (isNaN(parsed.getTime())) return leaveTypes; // no join date: show all
+
+    const joinDate = dayjs(parsed);
+    const today = dayjs();
+
+    return leaveTypes.filter((lt) => {
+      const rule = LEAVE_ELIGIBILITY_RULES.find((r) => r.code === lt.value);
+
+      const minMonths = rule?.minMonths ?? DEFAULT_MIN_MONTHS;
+      if (today.isBefore(joinDate.add(minMonths, 'month'), 'day')) return false;
+
+      if (rule?.maxMonths !== undefined && !today.isBefore(joinDate.add(rule.maxMonths, 'month'), 'day')) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [leaveTypes, currentUserEmployeeData, data]);
+  
+  console.log('filteredleaveTypes',filteredLeaveTypes);
 
   const runLeaveValidation = async (
     requestedDays: number
@@ -846,7 +882,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
     }
   };
 
-
+  const start = dayjs(formData.leave_start_date);
+  const end = dayjs(formData.leave_end_date);
 
   const handleSave = async (actionType: string) => {
     dispatch(openBackdrop());
@@ -865,7 +902,8 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       resume_work,
       actual_resume_date,
       DUTY_RESUME_DATE,
-      CONTACT_DETAILS_DURING_LEAVE
+      CONTACT_DETAILS_DURING_LEAVE,
+      is_half_day
     } = formData;
 
     if (actionType === 'SAVEASDRAFT' || actionType === 'SUBMITTED') {
@@ -887,6 +925,20 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
       if (!CONTACT_DETAILS_DURING_LEAVE) errors.push(intl.formatMessage({ id: 'ContactDetailsDuringLeaveRequired', defaultMessage: 'Contact Details During Leave are required.' }));
 
       if (!remarks) errors.push(intl.formatMessage({ id: 'RemarksRequired', defaultMessage: 'Remarks are required.' }));
+
+      if (is_half_day === 'Y' &&
+        leave_start_date &&
+        leave_end_date &&
+        !start.isSame(end, 'day')
+      ) {
+        console.log('half_day1', leave_start_date, leave_end_date);
+        errors.push(
+          intl.formatMessage({
+            id: 'HalfDayMultipleDaysNotAllowed',
+            defaultMessage: 'Half day leaves for multiple days are not allowed.'
+          })
+        );
+      }
 
       if (
         actionType === 'SUBMITTED' &&
@@ -1322,7 +1374,7 @@ const AddLeaveApprovalForm: React.FC<AddLeaveApprovalFormProps> = ({
                     <MenuItem value="">
                       <em>{intl.formatMessage({ id: 'Select' }) || 'Select'}</em>
                     </MenuItem>
-                    {leaveTypes.map((leaveType) => (
+                    {filteredLeaveTypes.map((leaveType) => (
                       <MenuItem key={leaveType.value} value={leaveType.value}>
                         {leaveType.label}
                       </MenuItem>
