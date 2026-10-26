@@ -52,7 +52,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     companyCode: ''
   });
 
-  console.log('Userlevel in after sending:', userlevel);
+  console.log('Userlevel in history:', userlevel);
   //--------------constants----------
   const { permissions, user_permission, user } = useAuth();
   const location = useLocation();
@@ -85,13 +85,16 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
   const [gridApi, setGridApi] = useState<any>(null);
 
-  // Helper: robust PR/PO detection off the (possibly $-delimited) doc number,
-  // same pattern used in MyitemPOConfirm — doesn't rely on document_type accuracy.
-  const getDocFlags = (rawDocNumber: unknown) => {
+  // Helper: robust PR/PO detection off the (possibly $-delimited) doc number
+  // and document type — same logic as the My Task Closed tab.
+  const getDocFlags = (rawDocNumber: unknown, rawDocType?: unknown) => {
     const safeRaw = typeof rawDocNumber === 'string' ? rawDocNumber : '';
     const formattedDocNumber = safeRaw.replace(/\$/g, '/');
-    const isPR = /\/PR\//i.test(formattedDocNumber);
-    const isPO = /\/PO\//i.test(formattedDocNumber);
+    const docType = (typeof rawDocType === 'string' ? rawDocType : '').toUpperCase();
+    const upperDocNumber = formattedDocNumber.toUpperCase();
+
+    const isPO = docType.includes('PURCHASE ORDER') || upperDocNumber.includes('/PO/');
+    const isPR = /\/PR\//i.test(formattedDocNumber) || docType.includes('PURCHASE REQUEST');
     return { formattedDocNumber, isPR, isPO };
   };
 
@@ -142,6 +145,12 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
       },
       {
+        headerName: 'Supplier',
+        field: 'supplier',
+        cellStyle: { fontSize: '12px' },
+        valueFormatter: (params: any) => (typeof params.value === 'string' ? params.value : params.value?.message || '')
+      },
+      {
         headerName: 'Reference Doc No.',
         field: 'reference_doc_no',
         cellStyle: { fontSize: '12px' },
@@ -163,21 +172,21 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         colId: 'prActions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
-          const { isPO } = getDocFlags(params.data?.document_number);
+          const { isPO, isPR } = getDocFlags(params.data?.document_number, params.data?.document_type);
 
-          // Only PR / Budget rows get the Actions (view) button — PO rows hide it,
-          // same as MyitemPOConfirm's prActions column.
-          if (isPO) return null;
+          const actionButtons: TAvailableActionButtons[] = [];
 
-          const actionButtons: TAvailableActionButtons[] = ['view']; //default action button
-
-          if (userlevel === 3 && params.data.document_type === 'Purchase Order') {
-            actionButtons.push('edit');
+          // 1. PR rows get the view (eye) button
+          if (isPR) {
+            actionButtons.push('view');
           }
 
-          if (userlevel === 5 && params.data.document_type === 'Purchase Order') {
+          // 2. PO rows get the cancel (x) button when userlevel is 5 — same as My Task Closed
+          if (isPO && userlevel === 5 && params.data?.document_type === 'Purchase Order') {
             actionButtons.push('cancel');
           }
+
+          if (actionButtons.length === 0) return null;
 
           return <ActionButtonsGroup handleActions={(action) => handleActions(action, params.data)} buttons={actionButtons} />;
         }
@@ -189,7 +198,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         colId: 'poReportActions',
         cellStyle: { fontSize: '12px' },
         cellRenderer: (params: any) => {
-          const { formattedDocNumber, isPR } = getDocFlags(params.data?.document_number);
+          const { formattedDocNumber, isPR } = getDocFlags(params.data?.document_number, params.data?.document_type);
 
           if (isPR) return null;
 
@@ -221,14 +230,12 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     params.api.sizeColumnsToFit();
   };
 
+  // Fixed: getServerSideSortModel doesn't exist on a client-side grid.
   const onSortChanged = useCallback((params: any) => {
-    const sortModel = params.api.getServerSideSortModel?.() || [];
+    const sortState = params.api.getColumnState().find((col: any) => col.sort);
     setSearchData((prevData) => ({
       ...prevData,
-      sort:
-        sortModel.length > 0
-          ? { field_name: sortModel[0].colId, desc: sortModel[0].sort === 'desc' }
-          : { field_name: 'updated_at', desc: true }
+      sort: sortState ? { field_name: sortState.colId, desc: sortState.sort === 'desc' } : { field_name: 'updated_at', desc: true }
     }));
   }, []);
 
@@ -270,7 +277,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     refetch: refetchPurchaserequestheaderData
   } = useQuery({
     queryKey: ['Purchaserequestheader_data', searchData, paginationData],
-    queryFn: () => PfSerivceInstance.getMasters(app, 'po_modify_history', { page: paginationData.page, rowsPerPage: paginationData.rowsPerPage })
+    queryFn: () =>
+      PfSerivceInstance.getMasters(app, 'po_modify_history', { page: paginationData.page, rowsPerPage: paginationData.rowsPerPage })
   });
 
   const handleViewPurchaserequestheader = (existingData: TVPurchaserequestheader) => {
@@ -285,17 +293,15 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
     const isBudgetRequest = normalizedRequestNumber.includes('BUDGET');
     const title = isBudgetRequest ? 'Budget Request' : 'View Purchase Request';
 
-    setPurchaserequestheaderFormPopup((prev) => {
-      return ({
-        action: { ...prev.action, open: !prev.action.open },
-        title,
-        data: {
-          isEditMode: true,
-          isViewMode: true,
-          request_number: rawRequestNumber
-        }
-      });
-    });
+    setPurchaserequestheaderFormPopup((prev) => ({
+      action: { ...prev.action, open: !prev.action.open },
+      title,
+      data: {
+        isEditMode: true,
+        isViewMode: true,
+        request_number: rawRequestNumber
+      }
+    }));
   };
 
   const togglePurchaserequestheaderPopup = () => {
@@ -321,7 +327,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   };
 
   const handleCancelPopupOpen = (request_number: string) => {
-    const isPORequest = request_number.includes('PO$');
+    const isPORequest = request_number.includes('PO$') || request_number.includes('PO/');
     setCreatePR(false);
     setCancelPopup((prev) => ({
       ...prev,
@@ -345,7 +351,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         handleViewPurchaserequestheader(rowOriginal);
         break;
       case 'cancel':
-        if (REQUEST_NUMBER.includes('PO$')) {
+        if (REQUEST_NUMBER.includes('PO$') || REQUEST_NUMBER.includes('PO/')) {
           handleCancelPopupOpen(REQUEST_NUMBER);
         }
         break;
@@ -556,10 +562,10 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
               hasPrimaryButton={false}
             >
               <AddPurchaserequestPfForm
-                            divCode={divCode}
-              setDivCode={setDivCode}
-  request_number={PurchaserequestheaderFormPopup.data.request_number}   // ✅ raw, e.g. MFS$26$OH012$PR$0025       
-           onClose={togglePurchaserequestheaderPopup}
+                divCode={divCode}
+                setDivCode={setDivCode}
+                request_number={PurchaserequestheaderFormPopup.data.request_number} // raw, e.g. MFS$26$OH012$PR$0025
+                onClose={togglePurchaserequestheaderPopup}
                 isEditMode={PurchaserequestheaderFormPopup.data.isEditMode}
                 isViewMode={PurchaserequestheaderFormPopup.data.isViewMode}
                 existingData={safeExistingData}
