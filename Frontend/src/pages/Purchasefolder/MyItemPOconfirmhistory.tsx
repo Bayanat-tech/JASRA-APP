@@ -273,7 +273,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
 
   const {
     data: PurchaserequestheaderData,
-    // isFetching: isPurchaserequestheaderFetchLoading,
+    // isFetching: isPurchaserequestheaderFetchLoadings,
     refetch: refetchPurchaserequestheaderData
   } = useQuery({
     queryKey: ['Purchaserequestheader_data', searchData, paginationData],
