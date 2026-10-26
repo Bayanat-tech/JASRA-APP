@@ -311,15 +311,24 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
     SELECT *
     FROM VW_HR_LEAVE_REQUEST_FLOW
     WHERE COMPANY_CODE = '${user?.company_code}'
-    AND ( ACTUAL_RESUME_DATE IS NOT NULL
+    AND ACTUAL_RESUME_DATE IS NOT NULL
     AND RESUME_DATE_APPROVED = 'YES'
       AND FINAL_APPROVED = 'YES'
       AND LAST_ACTION = 'SUBMITTED'
-      AND CREATED_BY = '${user?.loginid1}')
-  OR (ACTUAL_RESUME_DATE IS NOT NULL 
-    AND RESUME_DATE_APPROVED = 'YES'
-  AND FINAL_APPROVED = 'YES' AND
-  LAST_ACTION = 'SUBMITTED' AND CREATED_BY = '${user?.loginid1}')
+      AND (CREATED_BY = '${user?.loginid1}'
+            OR IMMEDIATE_SUPERVISOR = '${user?.loginid1}'
+            OR HOD = '${user?.loginid1}'
+            OR DEPT_HEAD = '${user?.loginid1}'
+            OR EXISTS (
+                        SELECT 1
+                        FROM ms_hr_employee e
+                        JOIN ms_hr_department d
+                            ON d.DEPT_CODE = e.DEPT_CODE
+                            AND d.DIV_CODE = e.DIV_CODE
+                        WHERE e.EMPLOYEE_ID = CREATED_BY
+                          AND d.LEAVE_FINAL_APPROVER = '${user?.loginid1}'
+                    )
+          )
   `;
   
     const {
