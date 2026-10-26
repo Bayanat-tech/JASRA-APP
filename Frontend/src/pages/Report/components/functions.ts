@@ -1,19 +1,22 @@
-export const  spellNumber = (value?: number, currencyCode: string = 'QAR'): string => {
+export const spellNumber = (value?: number, currencyCode: string = 'QAR'): string => {
   const num = Number(value ?? 0);
   if (Number.isNaN(num)) return '';
   const ones  = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
   const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
   const tens  = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-  const currencyMap: Record<string, { major: string; minor: string }> = {
+
+  const currencyMap: Record<string, { major: string; majorPlural?: string; minor: string; minorPlural?: string }> = {
     QAR: { major: 'Qatari Riyal', minor: 'Dirham' },
-    USD: { major: 'US Dollar',    minor: 'Cent'    },
-    EUR: { major: 'Euro',         minor: 'Cent'    },
-    AED: { major: 'UAE Dirham',   minor: 'Fils'    },
-    SAR: { major: 'Saudi Riyal',  minor: 'Halala'  },
-    OMR: { major: 'Omani Rial',   minor: 'Baisa'   },
-    INR: { major: 'Rupee',        minor: 'Paise'   },
+    GBP: { major: 'British Pound', minor: 'Penny', minorPlural: 'Pence' },
+    USD: { major: 'US Dollar',    minor: 'Cent' },
+    EUR: { major: 'Euro',         minor: 'Cent' },
+    AED: { major: 'UAE Dirham',   minor: 'Fils',   minorPlural: 'Fils' },
+    SAR: { major: 'Saudi Riyal',  minor: 'Halala' },
+    OMR: { major: 'Omani Rial',   minor: 'Baisa',  minorPlural: 'Baisa' },
+    INR: { major: 'Rupee',        minor: 'Paisa',  minorPlural: 'Paise' },
   };
   const currency = currencyMap[currencyCode?.toUpperCase()] ?? currencyMap['QAR'];
+
   const convertHundreds = (n: number): string => {
     let result = '';
     if (n >= 100) { result += ones[Math.floor(n / 100)] + ' Hundred '; n %= 100; }
@@ -22,6 +25,7 @@ export const  spellNumber = (value?: number, currencyCode: string = 'QAR'): stri
     if (n > 0) result += ones[n] + ' ';
     return result.trim();
   };
+
   const convertNumber = (n: number): string => {
     if (n === 0) return '';
     const places = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
@@ -33,12 +37,28 @@ export const  spellNumber = (value?: number, currencyCode: string = 'QAR'): stri
     }
     return word.trim();
   };
-  const intPart = Math.floor(num);
-  const decPart = Math.round((num - intPart) * 100);
+
+  // Round to 2 decimals first so values like 12.999 can't produce a "100" minor unit
+  const rounded = Math.round(num * 100) / 100;
+  const intPart = Math.floor(rounded);
+  const decPart = Math.round((rounded - intPart) * 100);
+
+  const majorPlural = currency.majorPlural ?? `${currency.major}s`;
+  const minorPlural = currency.minorPlural ?? `${currency.minor}s`;
+
   let majorText = convertNumber(intPart);
   let minorText = decPart ? convertHundreds(decPart) : '';
-  majorText = !majorText ? `No ${currency.major}` : majorText === 'One' ? `One ${currency.major}` : `${majorText} ${currency.major}s`;
-  minorText = minorText ? (minorText === 'One' ? ` and One ${currency.minor}` : ` and ${minorText} ${currency.minor}s`) : '';
+
+  majorText = !majorText
+    ? `No ${currency.major}`
+    : majorText === 'One'
+      ? `One ${currency.major}`
+      : `${majorText} ${majorPlural}`;
+
+  minorText = minorText
+    ? (minorText === 'One' ? ` and One ${currency.minor}` : ` and ${minorText} ${minorPlural}`)
+    : '';
+
   return `${majorText}${minorText} only`.replace(/\s+/g, ' ').trim();
 };
 

@@ -790,6 +790,7 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
             <th style={{ ...thItems, width: '12%' }}>Unit of Measure</th>
             <th style={{ ...thItems, width: '6%' }}>QTY</th>
             <th style={{ ...thItems, width: '11%' }}>UNIT PRICE</th>
+            {/* <th style={{ ...thItems, width: '13%' }}>Amount</th> */}
             <th style={{ ...thItems, width: '13%' }}>Amount({poData.CURR_CODE || 'QAR'})</th>
           </tr>
         </thead>
