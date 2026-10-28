@@ -114,6 +114,10 @@ const TERMS_GAP_PX = 10;
 
 const DEFAULT_LOGO_WIDTH = '17%';
 const DEFAULT_HEADER_WIDTH = '33.5%';
+// Wide letterhead-style logos (e.g. AJSS, where logo + company mark are one
+// banner image) get almost the full width instead of the 17% square-logo slot.
+const BANNER_ASPECT = 3.5; // trimmed width / height at or above this => banner
+const BANNER_LOGO_WIDTH = '96%';
 // Taller box so the supplier (and company) have clear room to sign above the
 // "Signature" / "Date" lines. Pagination measures the real rendered height, so
 // the layout adjusts automatically.
@@ -147,10 +151,25 @@ const trimImage = (src: string): Promise<TrimmedInfo | null> => {
         ctx.drawImage(img, 0, 0);
         const { data } = ctx.getImageData(0, 0, w, h);
         let minX = w, minY = h, maxX = -1, maxY = -1;
+        // Background colour = top-left pixel (white if it is transparent).
+        // A pixel is "background" if transparent, near-white, or within a
+        // tolerance of that colour. The old check (all channels >= 240) failed
+        // for off-white / JPEG-noise backgrounds, so nothing was ever cropped
+        // and the banner logo stayed tiny inside a mostly-empty image.
+        const bgOpaque = data[3] > 20;
+        const bgR = bgOpaque ? data[0] : 255;
+        const bgG = bgOpaque ? data[1] : 255;
+        const bgB = bgOpaque ? data[2] : 255;
+        const TOL = 45;
         for (let y = 0; y < h; y += 1) {
           for (let x = 0; x < w; x += 1) {
             const i = (y * w + x) * 4;
-            const isContent = data[i + 3] > 20 && (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240);
+            const nearBg =
+              Math.abs(data[i] - bgR) <= TOL &&
+              Math.abs(data[i + 1] - bgG) <= TOL &&
+              Math.abs(data[i + 2] - bgB) <= TOL;
+            const nearWhite = data[i] >= 225 && data[i + 1] >= 225 && data[i + 2] >= 225;
+            const isContent = data[i + 3] > 20 && !nearBg && !nearWhite;
             if (isContent) {
               if (x < minX) minX = x;
               if (x > maxX) maxX = x;
@@ -168,6 +187,8 @@ const trimImage = (src: string): Promise<TrimmedInfo | null> => {
         const octx = out.getContext('2d');
         if (!octx) return resolve(null);
         octx.drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+        // eslint-disable-next-line no-console
+        console.info('[PO logo trim]', { original: `${w}x${h}`, trimmed: `${cw}x${ch}`, aspect: +(cw / ch).toFixed(2) });
         return resolve({ src: out.toDataURL('image/png'), w: cw, h: ch });
       } catch {
         return resolve(null);
@@ -193,8 +214,16 @@ const TrimmedImg = ({
 }) => {
   const [info, setInfo] = useState<TrimmedInfo | null>(trimResolved.get(src) ?? null);
   useEffect(() => {
+    // FIX (AJSS banner logo): when the trim result is already cached we used to
+    // return WITHOUT telling the parent. If the trim finished between the
+    // parent's render and this effect (very common when the report remounts
+    // after the "Loading report..." state), the parent header never re-rendered
+    // with the banner width and the wide AJSS logo stayed squeezed into the
+    // 17% slot. Always notify the parent when we have a trim result.
     if (trimResolved.has(src)) {
-      setInfo(trimResolved.get(src) ?? null);
+      const cachedInfo = trimResolved.get(src) ?? null;
+      setInfo(cachedInfo);
+      if (cachedInfo) onTrimmed?.();
       return undefined;
     }
     let cancelled = false;
@@ -214,6 +243,62 @@ const TrimmedImg = ({
       alt={alt}
       style={{ ...style, ...(info ? { aspectRatio: `${info.w} / ${info.h}` } : {}) }}
     />
+  );
+};
+
+// ── AJSS letterhead: fixed CSS crop (no canvas, no CORS, cannot fail) ────────
+// The AJSS logo image is a very wide strip whose real artwork (blue bar +
+// company text + AL JASSRA mark) only occupies the LEFT part of it. Auto-trim
+// via canvas was not taking effect, so for AJSS we crop with plain CSS.
+// Values are fractions (0..1) of the image. If the artwork looks cut off, raise
+// `r`; if there is still empty space on the right, lower it.
+// NOTE: the AJSS image is a full letterhead (blue bar + company info + AL JASSRA
+// mark), so it must be shown WHOLE. Crop is the full image (no cropping).
+const AJSS_LOGO_CROP = { l: 0, r: 1, t: 0, b: 1 };
+const AJSS_LOGO_WIDTH = '96%';
+
+const CroppedImg = ({
+  src,
+  alt,
+  crop,
+  onReady,
+}: {
+  src: string;
+  alt: string;
+  crop: { l: number; r: number; t: number; b: number };
+  onReady?: () => void;
+}) => {
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  const cw = crop.r - crop.l;
+  const ch = crop.b - crop.t;
+  return (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        width: '100%',
+        aspectRatio: nat ? `${nat.w * cw} / ${nat.h * ch}` : '6 / 1',
+      }}
+    >
+      <img
+        src={src}
+        alt={alt}
+        onLoad={(e) => {
+          const el = e.currentTarget;
+          setNat({ w: el.naturalWidth, h: el.naturalHeight });
+          onReady?.();
+        }}
+        style={{
+          position: 'absolute',
+          display: 'block',
+          maxWidth: 'none',
+          width: `${100 / cw}%`,
+          height: 'auto',
+          left: `-${(crop.l / cw) * 100}%`,
+          top: `-${(crop.t / ch) * 100}%`,
+        }}
+      />
+    </div>
   );
 };
 
@@ -457,6 +542,13 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
 
     const [chunks, setChunks] = useState<PurchaseOrderData[][] | null>(null);
     const [extraBuffer, setExtraBuffer] = useState(0);
+    // Bumped whenever a header image finishes trimming so the header (which
+    // picks its logo width from the trimmed aspect ratio) re-renders.
+    const [, setTrimTick] = useState(0);
+    const handleImageTrimmed = useCallback(() => {
+      setTrimTick((t) => t + 1);
+      setChunks(null);
+    }, []);
 
     useLayoutEffect(() => {
       setChunks(null);
@@ -675,39 +767,60 @@ const PurchaseReportDesign = forwardRef<HTMLDivElement, PurchaseReportDesignProp
       verticalAlign: 'top',
     };
 
-    const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => (
-      <Box
-        ref={elRef}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          width: '100%',
-          pb: '14px',
-        }}
-      >
-        {div.logoYes && (
-          <Box sx={{ width: DEFAULT_LOGO_WIDTH, ml: '1%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-start' }}>
-            <TrimmedImg
-              src={div.logo}
-              alt="logo"
-              onTrimmed={() => setChunks(null)}
-              style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
-            />
-          </Box>
-        )}
-        {div.headerYes && (
-          <Box sx={{ width: DEFAULT_HEADER_WIDTH, mr: '3.5%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-            <TrimmedImg
-              src={div.header}
-              alt="header text"
-              onTrimmed={() => setChunks(null)}
-              style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'right center', display: 'block' }}
-            />
-          </Box>
-        )}
-      </Box>
-    );
+    const renderPageHeader = (elRef?: React.Ref<HTMLDivElement>) => {
+      // Wide letterhead-style logo (e.g. AJSS) => use (almost) full width.
+      const logoInfo = div.logoYes ? trimResolved.get(div.logo) : null;
+      const isBannerLogo = !!logoInfo && logoInfo.w / logoInfo.h >= BANNER_ASPECT;
+      const isAjssDoc = (poData?.REF_DOC_NO || '').startsWith('AJSS');
+
+      return (
+        <Box
+          ref={elRef}
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            pb: '14px',
+          }}
+        >
+          {div.logoYes && isAjssDoc && (
+            <Box sx={{ width: AJSS_LOGO_WIDTH, ml: '1%', flex: '0 0 auto' }}>
+              <CroppedImg src={div.logo} alt="logo" crop={AJSS_LOGO_CROP} onReady={handleImageTrimmed} />
+            </Box>
+          )}
+          {div.logoYes && !isAjssDoc && (
+            <Box
+              sx={{
+                width: isBannerLogo ? BANNER_LOGO_WIDTH : DEFAULT_LOGO_WIDTH,
+                ml: '1%',
+                flex: '0 0 auto',
+                display: 'flex',
+                justifyContent: 'flex-start',
+              }}
+            >
+              <TrimmedImg
+                src={div.logo}
+                alt="logo"
+                onTrimmed={handleImageTrimmed}
+                style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'left center', display: 'block' }}
+              />
+            </Box>
+          )}
+          {div.headerYes && (
+            <Box sx={{ width: DEFAULT_HEADER_WIDTH, mr: '3.5%', flex: '0 0 auto', display: 'flex', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+              <TrimmedImg
+                src={div.header}
+                alt="header text"
+                onTrimmed={handleImageTrimmed}
+                style={{ width: '100%', height: 'auto', objectFit: 'contain', objectPosition: 'right center', display: 'block' }}
+              />
+            </Box>
+          )}
+        </Box>
+      );
+    };
     const renderPoHeaderBlock = (elRef?: React.Ref<HTMLDivElement>) => (
       <Box ref={elRef} className="print-avoid" sx={{ px: 1, pt: 0.25, pb: 0.5 }}>
         <Typography align="center" sx={{ fontWeight: 800, fontSize: 16, mb: 0.5, textDecoration: 'underline' }}>
