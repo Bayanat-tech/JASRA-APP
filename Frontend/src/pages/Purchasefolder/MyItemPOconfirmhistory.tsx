@@ -59,7 +59,7 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
   const pathNameList = getPathNameList(location.pathname);
   const [createPR, setCreatePR] = useState<boolean>(false);
   const { app } = useSelector((state: any) => state.menuSelectionSlice);
-  const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 6000 });
+  const [paginationData, setPaginationData] = useState({ page: 1, rowsPerPage: 20000 });
   const [searchData, setSearchData] = useState<ISearch>(filter);
   // const [toggleFilter, setToggleFilter] = useState<boolean | null>(null);
   const [globalFilter, setGlobalFilter] = useState<string>('');
@@ -522,8 +522,8 @@ const MyitemPOConfirm: FC<MyitemPOConfirmProps> = ({ costUser, userlevel }) => {
         onFilterChanged={onFilterChanged}
         onPaginationChanged={onPaginationChanged}
         pagination
-        paginationPageSize={6000}
-        paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000]}
+        paginationPageSize={20000}
+        paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000, 10000, 20000]}
       />
 
       {PurchaserequestheaderFormPopup.action.open &&

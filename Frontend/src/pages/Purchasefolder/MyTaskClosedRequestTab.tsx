@@ -317,8 +317,8 @@ const MyTaskClosedRequestTab: FC<MyTaskClosedRequestTabProps> = ({ costUser }) =
         onGridReady={onGridReady}
         onPaginationChanged={onPaginationChanged}
         pagination
-        paginationPageSize={6000}
-        paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000]}
+        paginationPageSize={20000}
+        paginationPageSizeSelector={[10, 50, 100, 500, 1000, 2000, 4000, 6000, 10000, 20000]}
       />
       {PurchaserequestheaderFormPopup.action.open &&
         (costUser === 'YES' &&
