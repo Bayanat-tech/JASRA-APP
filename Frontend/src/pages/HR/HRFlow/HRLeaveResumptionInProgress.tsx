@@ -142,7 +142,15 @@ const HRLeaveResumptionInProgress: FC<HRLInProgressProps> = ({}) => {
         sortable: true,
         filter: true
       },
-
+            {
+        headerName: intl.formatMessage({ id: 'Alternate Id' }) || 'Alternate Id',
+        field: 'ALTERNATE_ID',
+        width: 120,
+        minWidth: 150,
+        cellStyle: { fontSize: '12px' },
+        sortable: true,
+        filter: true
+      },
       {
         headerName: intl.formatMessage({ id: 'Employee Name' }) || 'Employee Name',
         field: 'EMPLOYEE_NAME_DISPLAY',

@@ -162,6 +162,15 @@ const HRLLeaveApprovalPage = ({
         }
       },
       {
+        headerName: intl.formatMessage({ id: 'ALTERNATE ID' }) || 'ALTERNATE ID',
+        field: 'ALTERNATE_ID',
+        width: 120,
+        minWidth: 130,
+        cellStyle: { fontSize: '12px',textAlign: 'center' } as any,
+        sortable: true,
+        filter: true
+      },
+      {
         headerName: intl.formatMessage({ id: 'Employee Name' }) || 'Employee Name',
         field: 'EMPLOYEE_NAME_DISPLAY',
         width: 120,

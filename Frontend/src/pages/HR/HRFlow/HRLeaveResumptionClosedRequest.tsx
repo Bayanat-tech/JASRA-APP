@@ -144,7 +144,7 @@ const HRLeaveResumptionClosedRequest: FC<HRLClosedRequestProps> = ({}) => {
         filter: true
       },
       {
-            headerName: intl.formatMessage({ id: 'ALTERNATE ID' }) || 'ALTERNATE ID',
+        headerName: intl.formatMessage({ id: 'ALTERNATE ID' }) || 'ALTERNATE ID',
         field: 'ALTERNATE_ID',
         width: 120,
         minWidth: 130,
